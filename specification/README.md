@@ -30,7 +30,7 @@ See [`SPEC.md`](./SPEC.md) for the normative detail.
 3. Copy [`COMPLIANCE.md`](./COMPLIANCE.md) into your tool's repository and fill it in.
 4. Submit it to be listed in the A2A **compatibility matrix**.
 
-Conformance is open to any implementation, in any language. "Official" is a separate, project-level designation (see `SPEC.md` §1.4 and §15); designating an official reference implementation does not restrict conformance.
+Conformance is open to any implementation, in any language. "Official" is a separate, project-level designation (see `SPEC.md` §1.4 and §15.3) made outside the specification; it does not restrict or privilege conformance.
 
 ## Status
 

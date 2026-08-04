@@ -30,7 +30,7 @@ References of the form "A2A §x" point to the A2A Protocol Specification v1.0. W
 
 1.4 **Conformant vs. official.** These are distinct:
 - A **conformant** tool is any implementation that satisfies a tier of this specification and publishes a compliance report (§13). Conformance is open to all.
-- An **official** tool is one the A2A project has designated as a project-maintained reference implementation, hosted under the A2A project's GitHub organization, demonstrated against the A2A TCK, and listed in the compatibility matrix (§13). "Official" denotes governance and demonstrated conformance — not exclusivity. Governance and the current official implementation(s) are defined in §15.
+- An **official** tool is one the A2A project has designated as a project-maintained reference implementation, hosted under the A2A project's GitHub organization, demonstrated against the A2A TCK, and listed in the compatibility matrix (§13). "Official" denotes governance and demonstrated conformance — not exclusivity, and not a higher standard of conformance. Designation is a project decision made outside this specification (§15.3).
 
 ---
 
@@ -293,7 +293,7 @@ Cancel an active task by identifier. The operation is idempotent and MAY return 
 
 ## 14. Non-goals
 
-This specification does not: define server/agent behavior (`serve` mode is optional and out of the client baseline); alter A2A wire semantics; or mandate an implementation language or framework for *conformant* tools (the official reference implementation is a separate, project-level designation — §15).
+This specification does not: define server/agent behavior (`serve` mode is optional and out of the client baseline); alter A2A wire semantics; mandate an implementation language or framework; or designate which implementations are official — that is a project decision made outside this document (§15.3).
 
 ---
 
@@ -301,9 +301,9 @@ This specification does not: define server/agent behavior (`serve` mode is optio
 
 15.1 **Ownership & ratification.** This specification is maintained under the A2A project's public GitHub organization and is ratified through the A2A project's governance process (its Technical Steering Committee). Status advances along the document axis **Draft → Proposed → Ratified**; only a Ratified version is "official" as a specification.
 
-15.2 **Two independent status axes.** Specification status (§15.1) is independent of *implementation* maturity (**alpha → beta → GA**). An official reference implementation MAY be released as an early alpha, with no stability guarantees, while the specification is still Proposed.
+15.2 **Two independent status axes.** Specification status (§15.1) is independent of *implementation* maturity (**alpha → beta → GA**). An implementation MAY be released as an early alpha, with no stability guarantees, while the specification is still a Draft or Proposed.
 
-15.3 **Official reference implementation.** The A2A project designates a **single official reference implementation**, written in Go and maintained under the A2A project's GitHub organization. Additional conformant community implementations, in any language, are welcomed and listed in the compatibility matrix (§13.2). Designating one official implementation does not restrict conformance (§1.4); it concentrates the project's maintenance and the canonical `SKILL.md` in one place.
+15.3 **Reference implementations.** The A2A project MAY designate one or more reference implementations. Such a designation is a project decision recorded outside this specification; which implementations hold it, and in which languages, is published alongside the compatibility matrix (§13.2). This specification is language- and implementation-neutral: designation confers no additional normative authority, and it neither restricts nor privileges conformance (§1.4), which remains open to any implementation in any language.
 
 15.4 **Change control.** Changes to normative requirements MUST go through the ratification process and MUST bump the specification version. The revision history (Appendix D) records each change.
 
