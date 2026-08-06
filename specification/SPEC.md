@@ -2,6 +2,7 @@
 
 **Version:** 0.1
 **Status:** Draft — open for review.
+**Last updated:** 2026-08-06
 **Applies to:** A2A Protocol v1.0
 
 ## Abstract
@@ -319,7 +320,7 @@ This specification does not: define server/agent behavior (`serve` mode is optio
 
 15.3 **Reference implementations.** The A2A project MAY designate one or more reference implementations. Such a designation is a project decision recorded outside this specification; which implementations hold it, and in which languages, is published alongside the compatibility matrix (§13.2). This specification is language- and implementation-neutral: designation confers no additional normative authority, and it neither restricts nor privileges conformance (§1.4), which remains open to any implementation in any language.
 
-15.4 **Change control.** Changes to normative requirements MUST go through the ratification process and MUST bump the specification version. The revision history (Appendix D) records each change.
+15.4 **Change control.** While the specification is a **Draft**, it is still being assembled: normative requirements MAY change without a version bump, and each notable revision is recorded by date in the revision history (Appendix D) and reflected in the **Last updated** date in the header. From the first **Proposed** version onward, any change to a normative requirement MUST go through the ratification process and MUST bump the specification version. Implementers SHOULD therefore treat a Draft as a moving target and pin to a ratified version for conformance claims.
 
 ---
 
@@ -381,6 +382,10 @@ In a machine-readable mode (`json` or `jsonl`), task-affecting commands (`send`,
 
 ## Appendix D — Revision history
 
+While the specification is in Draft, notable revisions are recorded by date; the version number changes only at ratification milestones (§15.4). Newest first.
+
 | Version | Date | Notes |
 | --- | --- | --- |
-| 0.1 | 2026-08 | Initial published draft. Tier 1 normative; Tiers 2–3 outlined. Client-only baseline; conversation/session state (§6) and task polling (§7) as first-class; opinionated defaults (§4.5); conformant-vs-official + governance (§1.4, §15); two machine-readable output modes, `json` and `jsonl` (§9.3); normative output envelope (Appendix B). |
+| 0.1 (Draft) | 2026-08-06 | Defined two machine-readable output modes — `json` (exactly one buffered document) and `jsonl` (one object per line, flushed as produced) — and required both (§9.3). Renamed NDJSON to JSONL throughout. Added `--no-wait` as an alias for `--async` / `--return-immediately`, and required that not waiting still returns `taskId` and `contextId` for later polling (§9.5). |
+| 0.1 (Draft) | 2026-08-04 | Made governance implementation-neutral: removed the designation of a specific reference implementation and language from §15.3, and aligned §1.4, §14 and §15.2. |
+| 0.1 (Draft) | 2026-08-04 | Initial draft. Tier 1 normative; Tiers 2–3 outlined. Client-only baseline; conversation/session state (§6) and task polling (§7) as first-class; opinionated defaults (§4.5); conformant-vs-official + governance (§1.4, §15); normative output envelope (Appendix B). |
