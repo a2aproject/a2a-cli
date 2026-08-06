@@ -37,15 +37,18 @@
 | 8 | Session persistence *(if state is persisted)* — conventional path, secrets not world-readable (`0600`), explicit flags override stored state | §6.4 | `<>` | |
 | 9 | Polling path — `get` + wait/watch with `--poll-interval` / `--timeout` | §7.3 | `<>` | |
 | 10 | Handles interrupted states (`INPUT_REQUIRED` / `AUTH_REQUIRED`) without deadlock | §7.1, §8.2 | `<>` | |
-| 11 | Output contract — `--output json` on stdout, diagnostics on stderr, auto-degrade off-TTY | §9.1, §9.2 | `<>` | |
-| 12 | Minimal JSON envelope (`taskId`/`contextId`/`state`, error object) | §9.3, Appendix B | `<>` | |
-| 13 | Errors machine-readable **and normalized across transports** (same A2A error → same result) | §9.4 | `<>` | |
-| 14 | Exit-code scheme (0–7) | §9.5 | `<>` | |
-| 15 | Tier-1 auth — bearer / API key / custom header (scriptable) | §10.1 | `<>` | |
-| 16 | Transport selection from the Agent Card; HTTP+JSON default | §11.1, §4.5 | `<>` | |
-| 17 | `A2A-Version` signaled on every request (explicit; no silent downgrade) | §11.2 | `<>` | |
-| 18 | Opinionated defaults, each overridable by flag | §4.5 | `<>` | |
-| 19 | Ships exactly one lightweight, generic `SKILL.md`; spec & skill kept as distinct layers (skill does not restate normative requirements) | §12.1–§12.3 | `<>` | |
+| 11 | Output contract — structured payload on stdout, diagnostics on stderr, auto-degrade off-TTY | §9.1, §9.2 | `<>` | |
+| 12 | `--output json` — exactly one complete document, buffered even when the interaction streams | §9.3 | `<>` | |
+| 13 | `--output jsonl` — one complete JSON object per line, flushed as produced | §9.3 | `<>` | |
+| 14 | Minimal envelope (`taskId`/`contextId`/`state`, error object) in both machine-readable modes | Appendix B | `<>` | |
+| 15 | Errors machine-readable **and normalized across transports** (same A2A error → same result) | §9.4 | `<>` | |
+| 16 | Async (`--no-wait`) still emits `taskId` + `contextId` for later polling | §9.5 | `<>` | |
+| 17 | Exit-code scheme (0–7) | §9.6 | `<>` | |
+| 18 | Tier-1 auth — bearer / API key / custom header (scriptable) | §10.1 | `<>` | |
+| 19 | Transport selection from the Agent Card; HTTP+JSON default | §11.1, §4.5 | `<>` | |
+| 20 | `A2A-Version` signaled on every request (explicit; no silent downgrade) | §11.2 | `<>` | |
+| 21 | Opinionated defaults, each overridable by flag | §4.5 | `<>` | |
+| 22 | Ships exactly one lightweight, generic `SKILL.md`; spec & skill kept as distinct layers (skill does not restate normative requirements) | §12.1–§12.3 | `<>` | |
 
 ## 4. Tier 2 — Standard
 

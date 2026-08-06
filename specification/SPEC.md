@@ -64,7 +64,7 @@ Restated from A2A §4 so this document stands alone:
 
 4.1 **Agent-first core, dual-mode.** The default behavioral contract MUST be safe for non-interactive and programmatic use (structured output, no interactive prompts required, deterministic exit codes). A rich interactive experience for humans MAY be layered on top and MUST be gated by terminal (TTY) detection. A conformant tool is a single dual-mode tool, not two separate tools.
 
-4.2 **Stable, versioned contract.** The `--output json` shape (§9, Appendix B) and the exit-code scheme (§9) are a stable contract; breaking changes require a specification version bump.
+4.2 **Stable, versioned contract.** The machine-readable output shapes (`json` and `jsonl` — §9.3, Appendix B) and the exit-code scheme (§9.6) are a stable contract; breaking changes require a specification version bump.
 
 4.3 **Explicit, recoverable state.** Every identifier needed to resume a conversation MUST be observable in output (§6.3). Conversation state MUST NOT exist only in process memory.
 
@@ -75,8 +75,8 @@ Restated from A2A §4 so this document stands alone:
 | Behavior | Default | Override |
 | --- | --- | --- |
 | Transport | **HTTP+JSON**, when the Agent Card offers a choice or expresses no preference (subject to card-driven selection, §11.1) | `--transport <http-json\|jsonrpc\|grpc>` |
-| Task completion | **Wait** (block) until the task reaches a terminal or interrupted state | `--async` / `--return-immediately` (return the `taskId` immediately) |
-| Output presentation | **Human-readable, minimal yet consistently structured** text (labeled fields; not raw JSON, not a verbose dashboard) | `--output <text\|tui\|json>`, `-n` (JSON/NDJSON) |
+| Task completion | **Wait** (block) until the task reaches a terminal or interrupted state | `--async` / `--return-immediately` / `--no-wait` (return identifiers immediately) |
+| Output presentation | **Human-readable, minimal yet consistently structured** text (labeled fields; not raw JSON, not a verbose dashboard) | `--output <text\|tui\|json\|jsonl>`, `-n` (machine-readable `json`) |
 | Detail level | **Concise** | `-v, --verbose` for detailed output |
 | Protocol version | The **latest** A2A version the tool supports, signaled explicitly (§11.2) | `--a2a-version <version>` |
 | Transport security | **TLS verification enabled** | `--insecure` (development only; MUST warn) |
@@ -111,10 +111,10 @@ Restated from A2A §4 so this document stands alone:
 | `--context-id <id>` | Continue an existing conversation (§6.2). |
 | `--task-id <id>` | Continue an existing task (§6.2). |
 | `--continue` / `--last` | Resume the stored last conversation (§6.4). |
-| `-o, --output <text\|tui\|json>` | Output mode. Default: minimal, structured `text` (§4.5). `tui` is an opt-in interactive mode; `json` is machine-readable. |
-| `-n` | Alias for `--output json` (NDJSON), non-interactive. |
+| `-o, --output <text\|tui\|json\|jsonl>` | Output mode. Default: minimal, structured `text` (§4.5). `tui` is an opt-in interactive mode; `json` emits one complete document; `jsonl` emits one JSON object per line for streaming (§9.3). |
+| `-n` | Alias for `--output json`, non-interactive. |
 | `--transport <http-json\|jsonrpc\|grpc>` | Override the transport binding (default HTTP+JSON, §4.5), subject to the Agent Card (§11.1). |
-| `--async` / `--return-immediately` | Do not wait; return the `taskId` immediately (default is to wait, §4.5 / §7.3). |
+| `--async` / `--return-immediately` / `--no-wait` | Do not wait; return the task identifiers immediately for later polling (default is to wait, §4.5 / §7.3). |
 | `--wait` / `--watch` | Block until the task reaches a terminal or interrupted state. This is the default for `send` (§4.5); stating it explicitly overrides a configured default. On `get` it turns the one-shot read into a poll loop (§7.3). |
 | `--poll-interval <duration>` / `--timeout <duration>` | Polling controls (§7.3). |
 | `--bearer <token>` / `--api-key <key>` / `-H, --header <k:v>` | Credentials (§10.1). |
@@ -228,15 +228,29 @@ Cancel an active task by identifier. The operation is idempotent and MAY return 
 
 ## 9. Output & exit codes
 
-9.1 In `--output json`, a tool MUST emit only valid JSON or NDJSON on **stdout**; all diagnostics, prompts, and logs MUST go to **stderr**. The two streams MUST NOT be mixed.
+9.1 In a machine-readable mode (`json` or `jsonl`), a tool MUST emit only the structured payload on **stdout**; all diagnostics, prompts, progress indicators, and logs MUST go to **stderr**. The two streams MUST NOT be mixed.
 
 9.2 When `tui` is in effect (selected explicitly or by configuration), a tool MUST auto-degrade to `text` if stdout is not a terminal, producing no terminal control sequences and never blocking on interactive input. The default output mode is already non-interactive `text` (§4.5).
 
-9.3 JSON output for task operations MUST conform to the minimal envelope in Appendix B, including the stable fields defined in §6.3.
+### 9.3 Machine-readable modes: `json` and `jsonl`
 
-9.4 Errors MUST be machine-readable in JSON mode (the error envelope in Appendix B) and MUST be normalized across transports so that the same A2A error yields the same tool-level result regardless of binding.
+A conformant tool MUST support **both** machine-readable modes. They serve different consumers and MUST NOT be conflated.
 
-9.5 Exit codes:
+| Mode | Shape | Use it when |
+| --- | --- | --- |
+| **`json`** | Exactly **one** complete JSON document written once, when the result is known | The agent responds quickly, or the caller wants the whole result in a single parse — the common scripting case |
+| **`jsonl`** | **One JSON object per line** ([JSON Lines](https://jsonlines.org/)), flushed as each event occurs | The caller consumes progress incrementally — streaming agents, and agentic apps/harnesses that render or act on partial output |
+
+- **`json` MUST buffer**: even when the underlying interaction streams, the tool MUST emit a single final document, never a concatenation of objects. A `json` consumer can always `JSON.parse` stdout in one shot.
+- **`jsonl` MUST stream**: each line MUST be a complete, independently parseable JSON object terminated by a newline, flushed as it is produced so a reader can consume the stream incrementally. Lines MUST NOT be pretty-printed across multiple physical lines.
+- If a tool cannot stream a given interaction (streaming unsupported by the agent, or a one-shot command such as `cancel`), `jsonl` MUST still be honored by emitting the applicable object(s), one per line — a single-line result is valid JSONL.
+- Both modes MUST use the envelope in Appendix B and MUST include the stable fields defined in §6.3.
+
+9.4 Errors MUST be machine-readable in both modes (the error envelope in Appendix B) and MUST be normalized across transports so that the same A2A error yields the same tool-level result regardless of binding. In `jsonl`, an error terminating the stream MUST be emitted as a final error object on its own line.
+
+9.5 When the caller does not wait for completion (`--async` / `--return-immediately` / `--no-wait`), the tool MUST still emit a result object carrying the identifiers required to resume or poll later — at minimum `taskId` and `contextId` (§6.3) — so the caller can query status with `get` at a later time.
+
+9.6 Exit codes:
 
 | Code | Meaning |
 | --- | --- |
@@ -275,7 +289,7 @@ Cancel an active task by identifier. The operation is idempotent and MAY return 
 
 ## 12. Agent integration (SKILL.md)
 
-12.1 A conformant tool MUST ship a machine-readable agent skill descriptor (`SKILL.md`) that instructs an AI coding agent how to drive the tool: prefer `--output json`; rely on blocking completion (the default, or `--wait` on `get`) rather than ad-hoc sleeps; determine success from the reported task state; **capture and replay `taskId` and `contextId` to sustain a multi-turn conversation**; and use scriptable credentials rather than interactive login.
+12.1 A conformant tool MUST ship a machine-readable agent skill descriptor (`SKILL.md`) that instructs an AI coding agent how to drive the tool: use `--output json` for a single parseable result, or `--output jsonl` to consume progress incrementally (§9.3); rely on blocking completion (the default, or `--wait` on `get`) rather than ad-hoc sleeps; determine success from the reported task state; **capture and replay `taskId` and `contextId` to sustain a multi-turn conversation**; and use scriptable credentials rather than interactive login.
 
 12.2 **One lightweight, generic skill.** A conformant tool MUST ship exactly one skill descriptor — not one per tier, per command, or per capability. It MUST be generic and token-efficient: it MUST NOT enumerate the full command surface or embed all capabilities inline, and instead MUST direct the agent to discover capabilities at runtime (for example, beginning with `a2a-cli help` / `a2a-cli <command> --help`), keeping the always-loaded context footprint minimal.
 
@@ -323,7 +337,7 @@ This specification does not: define server/agent behavior (`serve` mode is optio
 
 ## Appendix B — Minimal JSON output envelope (normative)
 
-In `--output json`, task-affecting commands (`send`, `get`, `cancel`, and per-item `list`/`subscribe` output) MUST emit at least the following fields. Tools MAY add fields; consumers MUST ignore unknown fields.
+In a machine-readable mode (`json` or `jsonl`), task-affecting commands (`send`, `get`, `cancel`, and per-item `list`/`subscribe` output) MUST emit at least the following fields. Tools MAY add fields; consumers MUST ignore unknown fields.
 
 **Task-operation object:**
 ```json
@@ -353,7 +367,9 @@ In `--output json`, task-affecting commands (`send`, `get`, `cancel`, and per-it
 - `message` — REQUIRED, human-readable.
 - `a2aCode` — the underlying A2A/transport error code when one exists, else `null`.
 
-**Streaming (`-n` / NDJSON):** one JSON object per line; each object MUST carry a `type` field identifying the event, and terminal events MUST include the task-operation fields above.
+**Streaming (`--output jsonl`):** one JSON object per line, flushed as produced. Each line MUST carry a `type` field identifying the event (for example `status`, `artifact`, `result`, `error`), and the final/terminal line MUST include the task-operation fields above so a reader that keeps only the last line still obtains `taskId`, `contextId`, and `state`.
+
+**Single document (`--output json`):** exactly one task-operation object (or one error object) for the whole invocation.
 
 ## Appendix C — References
 
@@ -367,4 +383,4 @@ In `--output json`, task-affecting commands (`send`, `get`, `cancel`, and per-it
 
 | Version | Date | Notes |
 | --- | --- | --- |
-| 0.1 | 2026-08 | Initial published draft. Tier 1 normative; Tiers 2–3 outlined. Client-only baseline; conversation/session state (§6) and task polling (§7) as first-class; opinionated defaults (§4.5); conformant-vs-official + governance (§1.4, §15); normative JSON envelope (Appendix B). |
+| 0.1 | 2026-08 | Initial published draft. Tier 1 normative; Tiers 2–3 outlined. Client-only baseline; conversation/session state (§6) and task polling (§7) as first-class; opinionated defaults (§4.5); conformant-vs-official + governance (§1.4, §15); two machine-readable output modes, `json` and `jsonl` (§9.3); normative output envelope (Appendix B). |
