@@ -2,16 +2,44 @@
 
 **Version:** 0.1
 **Status:** Draft — open for review.
-**Last updated:** 2026-08-06
+**Last updated:** 2026-08-10
 **Applies to:** A2A Protocol v1.0
 
 ## Abstract
 
 This document specifies the behavior that a command-line interface (CLI) tool MUST, SHOULD, and MAY exhibit to be considered a conformant **`a2a-cli`** — a terminal client for the [Agent2Agent (A2A) Protocol](https://a2a-protocol.org/latest/specification/). It exists so that independently built CLIs, in any language, converge on one predictable command surface, output contract, and conversation model — measurable through a published compliance report.
 
-**Why this matters.** In the absence of an official command-line client, the developer experience of building, testing, and driving A2A agents through AI coding agents is prohibitively high — every team reinvents ad-hoc scripts. AI-native development needs a stable, scriptable A2A client that a coding agent can operate directly, across scenarios well beyond debugging. This specification defines that client.
-
 This is an **implementer's specification**. Its audience is engineers building or improving an `a2a-cli`. It constrains CLI behavior only and never modifies A2A wire semantics.
+
+## Why this matters
+
+Three problems, all traceable to the same cause: there is no official A2A command-line tool.
+
+### 1. Everyone builds their own, and they build the same thing
+
+At least seven independent A2A CLIs exist today, across six languages — Go, Rust, Python, TypeScript, .NET, and Swift. Two already sit inside the A2A project's own GitHub organization ([A2A#1929](https://github.com/a2aproject/A2A/issues/1929)).
+
+They largely re-implement the same short list of operations: send a task, continue a multi-turn conversation, check task status, read artifacts. Those are exactly the operations an official tool should cover.
+
+The request keeps recurring rather than resolving. An earlier CLI contribution was closed as out of scope for its repository ([PR#1323](https://github.com/a2aproject/A2A/pull/1323)); its follow-up issue was closed as a duplicate ([#1325](https://github.com/a2aproject/A2A/issues/1325)); a working command grammar was designed separately inside the Go SDK ([a2a-go#306](https://github.com/a2aproject/a2a-go/discussions/306)); and the consolidation request itself ([A2A#1929](https://github.com/a2aproject/A2A/issues/1929)) is open for community vote.
+
+### 2. AI coding agents have no standard way in
+
+Developers increasingly work through AI coding agents, and those agents drive tools from the terminal. An agent learns to use a command-line tool from a skill descriptor — so with no canonical CLI there can be no canonical skill file, and therefore no standard way for a coding agent to work with an A2A agent at all ([A2A#1929](https://github.com/a2aproject/A2A/issues/1929)).
+
+Agents also consume output directly. They need predictable, machine-readable results and stable exit codes rather than a screen formatted for humans, which is why machine-readable output (§9.3) and a skill descriptor (§12) are core requirements here rather than optional extras.
+
+### 3. Testing a running agent is harder than it should be
+
+A2A already provides SDKs in several languages, a Technology Compatibility Kit, an inspector, and a sample repository. What is missing is a quick way to exercise a *running* agent from outside any one SDK.
+
+A conformant CLI fills that gap. Because it is scriptable and emits machine-readable output, it doubles as a lightweight test harness: a shell script or a Python test can drive real conversations against a live agent, and a coding agent can do the same unattended. That lowers the cost of checking an A2A service — by hand during development, or automatically in CI — without writing client code first.
+
+### What this document does about it
+
+It defines the core client behavior — the operations above — so that every implementation can agree on one definition. Specialised needs can be built on top; the goal here is to get the common path right.
+
+This is not an attempt to replace the existing tools. Any tool, in any language, can implement this specification and report exactly what it supports (§13).
 
 ## Notational conventions
 
@@ -58,6 +86,44 @@ Restated from A2A §4 so this document stands alone:
 | **Tier 3** | Advanced | Tier 2 + push-notification config CRUD and a webhook receiver, gRPC transport, authenticated extended Agent Card, Agent Card signature verification, mTLS, OpenID Connect, `serve`/mock mode, catalog/registry, extensions |
 
 3.2 Conformance MUST be demonstrated by a **compliance report** (§13) generated against the A2A Technology Compatibility Kit (TCK) and this specification. A tool MUST NOT advertise a tier it has not demonstrated.
+
+### 3.3 Requirement identifiers
+
+Each testable requirement carries a stable identifier of the form:
+
+```
+A2ACLI_<AREA>_<NNN>
+```
+
+where `<AREA>` names the command or cross-cutting concern and `<NNN>` is a zero-padded sequence number within that area — for example `A2ACLI_SEND_002`, `A2ACLI_CONV_001`, `A2ACLI_OUT_003`.
+
+Defined areas:
+
+| Area | Covers | Area | Covers |
+| --- | --- | --- | --- |
+| `DEFAULT` | Default behavior (§4.5) | `OUT` | Output & error contract (§9.1–9.4) |
+| `DISCOVER` | Agent Card discovery (§8.1) | `EXIT` | Exit codes (§9.6) |
+| `SEND` | Sending messages (§8.2) | `AUTH` | Authentication (§10) |
+| `GET` | Task retrieval (§8.3) | `TX` | Transport selection (§11.1) |
+| `CANCEL` | Task cancellation (§8.4) | `VER` | Protocol versioning (§11.2, §11.3) |
+| `LIST` | Task listing (§8.5) | `SKILL` | Agent skill descriptor (§12) |
+| `SUB` | Subscription / streaming (§7.4, §8.5) | `CHAT` | Interactive session (§8.5) |
+| `CONV` | Conversation & session state (§6) | `CONFIG` | Profiles / environments (§8.5) |
+| `POLL` | Task status polling (§7) | `DOWNLOAD` | Artifact retrieval (§8.5) |
+| `PUSH` | Push notifications (Tier 3) | `CONFORM` | TCK conformance check (§8.5) |
+| `SERVE` | Local agent mode (Tier 3) | | |
+
+`ERR` is **reserved** and is never used as a requirement area: `A2ACLI_ERR_*` identifiers denote **error codes** (Appendix E), which carry a symbolic suffix rather than a number. Requirements about error handling live under `OUT`.
+
+Stability rules — these make the identifiers safe to cite in tooling, test suites, and compliance reports:
+
+- An identifier, once published, is **permanent**. It MUST NOT be renumbered, reused, or reassigned to a different requirement.
+- **Tier membership is not encoded in the identifier.** A requirement may move between tiers across specification versions while keeping its identifier.
+- New requirements take the next unused number in their area. Numbers need not be contiguous.
+- A withdrawn requirement MUST be marked `Withdrawn` in the registry rather than deleted, and its number MUST NOT be reused.
+- New areas MAY be added; existing area names MUST NOT be repurposed.
+
+The authoritative list of requirement identifiers is the compliance-report template published alongside this specification.
 
 ---
 
@@ -249,9 +315,13 @@ A conformant tool MUST support **both** machine-readable modes. They serve diffe
 
 9.4 Errors MUST be machine-readable in both modes (the error envelope in Appendix B) and MUST be normalized across transports so that the same A2A error yields the same tool-level result regardless of binding. In `jsonl`, an error terminating the stream MUST be emitted as a final error object on its own line.
 
+The `code` field MUST carry a stable, symbolic error identifier of the form `A2ACLI_ERR_<SYMBOL>`, drawn from the registry in Appendix E. Symbolic codes — rather than bare numbers — let a caller match on meaning, keep working as the registry grows, and read clearly in logs.
+
+Only the **eight core codes** in Appendix E.1 are required. The extended codes in E.2 are optional refinements for tools that can tell those cases apart; a tool that cannot classify a condition MUST fall back to the applicable core code (`A2ACLI_ERR_INTERNAL` if none is closer). Tools MUST NOT invent codes in the `A2ACLI_ERR_` namespace; vendor-specific codes MUST use a distinct prefix.
+
 9.5 When the caller does not wait for completion (`--async` / `--return-immediately` / `--no-wait`), the tool MUST still emit a result object carrying the identifiers required to resume or poll later — at minimum `taskId` and `contextId` (§6.3) — so the caller can query status with `get` at a later time.
 
-9.6 Exit codes:
+9.6 Exit codes. Every error code in Appendix E maps to exactly one of these: the exit code is the coarse signal for shells and CI, the error code the precise one for programmatic callers.
 
 | Code | Meaning |
 | --- | --- |
@@ -364,7 +434,7 @@ In a machine-readable mode (`json` or `jsonl`), task-affecting commands (`send`,
   }
 }
 ```
-- `code` — REQUIRED, the normalized CLI error identifier (stable across transports).
+- `code` — REQUIRED, a symbolic `A2ACLI_ERR_<SYMBOL>` identifier from Appendix E (stable across transports).
 - `message` — REQUIRED, human-readable.
 - `a2aCode` — the underlying A2A/transport error code when one exists, else `null`.
 
@@ -386,6 +456,48 @@ While the specification is in Draft, notable revisions are recorded by date; the
 
 | Version | Date | Notes |
 | --- | --- | --- |
+| 0.1 (Draft) | 2026-08-10 | Restructured "Why this matters" into three sourced problems, adding testing a running agent as a distinct motivation. Split the error registry into eight required core codes (E.1) and optional extended refinements (E.2) so conformance stays cheap. Added the requirement-identifier convention (§3.3) and a symbolic error vocabulary. |
 | 0.1 (Draft) | 2026-08-06 | Defined two machine-readable output modes — `json` (exactly one buffered document) and `jsonl` (one object per line, flushed as produced) — and required both (§9.3). Renamed NDJSON to JSONL throughout. Added `--no-wait` as an alias for `--async` / `--return-immediately`, and required that not waiting still returns `taskId` and `contextId` for later polling (§9.5). |
 | 0.1 (Draft) | 2026-08-04 | Made governance implementation-neutral: removed the designation of a specific reference implementation and language from §15.3, and aligned §1.4, §14 and §15.2. |
 | 0.1 (Draft) | 2026-08-04 | Initial draft. Tier 1 normative; Tiers 2–3 outlined. Client-only baseline; conversation/session state (§6) and task polling (§7) as first-class; opinionated defaults (§4.5); conformant-vs-official + governance (§1.4, §15); normative output envelope (Appendix B). |
+
+## Appendix E — Error code registry (normative)
+
+Values for the `code` field of the error envelope (Appendix B).
+
+The registry is split so that conformance stays cheap: a tool needs only the **core** codes below. The **extended** codes exist for tools that can tell failures apart more precisely — using them is encouraged but never required, and a tool that cannot distinguish a case simply reports the core code instead.
+
+Identifiers are permanent: once published, a code MUST NOT be reused or redefined. Codes MAY be added later; a consumer MUST tolerate an unrecognized `A2ACLI_ERR_*` value and SHOULD fall back to the exit code.
+
+### E.1 Core codes (required)
+
+A conformant tool MUST be able to emit these. Together they cover every exit code, so a caller can always act on the result.
+
+| Code | Meaning | Exit |
+| --- | --- | --- |
+| `A2ACLI_ERR_USAGE` | Invalid arguments, flags, or flag combination | 2 |
+| `A2ACLI_ERR_UNREACHABLE` | Agent could not be reached — DNS, connection, TLS, or no Agent Card | 3 |
+| `A2ACLI_ERR_AUTH_REQUIRED` | Credentials required but not supplied | 4 |
+| `A2ACLI_ERR_AUTH_FAILED` | Credentials supplied but rejected | 4 |
+| `A2ACLI_ERR_TASK_FAILED` | Task ended unsuccessfully (`FAILED`, or `REJECTED` if not distinguished) | 5 |
+| `A2ACLI_ERR_INPUT_REQUIRED` | Task needs caller input in a non-interactive run | 6 |
+| `A2ACLI_ERR_TIMEOUT` | `--timeout` expired before a terminal state | 7 |
+| `A2ACLI_ERR_INTERNAL` | Unexpected tool-side failure, or any condition with no better code | 1 |
+
+### E.2 Extended codes (optional)
+
+Use when the tool can distinguish the case. Each refines a core code; if unsupported, report the core code shown in brackets.
+
+| Code | Meaning | Refines | Exit |
+| --- | --- | --- | --- |
+| `A2ACLI_ERR_CARD_NOT_FOUND` | No Agent Card at the well-known location or given URL | [`UNREACHABLE`] | 3 |
+| `A2ACLI_ERR_CARD_INVALID` | Agent Card fetched but malformed or schema-invalid | [`INTERNAL`] | 1 |
+| `A2ACLI_ERR_TASK_NOT_FOUND` | Referenced `taskId` does not exist | [`INTERNAL`] | 1 |
+| `A2ACLI_ERR_TASK_REJECTED` | Task reached `REJECTED` rather than `FAILED` | [`TASK_FAILED`] | 5 |
+| `A2ACLI_ERR_TASK_NOT_CANCELABLE` | Task cannot be canceled in its current state | [`INTERNAL`] | 1 |
+| `A2ACLI_ERR_CONTEXT_MISMATCH` | `contextId` and `taskId` do not correspond | [`INTERNAL`] | 1 |
+| `A2ACLI_ERR_CAPABILITY_UNSUPPORTED` | Agent does not advertise a required capability (e.g. streaming) | [`INTERNAL`] | 1 |
+| `A2ACLI_ERR_TRANSPORT_UNSUPPORTED` | No transport in common between tool and Agent Card | [`INTERNAL`] | 1 |
+| `A2ACLI_ERR_VERSION_UNSUPPORTED` | Agent rejected the signaled protocol version | [`INTERNAL`] | 1 |
+| `A2ACLI_ERR_EXTENSION_REQUIRED` | Agent requires an extension the tool does not support | [`INTERNAL`] | 1 |
+| `A2ACLI_ERR_STREAM_INTERRUPTED` | Stream ended before a terminal state and could not be resumed | [`INTERNAL`] | 1 |
