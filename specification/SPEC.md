@@ -319,6 +319,8 @@ The `code` field MUST carry a stable, symbolic error identifier of the form `A2A
 
 Only the **eight core codes** in Appendix E.1 are required. The extended codes in E.2 are optional refinements for tools that can tell those cases apart; a tool that cannot classify a condition MUST fall back to the applicable core code (`A2ACLI_ERR_INTERNAL` if none is closer). Tools MUST NOT invent codes in the `A2ACLI_ERR_` namespace; vendor-specific codes MUST use a distinct prefix.
 
+A tool SHOULD also populate the envelope's `hint` field with an actionable next step (Appendix B). A precise code tells a program what happened; a good hint tells a person what to do about it, and costs far less to implement than the rest of this section.
+
 9.5 When the caller does not wait for completion (`--async` / `--return-immediately` / `--no-wait`), the tool MUST still emit a result object carrying the identifiers required to resume or poll later — at minimum `taskId` and `contextId` (§6.3) — so the caller can query status with `get` at a later time.
 
 9.6 Exit codes. Every error code in Appendix E maps to exactly one of these: the exit code is the coarse signal for shells and CI, the error code the precise one for programmatic callers.
@@ -430,12 +432,14 @@ In a machine-readable mode (`json` or `jsonl`), task-affecting commands (`send`,
   "error": {
     "code":    "string",
     "message": "string",
+    "hint":    "string | null",
     "a2aCode": "string | number | null"
   }
 }
 ```
 - `code` — REQUIRED, a symbolic `A2ACLI_ERR_<SYMBOL>` identifier from Appendix E (stable across transports).
 - `message` — REQUIRED, human-readable.
+- `hint` — RECOMMENDED. A short, actionable next step, ideally a copy-pasteable command. Derive it from context where possible — for example, reading the Agent Card's security schemes to name the exact login command for that agent. Omit it, or set `null`, when there is nothing useful to say; never pad it.
 - `a2aCode` — the underlying A2A/transport error code when one exists, else `null`.
 
 **Streaming (`--output jsonl`):** one JSON object per line, flushed as produced. Each line MUST carry a `type` field identifying the event (for example `status`, `artifact`, `result`, `error`), and the final/terminal line MUST include the task-operation fields above so a reader that keeps only the last line still obtains `taskId`, `contextId`, and `state`.
@@ -456,7 +460,7 @@ While the specification is in Draft, notable revisions are recorded by date; the
 
 | Version | Date | Notes |
 | --- | --- | --- |
-| 0.1 (Draft) | 2026-08-10 | Restructured "Why this matters" into three sourced problems, adding testing a running agent as a distinct motivation. Split the error registry into eight required core codes (E.1) and optional extended refinements (E.2) so conformance stays cheap. Added the requirement-identifier convention (§3.3) and a symbolic error vocabulary. |
+| 0.1 (Draft) | 2026-08-10 | Added a RECOMMENDED `hint` field to the error envelope (Appendix B, §9.4) — an actionable next step alongside the machine-readable code. Restructured "Why this matters" into three sourced problems, adding testing a running agent as a distinct motivation. Split the error registry into eight required core codes (E.1) and optional extended refinements (E.2) so conformance stays cheap. Added the requirement-identifier convention (§3.3) and a symbolic error vocabulary. |
 | 0.1 (Draft) | 2026-08-06 | Defined two machine-readable output modes — `json` (exactly one buffered document) and `jsonl` (one object per line, flushed as produced) — and required both (§9.3). Renamed NDJSON to JSONL throughout. Added `--no-wait` as an alias for `--async` / `--return-immediately`, and required that not waiting still returns `taskId` and `contextId` for later polling (§9.5). |
 | 0.1 (Draft) | 2026-08-04 | Made governance implementation-neutral: removed the designation of a specific reference implementation and language from §15.3, and aligned §1.4, §14 and §15.2. |
 | 0.1 (Draft) | 2026-08-04 | Initial draft. Tier 1 normative; Tiers 2–3 outlined. Client-only baseline; conversation/session state (§6) and task polling (§7) as first-class; opinionated defaults (§4.5); conformant-vs-official + governance (§1.4, §15); normative output envelope (Appendix B). |
