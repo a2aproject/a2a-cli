@@ -53,7 +53,7 @@ References of the form "A2A §x" point to the A2A Protocol Specification v1.0. W
 
 1.1 An `a2a-cli` is an **A2A client**: it initiates requests to an A2A server (a remote agent) and renders the responses. Acting *as* a server — publishing an Agent Card, generating server-side identifiers, or serving inbound requests — is **outside the baseline** of this specification (see §8.5, optional).
 
-1.2 The primary purpose of an `a2a-cli` is **conversation with an A2A server**. A2A conversations are multi-turn and stateful and typically span multiple CLI invocations. A conformant tool MUST therefore allow a caller to **start, continue, inspect, and resume** a conversation (§6), and MUST provide a **polling** path for task status in addition to any streaming support (§7).
+1.2 The primary purpose of an `a2a-cli` is **interaction with an A2A server**. A2A interactions MAY be multi-turn and MAY be stateful and spanning multiple CLI invocations. A conformant tool MUST therefore allow a caller to **start, continue, inspect, and resume** a conversation (§6), and MUST provide a **polling** path for task status in addition to any streaming support (§7).
 
 1.3 Conformance is **tiered and evidence-based** (§3). A tool asserts conformance by publishing a compliance report. Any number of **conformant** tools MAY coexist; conformance is open to any implementation, in any language, that passes the specification.
 
