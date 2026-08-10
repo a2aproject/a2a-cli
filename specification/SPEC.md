@@ -215,7 +215,7 @@ A conformant tool MUST allow continuation via explicit options:
 
 Rules:
 - When `--task-id` is supplied, the tool MUST send the message against that task and MUST surface any server error (e.g. not-found or state conflict) rather than silently starting a new task.
-- When only `--context-id` is supplied, the tool starts a new task grouped under that conversation.
+- When only `--context-id` is supplied, the tool sends a message under that context which MAY return a message or Task
 - When both are supplied, the tool MUST pass them through unchanged.
 - Interactive `chat` (Tier 2) MUST carry the `contextId` — and the active `taskId` while a task is interrupted — across turns automatically.
 
