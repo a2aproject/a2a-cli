@@ -191,7 +191,7 @@ The authoritative list of requirement identifiers is the compliance-report templ
 | `--verbose` | **Presentation:** show the full part structure rather than collapsing parts into one representation. |
 | `--debug` | **Diagnostics:** verbose logging to stderr. `--dump-wire` (Tier 2) additionally emits raw protocol JSON. |
 | `--insecure` | Disable TLS verification for the negotiated transport (development only; MUST emit a warning). Transport security is on unless this is passed. |
-| `--metadata <json>` | Request metadata, for protocol extensions (A2A §3.2.5). |
+| `--metadata <json>` | Attach caller-supplied metadata to the outgoing message/request, for protocol extensions (A2A §3.2.5). This sends metadata to the agent; it is not a request for server-side metadata. |
 
 ---
 
