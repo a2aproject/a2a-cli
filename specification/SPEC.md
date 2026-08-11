@@ -175,23 +175,23 @@ The authoritative list of requirement identifiers is the compliance-report templ
 
 | Option | Meaning |
 | --- | --- |
+| `--a2a-version <version>` | Protocol version to signal to the server on every request (§11). |
 | `-a, --agent-card <ref>` | The agent to talk to, given as an Agent Card reference: a host (the well-known path is appended), an explicit card URL (used as-is), or a `file://` path to a local card. |
-| `--context-id <id>` | Continue an existing interaction (§6.2). |
-| `--task-id <id>` | Continue an existing task (§6.2). |
-| `-o, --output <text\|json>` | Output format. Default `text` (§4.5, §9.2). `json` emits the protocol's own types (Appendix B): one document by default, or JSON Lines (JSONL) when `--stream` is set (§9.3). |
-| `--stream` | Consume the agent's live event stream (§7.2). Under `-o text` it renders events as they arrive; under `-o json` it emits JSONL. MUST be set explicitly — never enabled from config, env, or terminal detection (§9.3). |
-| `--transport <binding>` | Client transport preference, **repeatable and ordered** (highest first). Overrides the card's preference order (§11.1); a binding absent from the card is skipped. |
 | `--async` / `--return-immediately` / `--no-wait` | Do not wait; return the task identifiers immediately for later polling (default is to wait, §4.5 / §7.3). |
-| `--wait` / `--watch` | Block until the task reaches a terminal or interrupted state. This is the default for `send` (§4.5); stating it explicitly overrides a configured default. On `get` it turns the one-shot read into a poll loop (§7.3). |
-| `--poll-interval <duration>` / `--timeout <duration>` | Polling controls (§7.3). |
-| `--bearer <token>` / `--api-key <key>` | Credentials (§10.1). |
-| `-H, --header <k:v>` | Add an arbitrary service parameter (e.g. an HTTP header), repeatable; general-purpose, not authentication-specific (§10.1). |
-| `--a2a-version <version>` | Protocol version to signal (§11). |
-| `-v, --version` | Print the tool version and exit. |
-| `--verbose` | **Presentation:** show the full part structure rather than collapsing parts into one representation. |
+| `--bearer <token>` / `--api-key <key>` | Pass a bearer token or an API key as the request credential (§10.1). |
+| `--context-id <id>` | Group this turn with an existing interaction: the message starts a new task under the given server-assigned context, alongside the tasks already in it (§6.2). |
 | `--debug` | **Diagnostics:** verbose logging to stderr. `--dump-wire` (Tier 2) additionally emits raw protocol JSON. |
+| `-H, --header <k:v>` | Add an arbitrary service parameter (e.g. an HTTP header), repeatable; general-purpose, not authentication-specific (§10.1). |
 | `--insecure` | Disable TLS verification for the negotiated transport (development only; MUST emit a warning). Transport security is on unless this is passed. |
 | `--metadata <json>` | Attach caller-supplied metadata to the outgoing message/request, for protocol extensions (A2A §3.2.5). This sends metadata to the agent; it is not a request for server-side metadata. |
+| `-o, --output <text\|json>` | Output format. Default `text` (§4.5, §9.2). `json` emits the protocol's own types (Appendix B): one document by default, or JSON Lines (JSONL) when `--stream` is set (§9.3). |
+| `--poll-interval <duration>` / `--timeout <duration>` | How often to re-check task status while waiting, and how long to wait before giving up (§7.3). |
+| `--stream` | Consume the agent's live event stream (§7.2). Under `-o text` it renders events as they arrive; under `-o json` it emits JSONL. MUST be set explicitly — never enabled from config, env, or terminal detection (§9.3). |
+| `--task-id <id>` | Continue a specific existing task — for example, to reply to one waiting in `INPUT_REQUIRED`. Requires `--context-id`; a rejected identifier fails rather than starting a new task (§6.2). |
+| `--transport <binding>` | Client transport preference, **repeatable and ordered** (highest first). Overrides the card's preference order (§11.1); a binding absent from the card is skipped. |
+| `--verbose` | **Presentation:** show the full part structure rather than collapsing parts into one representation. |
+| `-v, --version` | Print the tool version and exit. |
+| `--wait` / `--watch` | Block until the task reaches a terminal or interrupted state. This is the default for `send` (§4.5); stating it explicitly overrides a configured default. On `get` it turns the one-shot read into a poll loop (§7.3). |
 
 ---
 
@@ -422,7 +422,12 @@ Worked examples — a command with representative input and output — are genui
 
 A skill **MUST NOT** assume it can install the `a2a-cli` binary — no current agent-facing standard defines an installation mechanism. It SHOULD declare the dependency as human-readable prose in the `compatibility` frontmatter field, and SHOULD include a preflight check and install pointers in its body. Binary distribution is out of scope here and belongs to platform package managers.
 
-The RECOMMENDED distribution is an **Agent Plugin package** [AGENT-PLUGINS] that bundles the skill together with the tool's agent-facing components, so an agent installs, versions, and updates them as one unit rather than assembling them by hand. This keeps the skill and the tool it describes co-versioned. A caller MAY still install the skill and the `a2a-cli` binary independently — the plugin is a convenience, not a precondition — and Agent Plugins defines packaging only; installation, distribution, and permissions remain client-controlled.
+Distribution is expected to arrive in two stages, because the priority is adoption — the widest set of agents able to use the tool with the least friction:
+
+1. **Baseline — the tool and one skill.** The first form is the `a2a-cli` binary plus a single Agent Skill (§12.1), the skill installed at the location above. When a tool ships a skill, this baseline stands on its own and MUST NOT depend on any plugin machinery, so any agent that understands Agent Skills can use the tool immediately.
+2. **Next — an Agent Plugin.** The project SHOULD then also publish an **Agent Plugin package** [AGENT-PLUGINS], which carries the skill as a plugin component and MAY add an MCP server, so a plugin-aware agent installs, versions, and updates them as one unit. Agent Plugins defines exactly two component types — Agent Skills and MCP servers — so the plugin packages the *agent-facing* pieces; the `a2a-cli` binary itself is not a plugin component and its installation still belongs to platform package managers. The plugin references the binary via the preflight check above rather than embedding it.
+
+The two are complementary, not exclusive: the skill shipped in stage 1 is the same skill the plugin carries in stage 2, keeping them co-versioned. A caller MAY always install the skill and the binary independently — the plugin is a convenience, never a precondition — and Agent Plugins defines packaging only; installation, distribution, and permissions remain client-controlled.
 
 ## 13. Compliance report & compatibility matrix
 
@@ -449,6 +454,13 @@ This specification does not: define server/agent behavior (`serve` mode is optio
 15.3 **Reference implementations.** The A2A project MAY designate one or more reference implementations. Such a designation is a project decision recorded outside this specification; which implementations hold it, and in which languages, is published alongside the compatibility matrix (§13.2). This specification is language- and implementation-neutral: designation confers no additional normative authority, and it neither restricts nor privileges conformance (§1.4), which remains open to any implementation in any language.
 
 15.4 **Change control.** While the specification is a **Draft**, it is still being assembled: normative requirements MAY change without a version bump, and each notable revision is recorded by date in the revision history (Appendix D) and reflected in the **Last updated** date in the header. From the first **Proposed** version onward, any change to a normative requirement MUST go through the ratification process and MUST bump the specification version. Implementers SHOULD therefore treat a Draft as a moving target and pin to a ratified version for conformance claims.
+
+Proposals enter through two channels, both submitted to the TSC for review and disposition:
+
+- a **feature request** proposes a new capability — a command, flag, tier member, or output form not yet covered;
+- a **request for change (RFC)** proposes modifying or withdrawing an existing normative requirement.
+
+The TSC reviews each, and an accepted proposal is applied under the change-control rules above — recorded in the revision history while the specification is a Draft, and gated on ratification with a version bump once it is Proposed or later.
 
 ---
 
