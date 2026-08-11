@@ -75,7 +75,7 @@ Restated from A2A §4 so this document stands alone:
 
 ## 3. Conformance model
 
-3.1 A tool declares conformance **per tier**. A tier is satisfied only when **every MUST** in that tier is satisfied. Tiers are cumulative: Tier 2 requires Tier 1; Tier 3 requires Tier 2.
+3.1 A tool declares conformance **per tier**. A tier is satisfied only when **every applicable requirement listed for that tier** is satisfied: claiming a tier holds the tool to all of the tier's requirements, including any expressed as SHOULD in the prose, which the claim promotes to required for that tier. A requirement that is genuinely inapplicable (for example the Agent Skill requirements when the tool ships no skill) does not count against the tier; one that applies but could not be exercised is not thereby satisfied (§13.1). Tiers are cumulative: Tier 2 requires Tier 1; Tier 3 requires Tier 2.
 
 | Tier | Name | Requirements |
 | --- | --- | --- |
@@ -110,8 +110,8 @@ Defined areas:
 | `SUB` | Subscription / streaming (§7.4, §8.5) | `CHAT` | Interactive session (§8.5) |
 | `INTERACT` | Interaction state (§6) | `CONFIG` | Configuration (§6.4, §8.5) |
 | `POLL` | Task status polling (§7) | `DOWNLOAD` | Artifact retrieval (§8.5) |
-| `PUSH` | Push notifications (Tier 3) | `CONFORM` | TCK conformance check (§8.5) |
-| `SERVE` | Local agent mode (Tier 3) | | |
+| `PUSH` | Push notifications (§7.2, §8.5) | `CONFORM` | TCK conformance check (§8.5) |
+| `SERVE` | Local agent mode (§8.5) | | |
 
 `ERR` is **reserved** and is never used as a requirement area: `A2ACLI_ERR_*` identifiers denote **error codes** (Appendix E), which carry a symbolic suffix rather than a number. Requirements about error handling live under `OUT`.
 
@@ -225,7 +225,7 @@ Rules:
 - When `--task-id` is supplied, the tool MUST send the message against that task. If the server rejects the identifier — not found, a terminal-state conflict (A2A §3.1.1), or a `--context-id` that does not correspond to the task — the tool MUST surface the protocol error, exit non-zero (§9.6), and **MUST NOT create a new task**. Silently starting a fresh task would risk writing into a context the caller did not intend; a rejected identifier is an error to surface, not a condition to work around. The tool MUST point the caller at `--debug` for the underlying protocol error.
 - When only `--context-id` is supplied, the tool sends a message under that context which MAY return a message or Task
 - Both supplied is the normal case for task continuation; the tool MUST pass them through unchanged.
-- Interactive `chat` (Tier 2) MUST carry the `contextId` — and the active `taskId` while a task is interrupted — across turns automatically.
+- Interactive `chat` (Tier 3) MUST carry the `contextId` — and the active `taskId` while a task is interrupted — across turns automatically.
 
 ### 6.3 Reporting identifiers back (MUST)
 
@@ -539,6 +539,7 @@ While the specification is in Draft, notable revisions are recorded by date; the
 
 | Version | Date | Notes |
 | --- | --- | --- |
+| 0.1 (Draft) | 2026-08-11 | Consistency fixes surfaced while aligning the compliance registry. `chat` is Tier 3 in §6.2 (§5.1/§8.5 already agreed). §3.3 area table no longer encodes tiers on `PUSH`/`SERVE` (tier is not encoded in an identifier, §3.3). §3.1 tier satisfaction restated: a tier claim holds the tool to every applicable requirement listed for that tier — SHOULD-worded rows included — with genuinely inapplicable requirements excused and unobservable ones not counted as satisfied (§13.1). |
 | 0.1 (Draft) | 2026-08-11 | Second review round. Output format is `-o <text\|json>`; `--stream` selects live delivery, rendering events under `text` and emitting JSONL under `json`, so `json` cardinality follows an explicit `--stream` (never inferred from config, env, or a TTY). Added `-v/--version`, with `--verbose` keeping only its long form. Dropped named profiles and `--env`: configuration resolves through an environment variable and local/global files, keeping the CLI stateless. `-H/--header` split from the credential flags as a general-purpose service parameter. `--metadata` clarified as caller-sent request metadata. `agent-inspect` renamed to `inspect`. push-config is Tier 2; only the receiver is Tier 3. A rejected `--task-id` fails and creates nothing, rather than starting a task in an unintended context. Artifacts returned by the server MUST be rendered, never silently stripped. A reserved `--<binding>-<option>` convention allows future per-transport flags. Distribution is phased — the tool and one skill first, then an Agent Plugin carrying the skill (and optionally an MCP server), with independent installation still allowed. §15.4 adds feature-request and RFC intake channels. |
 | 0.1 (Draft) | 2026-08-11 | Terminology: interaction, not conversation. Transport honours the Agent Card's preference order; `--transport` is repeatable and ordered; version negotiates down only within 1.x. Machine-readable output emits the protocol's own types — Appendix B defines no schema; `tui` removed and §9.2 pins the `text` floor. The CLI is stateless: no capture-and-replay, no `--continue`; §6.4 keeps configuration only, with a documented precedence. Commands namespaced (`task get`, `task list`), `discover` → `inspect`, `--service-url` and `--card-url` → `--agent-card`. Errors defer to the A2A set (§3.3.2, §5.4); Appendix E reduced to CLI-local conditions. `chat` → Tier 3, `push-config` → Tier 2. Shipping a skill is conditional. Conformance is demonstrated against a live agent rather than the TCK, which validates agents rather than clients. Identifier permanence binds from Proposed. Exit codes split into three required statuses and five reserved ones, so conformance is achievable while the vocabulary stays fixed. |
 | 0.1 (Draft) | 2026-08-04 | Initial draft. Client-only baseline; Tier 1 normative with Tiers 2–3 outlined; interaction and session handling (§6) and task polling (§7) as first-class; opinionated defaults (§4.5); conformant-versus-official and governance (§1.4, §15). |
