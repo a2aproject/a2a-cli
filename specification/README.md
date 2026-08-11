@@ -2,7 +2,7 @@
 
 This directory holds the specification for **`a2a-cli`** — a command-line client for the [Agent2Agent (A2A) Protocol](https://a2a-protocol.org/latest/specification/) — together with the compliance-report template used to demonstrate conformance.
 
-`a2a-cli` lets developers and AI coding agents discover, message, stream, poll, and inspect A2A agents from the terminal. The specification defines the behavior a tool must exhibit so that independently built CLIs — in any language — converge on one predictable command surface, output contract, and conversation model, verifiable through a published compliance report.
+`a2a-cli` lets developers and AI coding agents inspect, message, stream, poll, and manage A2A agents from the terminal. The specification defines the behavior a tool must exhibit so that independently built CLIs — in any language — converge on one predictable command surface, output contract, and interaction model, verifiable through a published compliance report.
 
 ## Contents
 
@@ -17,9 +17,9 @@ Conformance is tiered and cumulative; a tier is satisfied only when every MUST i
 
 | Tier | Name | Summary |
 | --- | --- | --- |
-| **Tier 1** | Core | Discover, send, get, cancel; multi-turn conversation state; task polling; structured output + exit codes; token auth; version signaling; a `SKILL.md`. |
-| **Tier 2** | Standard | Task listing, streaming subscribe, OAuth login, multiple transports, config profiles, interactive chat, artifact download, wire debug, conformance check, completions. |
-| **Tier 3** | Advanced | Push notifications + webhook receiver, gRPC, extended card, signature verification, mTLS, OpenID Connect, serve/mock, catalog, extensions. |
+| **Tier 1** | Core | `agent-inspect`, `send`, `task get`, `task cancel`; explicit interaction state; task polling; the output contract + exit codes; token auth; version signaling. |
+| **Tier 2** | Standard | Task listing, streaming subscribe, OAuth login, multiple transports, configuration precedence, push-notification config, artifact download, wire debug, conformance check, completions. |
+| **Tier 3** | Advanced | Push-notification webhook receiver, interactive chat, gRPC, extended card, signature verification, mTLS, OpenID Connect, serve/mock, catalog, extensions. |
 
 See [`SPEC.md`](./SPEC.md) for the normative detail.
 

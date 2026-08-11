@@ -2,38 +2,36 @@
 
 **Version:** 0.1
 **Status:** Draft — open for review.
-**Last updated:** 2026-08-10
+**Last updated:** 2026-08-11
 **Applies to:** A2A Protocol v1.0
 
 ## Abstract
 
-This document specifies the behavior that a command-line interface (CLI) tool MUST, SHOULD, and MAY exhibit to be considered a conformant **`a2a-cli`** — a terminal client for the [Agent2Agent (A2A) Protocol](https://a2a-protocol.org/latest/specification/). It exists so that independently built CLIs, in any language, converge on one predictable command surface, output contract, and conversation model — measurable through a published compliance report.
+This document specifies the behavior that a command-line interface (CLI) tool MUST, SHOULD, and MAY exhibit to be considered a conformant **`a2a-cli`** — a terminal client for the [Agent2Agent (A2A) Protocol](https://a2a-protocol.org/latest/specification/). It exists so that independently built CLIs, in any language, converge on one predictable command surface, output contract, and interaction model — measurable through a published compliance report.
 
 This is an **implementer's specification**. Its audience is engineers building or improving an `a2a-cli`. It constrains CLI behavior only and never modifies A2A wire semantics.
 
 ## Why this matters
 
-Three problems, all traceable to the same cause: there is no official A2A command-line tool.
+Two problems, both traceable to the same cause: there is no official A2A command-line tool.
 
 ### 1. Everyone builds their own, and they build the same thing
 
-At least seven independent A2A CLIs exist today, across six languages — Go, Rust, Python, TypeScript, .NET, and Swift. Two already sit inside the A2A project's own GitHub organization ([A2A#1929](https://github.com/a2aproject/A2A/issues/1929)).
+At least eight independent A2A CLIs exist today, across six languages — Go, Rust, Python, TypeScript, .NET, and Swift. Two already sit inside the A2A project's own GitHub organization ([A2A#1929](https://github.com/a2aproject/A2A/issues/1929)).
 
-They largely re-implement the same short list of operations: send a task, continue a multi-turn conversation, check task status, read artifacts. Those are exactly the operations an official tool should cover.
+They largely re-implement the same short list of operations: send a task, continue a multi-turn interaction, check task status, read artifacts. Those are exactly the operations an official tool should cover.
 
 The request keeps recurring rather than resolving. An earlier CLI contribution was closed as out of scope for its repository ([PR#1323](https://github.com/a2aproject/A2A/pull/1323)); its follow-up issue was closed as a duplicate ([#1325](https://github.com/a2aproject/A2A/issues/1325)); a working command grammar was designed separately inside the Go SDK ([a2a-go#306](https://github.com/a2aproject/a2a-go/discussions/306)); and the consolidation request itself ([A2A#1929](https://github.com/a2aproject/A2A/issues/1929)) is open for community vote.
 
-### 2. AI coding agents have no standard way in
+### 2. Driving and testing a running agent has no standard path
 
-Developers increasingly work through AI coding agents, and those agents drive tools from the terminal. An agent learns to use a command-line tool from a skill descriptor — so with no canonical CLI there can be no canonical skill file, and therefore no standard way for a coding agent to work with an A2A agent at all ([A2A#1929](https://github.com/a2aproject/A2A/issues/1929)).
+A2A already provides SDKs in several languages, a Technology Compatibility Kit, an inspector, and a samples repository. What none of them gives is a quick way to exercise a *running* agent from outside whichever SDK you happen to be using — so checking that a deployed service actually behaves means writing client code first.
 
-Agents also consume output directly. They need predictable, machine-readable results and stable exit codes rather than a screen formatted for humans, which is why machine-readable output (§9.3) and a skill descriptor (§12) are core requirements here rather than optional extras.
+The same gap blocks AI coding agents, for a related reason. Developers increasingly work through them, and an agent learns a command-line tool from a skill descriptor. With no canonical CLI there can be no canonical skill file, and therefore no standard way for a coding agent to work with an A2A agent at all ([A2A#1929](https://github.com/a2aproject/A2A/issues/1929)).
 
-### 3. Testing a running agent is harder than it should be
+A conformant CLI closes both at once. Because it is scriptable, emits machine-readable output and returns meaningful exit codes, it doubles as a lightweight testing framework: a bash script or a Python test can drive real interactions against a live agent, and an agentic harness can do the same unattended. Testing an A2A service — by hand while developing, or automatically in CI — stops being a project and becomes a command.
 
-A2A already provides SDKs in several languages, a Technology Compatibility Kit, an inspector, and a sample repository. What is missing is a quick way to exercise a *running* agent from outside any one SDK.
-
-A conformant CLI fills that gap. Because it is scriptable and emits machine-readable output, it doubles as a lightweight test harness: a shell script or a Python test can drive real conversations against a live agent, and a coding agent can do the same unattended. That lowers the cost of checking an A2A service — by hand during development, or automatically in CI — without writing client code first.
+That is also why machine-readable output (§9.3) is a core requirement here rather than an optional extra: the tool's consumers are as often programs as people.
 
 ### What this document does about it
 
@@ -53,7 +51,7 @@ References of the form "A2A §x" point to the A2A Protocol Specification v1.0. W
 
 1.1 An `a2a-cli` is an **A2A client**: it initiates requests to an A2A server (a remote agent) and renders the responses. Acting *as* a server — publishing an Agent Card, generating server-side identifiers, or serving inbound requests — is **outside the baseline** of this specification (see §8.5, optional).
 
-1.2 The primary purpose of an `a2a-cli` is **interaction with an A2A server**. A2A interactions MAY be multi-turn and MAY be stateful and spanning multiple CLI invocations. A conformant tool MUST therefore allow a caller to **start, continue, inspect, and resume** a conversation (§6), and MUST provide a **polling** path for task status in addition to any streaming support (§7).
+1.2 The primary purpose of an `a2a-cli` is **interaction with an A2A server**. A2A interactions MAY be multi-turn and MAY be stateful, and MAY span multiple CLI invocations. A conformant tool MUST therefore allow a caller to **start, continue, inspect, and resume** an interaction (§6), and MUST provide a **polling** path for task status in addition to any streaming support (§7).
 
 1.3 Conformance is **tiered and evidence-based** (§3). A tool asserts conformance by publishing a compliance report. Any number of **conformant** tools MAY coexist; conformance is open to any implementation, in any language, that passes the specification.
 
@@ -67,10 +65,10 @@ References of the form "A2A §x" point to the A2A Protocol Specification v1.0. W
 
 Restated from A2A §4 so this document stands alone:
 
-- **Message** — a single conversational turn. Has a `role` (`user` or `agent`) and one or more **Parts** (`text`, `file`, or `data`). Carries a client-assigned **`messageId`**.
+- **Message** — a single turn. Has a `role` (`user` or `agent`) and one or more **Parts** (`text`, `file`, or `data`). Carries a client-assigned **`messageId`**.
 - **Task** — the stateful unit of work a message may create. Identified by a server-assigned **`taskId`**; advances through a **TaskState** (§7.1); may emit **Artifacts**.
 - **Artifact** — a task output (text, structured data, or file). Task outputs are delivered as Artifacts, not Messages; a conformant tool MUST render Artifacts.
-- **`contextId`** — a server-assigned, opaque identifier that groups related tasks and messages into a single **conversation**.
+- **`contextId`** — a server-assigned, opaque identifier that groups related tasks and messages. A2A does not define what the grouping *means*; that is the agent author's decision, and a conformant tool MUST NOT assume it denotes a chat session.
 - **AgentCard** — the server's machine-readable description of identity, capabilities, interfaces (transports), security schemes, and skills, obtained during discovery (§8.1).
 
 ---
@@ -81,11 +79,13 @@ Restated from A2A §4 so this document stands alone:
 
 | Tier | Name | Requirements |
 | --- | --- | --- |
-| **Tier 1** | Core | §4.5 default behavior · §6 conversation/session handling · §7 polling · §8.1–8.4 commands (`discover`, `send`, `get`, `cancel`) · §9 output & exit codes · §10.1 auth · §11 transport & versioning · §12 SKILL.md |
-| **Tier 2** | Standard | Tier 1 + `list`, `subscribe`, OAuth `auth login`, ≥2 transports, config profiles, interactive `chat`, `download`, wire debug, `conformance`, shell completions |
-| **Tier 3** | Advanced | Tier 2 + push-notification config CRUD and a webhook receiver, gRPC transport, authenticated extended Agent Card, Agent Card signature verification, mTLS, OpenID Connect, `serve`/mock mode, catalog/registry, extensions |
+| **Tier 1** | Core | §4.5 default behavior · §6 interaction/session handling · §7 polling · §8.1–8.4 commands (`agent-inspect`, `send`, `task get`, `task cancel`) · §9 output & exit codes · §10.1 auth · §11 transport & versioning · §12 SKILL.md |
+| **Tier 2** | Standard | Tier 1 + `task list`, `subscribe`, OAuth `auth login`, ≥2 transports, configuration scoping, push-notification config CRUD, `download`, wire debug, `conformance`, shell completions |
+| **Tier 3** | Advanced | Tier 2 + a push-notification webhook receiver, interactive `chat`, gRPC transport, authenticated extended Agent Card, Agent Card signature verification, mTLS, OpenID Connect, `serve`/mock mode, catalog/registry, extensions |
 
-3.2 Conformance MUST be demonstrated by a **compliance report** (§13) generated against the A2A Technology Compatibility Kit (TCK) and this specification. A tool MUST NOT advertise a tier it has not demonstrated.
+3.2 Conformance MUST be demonstrated by a **compliance report** (§13): the tool exercised against a live A2A agent, with an outcome recorded for every requirement identifier in the tier claimed. A tool MUST NOT advertise a tier it has not demonstrated.
+
+The A2A Technology Compatibility Kit validates *agents*, not clients, so it cannot grade an `a2a-cli`. Its role here is upstream: a reporter SHOULD state that the agent they tested against is itself TCK-conformant, so that a failure can be attributed to the CLI rather than to the agent. Reporting against a non-conformant agent measures two unknowns at once.
 
 ### 3.3 Requirement identifiers
 
@@ -95,20 +95,20 @@ Each testable requirement carries a stable identifier of the form:
 A2ACLI_<AREA>_<NNN>
 ```
 
-where `<AREA>` names the command or cross-cutting concern and `<NNN>` is a zero-padded sequence number within that area — for example `A2ACLI_SEND_002`, `A2ACLI_CONV_001`, `A2ACLI_OUT_003`.
+where `<AREA>` names the command or cross-cutting concern and `<NNN>` is a zero-padded sequence number within that area — for example `A2ACLI_SEND_002`, `A2ACLI_INTERACT_001`, `A2ACLI_OUT_003`.
 
 Defined areas:
 
 | Area | Covers | Area | Covers |
 | --- | --- | --- | --- |
 | `DEFAULT` | Default behavior (§4.5) | `OUT` | Output & error contract (§9.1–9.4) |
-| `DISCOVER` | Agent Card discovery (§8.1) | `EXIT` | Exit codes (§9.6) |
+| `INSPECT` | Agent Card inspection (§8.1) | `EXIT` | Exit codes (§9.6) |
 | `SEND` | Sending messages (§8.2) | `AUTH` | Authentication (§10) |
-| `GET` | Task retrieval (§8.3) | `TX` | Transport selection (§11.1) |
-| `CANCEL` | Task cancellation (§8.4) | `VER` | Protocol versioning (§11.2, §11.3) |
-| `LIST` | Task listing (§8.5) | `SKILL` | Agent skill descriptor (§12) |
+| `TASK_GET` | Task retrieval (§8.3) | `TX` | Transport selection (§11.1) |
+| `TASK_CANCEL` | Task cancellation (§8.4) | `VER` | Protocol versioning (§11.2, §11.3) |
+| `TASK_LIST` | Task listing (§8.5) | `SKILL` | Agent skill descriptor (§12) |
 | `SUB` | Subscription / streaming (§7.4, §8.5) | `CHAT` | Interactive session (§8.5) |
-| `CONV` | Conversation & session state (§6) | `CONFIG` | Profiles / environments (§8.5) |
+| `INTERACT` | Interaction state (§6) | `CONFIG` | Configuration (§6.4, §8.5) |
 | `POLL` | Task status polling (§7) | `DOWNLOAD` | Artifact retrieval (§8.5) |
 | `PUSH` | Push notifications (Tier 3) | `CONFORM` | TCK conformance check (§8.5) |
 | `SERVE` | Local agent mode (Tier 3) | | |
@@ -117,10 +117,11 @@ Defined areas:
 
 Stability rules — these make the identifiers safe to cite in tooling, test suites, and compliance reports:
 
-- An identifier, once published, is **permanent**. It MUST NOT be renumbered, reused, or reassigned to a different requirement.
+- An identifier MUST NOT be **reused**: a retired number never returns meaning something else. This holds at every status.
+- **Renumbering** is permitted while this specification is a **Draft**, and is frozen from the first **Proposed** version onward.
 - **Tier membership is not encoded in the identifier.** A requirement may move between tiers across specification versions while keeping its identifier.
 - New requirements take the next unused number in their area. Numbers need not be contiguous.
-- A withdrawn requirement MUST be marked `Withdrawn` in the registry rather than deleted, and its number MUST NOT be reused.
+- From **Proposed** onward, a withdrawn requirement MUST be marked `Withdrawn` in the registry rather than deleted, and its number MUST NOT be reused.
 - New areas MAY be added; existing area names MUST NOT be repurposed.
 
 The authoritative list of requirement identifiers is the compliance-report template published alongside this specification.
@@ -129,11 +130,11 @@ The authoritative list of requirement identifiers is the compliance-report templ
 
 ## 4. Design principles
 
-4.1 **Agent-first core, dual-mode.** The default behavioral contract MUST be safe for non-interactive and programmatic use (structured output, no interactive prompts required, deterministic exit codes). A rich interactive experience for humans MAY be layered on top and MUST be gated by terminal (TTY) detection. A conformant tool is a single dual-mode tool, not two separate tools.
+4.1 **Agent-first core.** The default behavioral contract MUST be safe for non-interactive and programmatic use: no interactive prompts, no terminal control sequences, deterministic exit codes, and output whose shape does not vary with the environment. This constrains **predictability, not format** — the default output is human-readable text (§4.5, §9.2); a machine consumer selects a machine format explicitly with `--output`. Any interactive mode a tool adds (for example `chat`) MUST be gated by terminal detection and MUST NOT be the default.
 
-4.2 **Stable, versioned contract.** The machine-readable output shapes (`json` and `jsonl` — §9.3, Appendix B) and the exit-code scheme (§9.6) are a stable contract; breaking changes require a specification version bump.
+4.2 **Stable, versioned contract.** The machine-readable output modes (`json` and `jsonl` — §9.3) and the exit-code scheme (§9.6) are a stable contract; breaking changes require a specification version bump. The *shapes* themselves are the A2A protocol's, not this document's (Appendix B).
 
-4.3 **Explicit, recoverable state.** Every identifier needed to resume a conversation MUST be observable in output (§6.3). Conversation state MUST NOT exist only in process memory.
+4.3 **Explicit, recoverable state.** Every identifier needed to resume an interaction MUST be observable in output (§6.3). Interaction state MUST NOT exist only in process memory.
 
 4.4 **Transport- and language-agnostic.** Observable behavior MUST be identical across the JSON-RPC, HTTP+JSON, and gRPC bindings and across implementation languages.
 
@@ -141,11 +142,11 @@ The authoritative list of requirement identifiers is the compliance-report templ
 
 | Behavior | Default | Override |
 | --- | --- | --- |
-| Transport | **HTTP+JSON**, when the Agent Card offers a choice or expresses no preference (subject to card-driven selection, §11.1) | `--transport <http-json\|jsonrpc\|grpc>` |
+| Transport | The **first interface in the Agent Card's `supported_interfaces`** — the list is always in server preference order (§11.1) | `--transport <binding>`, repeatable, highest preference first |
 | Task completion | **Wait** (block) until the task reaches a terminal or interrupted state | `--async` / `--return-immediately` / `--no-wait` (return identifiers immediately) |
-| Output presentation | **Human-readable, minimal yet consistently structured** text (labeled fields; not raw JSON, not a verbose dashboard) | `--output <text\|tui\|json\|jsonl>`, `-n` (machine-readable `json`) |
+| Output presentation | **Human-readable `text`** — labeled fields, one field per line, no control sequences (§9.2) | `--output <text\|json\|jsonl>` |
 | Detail level | **Concise** | `-v, --verbose` for detailed output |
-| Protocol version | The **latest** A2A version the tool supports, signaled explicitly (§11.2) | `--a2a-version <version>` |
+| Protocol version | The **highest version supported by both** tool and agent, signaled explicitly, never below 1.0 (§11.2) | `--a2a-version <version>` |
 | Transport security | **TLS verification enabled** | `--insecure` (development only; MUST warn) |
 
 ---
@@ -156,45 +157,45 @@ The authoritative list of requirement identifiers is the compliance-report templ
 
 | Command | Tier | Purpose |
 | --- | --- | --- |
-| `discover` | 1 | Fetch and inspect an Agent Card |
-| `send` | 1 | Send a message to start or continue a conversation |
-| `get` | 1 | Retrieve a task's status and artifacts |
-| `cancel` | 1 | Cancel an active task |
-| `list` | 2 | List tasks |
-| `subscribe` | 2 | (Re)subscribe to a task's event stream |
-| `chat` | 2 | Interactive multi-turn session |
+| `agent-inspect` | 1 | Fetch and inspect an Agent Card |
+| `send` | 1 | Send a message to start or continue an interaction |
+| `task cancel` | 1 | Cancel an active task |
+| `task get` | 1 | Retrieve a task's status and artifacts |
 | `auth` | 2 | Interactive credential acquisition (OAuth) |
-| `config` | 2 | Manage named environments/profiles |
-| `download` | 2 | Save task artifacts |
+| `config` | 2 | Inspect and edit configuration (§6.4) |
 | `conformance` | 2 | Smoke-check a live agent against the A2A TCK |
-| `push-config` | 3 | Manage push-notification configurations |
+| `download` | 2 | Save task artifacts |
+| `push-config` | 2 | Manage push-notification configurations |
+| `subscribe` | 2 | (Re)subscribe to a task's event stream |
+| `task list` | 2 | List tasks |
+| `chat` | 3 | Interactive multi-turn session |
 | `serve` | 3 | Run a local mock agent (out of client baseline) |
 
 5.2 Global options (Tier 1 MUST unless noted):
 
 | Option | Meaning |
 | --- | --- |
-| `-u, --service-url <url>` | Target agent base URL (or `--env`). |
-| `--context-id <id>` | Continue an existing conversation (§6.2). |
+| `-a, --agent-card <ref>` | The agent to talk to, given as an Agent Card reference: a host (the well-known path is appended), an explicit card URL (used as-is), or a `file://` path to a local card. |
+| `--context-id <id>` | Continue an existing interaction (§6.2). |
 | `--task-id <id>` | Continue an existing task (§6.2). |
-| `--continue` / `--last` | Resume the stored last conversation (§6.4). |
-| `-o, --output <text\|tui\|json\|jsonl>` | Output mode. Default: minimal, structured `text` (§4.5). `tui` is an opt-in interactive mode; `json` emits one complete document; `jsonl` emits one JSON object per line for streaming (§9.3). |
-| `-n` | Alias for `--output json`, non-interactive. |
-| `--transport <http-json\|jsonrpc\|grpc>` | Override the transport binding (default HTTP+JSON, §4.5), subject to the Agent Card (§11.1). |
+| `-o, --output <text\|json\|jsonl>` | Output mode. Default `text` (§4.5, §9.2). `json` emits exactly one document; `jsonl` emits one object per line (§9.3). A tool MUST NOT change the selected mode implicitly. |
+| `--transport <binding>` | Client transport preference, **repeatable and ordered** (highest first). Overrides the card's preference order (§11.1); a binding absent from the card is skipped. |
 | `--async` / `--return-immediately` / `--no-wait` | Do not wait; return the task identifiers immediately for later polling (default is to wait, §4.5 / §7.3). |
 | `--wait` / `--watch` | Block until the task reaches a terminal or interrupted state. This is the default for `send` (§4.5); stating it explicitly overrides a configured default. On `get` it turns the one-shot read into a poll loop (§7.3). |
 | `--poll-interval <duration>` / `--timeout <duration>` | Polling controls (§7.3). |
 | `--bearer <token>` / `--api-key <key>` / `-H, --header <k:v>` | Credentials (§10.1). |
 | `--a2a-version <version>` | Protocol version to signal (§11). |
 | `--env <name>` | Named profile (Tier 2). |
-| `-v, --verbose` | Detailed output; additional diagnostics to stderr. `--dump-wire` (Tier 2) emits raw protocol JSON. |
-| `--insecure` | Disable TLS verification (development only; MUST emit a warning). |
+| `-v, --verbose` | **Presentation:** show the full part structure rather than collapsing parts into one representation. |
+| `--debug` | **Diagnostics:** verbose logging to stderr. `--dump-wire` (Tier 2) additionally emits raw protocol JSON. |
+| `--insecure` | Disable TLS verification for the negotiated transport (development only; MUST emit a warning). Transport security is on unless this is passed. |
+| `--metadata <json>` | Request metadata, for protocol extensions (A2A §3.2.5). |
 
 ---
 
-## 6. Conversation & session state
+## 6. Interaction state & configuration
 
-A2A conversations span multiple invocations; the CLI is the bridge that carries state between them.
+A2A interactions MAY span multiple invocations. **The CLI itself is stateless**: it reports every identifier it receives and accepts every identifier as input, but it does not remember one invocation in the next. What persists is *configuration* (§6.4), not session state.
 
 ### 6.1 Identifiers
 
@@ -202,21 +203,22 @@ A2A conversations span multiple invocations; the CLI is the bridge that carries 
 | --- | --- | --- | --- |
 | `messageId` | Client | Turn identity / idempotency | SHOULD be reused when retrying a turn, because Send is not guaranteed idempotent; reuse avoids duplicated work. |
 | `taskId` | Server | Unit of work | A tool MUST NOT invent a `taskId` for a new task. A client-supplied `taskId` MUST reference an existing task; otherwise the server returns a not-found error. |
-| `contextId` | Server | Conversation grouping | Opaque; a tool SHOULD NOT fabricate one. A `contextId` and `taskId` that do not correspond MUST be rejected by the server; a tool MUST NOT attempt to reconcile them. |
+| `contextId` | Server | Context grouping | Opaque; a tool SHOULD NOT fabricate one. A `contextId` and `taskId` that do not correspond MUST be rejected by the server; a tool MUST NOT attempt to reconcile them. |
 
-A conformant tool never *creates* server identifiers; it **captures** them from responses and **replays** them on later turns.
+A conformant tool never *creates* server identifiers. It reports the ones the server assigned (§6.3) and accepts them back as explicit input (§6.2); it MUST NOT store them and replay them on the caller's behalf.
 
-### 6.2 Continuing a conversation (MUST)
+### 6.2 Continuing an interaction (MUST)
 
 A conformant tool MUST allow continuation via explicit options:
 
-- **`--context-id <id>`** attaches this turn to an existing conversation (a new task within the same context).
+- **`--context-id <id>`** attaches this turn to an existing context (a new task within that context).
 - **`--task-id <id>`** continues an existing task — for example, to respond to a task waiting in `INPUT_REQUIRED` (§7.1).
 
 Rules:
-- When `--task-id` is supplied, the tool MUST send the message against that task and MUST surface any server error (e.g. not-found or state conflict) rather than silently starting a new task.
+- `--task-id` MUST be accompanied by `--context-id`, so the pair can never be mismatched.
+- When `--task-id` is supplied, the tool MUST send the message against that task. If the server rejects the identifier — not found, or a terminal-state conflict (A2A §3.1.1) — the tool MUST emit a **warning** naming both the requested and the actual task identifier, then continue in the same context, and MUST carry both identifiers in machine-readable output so the substitution is detectable without reading stderr. It MUST point the caller at `--debug` for the underlying protocol error, and MUST NOT abort: a stale identifier is a routine retry, not a broken invocation.
 - When only `--context-id` is supplied, the tool sends a message under that context which MAY return a message or Task
-- When both are supplied, the tool MUST pass them through unchanged.
+- Both supplied is the normal case for task continuation; the tool MUST pass them through unchanged.
 - Interactive `chat` (Tier 2) MUST carry the `contextId` — and the active `taskId` while a task is interrupted — across turns automatically.
 
 ### 6.3 Reporting identifiers back (MUST)
@@ -224,15 +226,24 @@ Rules:
 Because the next invocation depends on them, every command that touches a task MUST expose, on completion and on interruption:
 
 - the **`taskId`**, the **`contextId`**, and the current **task state**;
-- in `--output json`, these MUST appear as stable top-level fields (`taskId`, `contextId`, `state`) per Appendix B;
+- in `--output json` and `--output jsonl`, these are carried by the protocol response type itself (Appendix B) — a tool MUST NOT flatten or rename them into fields of its own;
 - in human-facing modes, these MUST be printed in a copy-pasteable form, and the tool SHOULD print the exact command required to resume (for example, `a2a-cli send --task-id <id> "<reply>"`).
 
-### 6.4 Local session state (SHOULD)
+### 6.4 Configuration (SHOULD)
 
-- A tool SHOULD persist the most recent conversation (`contextId`, latest `taskId`, service URL) so a caller can resume without re-supplying identifiers (e.g. `--continue`).
-- A tool SHOULD support named profiles/environments (service URL, credentials, defaults) selected with `--env`.
-- Persisted data MUST reside under a conventional configuration path, MUST NOT store secrets in world-readable files (secret files MUST be mode `0600` or the platform equivalent), and MUST be inspectable and clearable by the user.
-- Explicit options MUST override stored state.
+A tool persists **configuration**, never session state. It MUST NOT record the last `contextId` or `taskId` and offer to resume from them: a caller that wants to continue supplies the identifier (§6.2), which keeps the tool stateless and the contract obvious.
+
+Configuration values resolve in one fixed order, highest wins:
+
+1. an explicit flag,
+2. an environment variable,
+3. a local configuration file,
+4. a global configuration file,
+5. the built-in default (§4.5).
+
+Files SHOULD be discovered the way `git` discovers its configuration: a global file, then a local file found by walking up from the working directory. Settings SHOULD be scopeable **by agent-card reference**, so a caller supplies the reference and inherits the right credentials and defaults for that agent without naming a profile.
+
+Persisted data MUST reside under a conventional configuration path, MUST NOT store secrets in world-readable files (secret files MUST be mode `0600` or the platform equivalent), and MUST be inspectable and clearable by the user.
 
 ---
 
@@ -260,36 +271,39 @@ A conformant tool MUST provide a polling path:
 - **`get <taskId>`** — one-shot retrieval of task state (with artifacts via `--include-artifacts`, history via `--history <n>`).
 - **A blocking/watch mode** that repeatedly polls until a **terminal** state and **stops immediately on an interrupted** state, returning so the caller can act. This is the default behavior of `send` (§4.5) and is available on `get` via `--wait` / `--watch`.
 - Polling controls: `--poll-interval` (RECOMMENDED default 2 seconds) and `--timeout` (on expiry the tool MUST exit non-zero with the timeout code, §9). A tool SHOULD apply bounded backoff, MUST NOT busy-loop, and MUST remain interruptible without losing the already-printed `taskId`.
-- When both streaming and polling are available, a blocking wait MAY prefer streaming and MUST fall back to polling on stream failure. Because messages are not a reliable delivery mechanism, after any stream reconnect the tool MUST reconcile final state with a `get`.
+- When both streaming and polling are available, a blocking wait MAY prefer streaming and MUST fall back to polling on stream failure. *(Reconciling after a reconnect needs no separate rule: A2A streaming already re-sends the full `Task` as the first event on reconnect.)*
 
 ### 7.4 Stream resumption (SHOULD)
 
-For long-running tasks, a tool SHOULD support reconnection via `subscribe` (whose first event is the `Task`, closing the gap between a poll and a subscribe) and, where the server supports it, resumption from the last received event. After any reconnect, the tool MUST reconcile with a `get`.
+For long-running tasks, a tool SHOULD support reconnection via `subscribe` (whose first event is the `Task`, closing the gap between a poll and a subscribe) and, where the server supports it, resumption from the last received event. Because that first event carries the full `Task`, state is reconciled by the protocol itself and no additional `get` is required.
 
 ---
 
 ## 8. Command specifications
 
-### 8.1 `discover` (Tier 1, MUST)
-Fetch the Agent Card from the well-known location (`/.well-known/agent-card.json`) or an explicit `--card-url`, then parse and present: identity, advertised capabilities (streaming, push notifications, extended card), declared interfaces/transports, security schemes, and skills. The tool MUST use the card to select a transport (§11). It SHOULD offer `--validate` to check the card against the A2A schema and SHOULD cache the card honoring HTTP caching semantics.
+### 8.1 `agent-inspect` (Tier 1, MUST)
+Resolve the Agent Card from `--agent-card` — a host (the well-known path `/.well-known/agent-card.json` is appended), an explicit card URL, or a local `file://` path — then parse and present: identity, advertised capabilities (streaming, push notifications, extended card), declared interfaces/transports, security schemes, and skills. The tool MUST use the card to select a transport (§11). It SHOULD offer `--validate` to check the card against the A2A schema, SHOULD offer `--extended` to fetch the authenticated extended card (Tier 3, §10.4), and SHOULD cache the card honoring HTTP caching semantics.
+
+The command is named `agent-inspect` rather than `discover` because "discovery" already names the *process* of resolving a card from a reference; using it for the command invites confusion with that broader sense.
 
 ### 8.2 `send` (Tier 1, MUST)
-Send a message to **start or continue** a conversation.
+Send a message to **start or continue** an interaction.
 - Blocking by default (the operation waits until the task reaches a terminal or interrupted state, §4.5); `--async` / `--return-immediately` returns the `taskId` immediately instead.
-- Accepts `--context-id` / `--task-id` (§6.2); message parts via `--text`, `--file`, `--data`; `--stream` (§7.2); polling controls (§7.3).
-- With `--stream`, the tool consumes the event stream when the streaming capability is present; the first event MUST be the `Task`. If streaming is unsupported the tool MUST fall back or error clearly and MUST NOT hang.
+- Accepts `--context-id` / `--task-id` (§6.2); `--stream` (§7.2); polling controls (§7.3); `--metadata` for extension data.
+- **Message parts.** A message MAY carry more than one part, and the part flags are repeatable and order-preserving: `--text <string>`, `--file <path>` (a local filesystem path), `--data <path|->` (a JSON file, or `-` to read from stdin). A tool MUST let the caller set the media type of a part explicitly — file extensions are not reliable indicators and are frequently absent — and SHOULD infer it only when not given.
+- With `--stream`, the tool consumes the event stream when the streaming capability is present. If the agent returns a `Message` rather than a `Task` the stream contains exactly that one object and closes; the tool MUST exit cleanly with the output rather than treating it as an error. If streaming is unsupported the tool MUST fall back or error clearly, and MUST NOT hang.
 - On `INPUT_REQUIRED` or `AUTH_REQUIRED`, the tool MUST stop and report the `taskId`, `contextId`, and state with a resume hint (§6.3), and MUST NOT deadlock.
-- The tool MUST render produced artifacts.
+- **The tool MUST render produced artifacts**, meaning: a text part is printed as readable text rather than dumped as raw structure; a data part is printed as formatted JSON; a file part has its name, media type and size reported, and its content written to disk only when the caller asked for it (`download`, Tier 2). Rendering never silently discards a part.
 
-### 8.3 `get` (Tier 1, MUST)
+### 8.3 `task get` (Tier 1, MUST)
 Retrieve a task by identifier: state, artifacts (`--include-artifacts`), and optionally history (`--history <n>`). One-shot by default; `--wait` / `--watch` polls until a terminal or interrupted state (§7.3). MUST report `taskId`, `contextId`, and state.
 
-### 8.4 `cancel` (Tier 1, MUST)
+### 8.4 `task cancel` (Tier 1, MUST)
 Cancel an active task by identifier. The operation is idempotent and MAY return a not-cancelable error if the task has already reached a terminal state. MUST report the resulting state.
 
 ### 8.5 Higher-tier commands (outline)
-- **Tier 2:** `list` (cursor-paginated, filterable by status and context); `subscribe` (stream reconnect); `auth login` (OAuth 2.1 device-code and client-credentials flows with a secure token store); multi-transport selection; `config` (named profiles); `chat` (interactive multi-turn); `download` (save artifacts); `--dump-wire`; `conformance` (TCK smoke check); shell completions.
-- **Tier 3:** `push-config` create/get/list/delete plus a webhook receiver; gRPC transport; authenticated extended Agent Card; Agent Card signature verification; mTLS; OpenID Connect; `serve`/mock agent; catalog/registry integration; batch/stdin input; protocol extensions.
+- **Tier 2:** `task list` (cursor-paginated, filterable by status and context); `subscribe` (stream reconnect); `auth login` (OAuth 2.1 device-code and client-credentials flows with a secure token store); multi-transport selection; `config` (inspect and edit configuration, §6.4); `push-config` create/get/list/delete; `download` (save artifacts); `--dump-wire`; `conformance` (TCK smoke check); shell completions.
+- **Tier 3:** a webhook receiver for push notifications; `chat` (interactive multi-turn); gRPC transport; authenticated extended Agent Card; Agent Card signature verification; mTLS; OpenID Connect; `serve`/mock agent; catalog/registry integration; batch/stdin input; protocol extensions.
 
 ---
 
@@ -297,7 +311,9 @@ Cancel an active task by identifier. The operation is idempotent and MAY return 
 
 9.1 In a machine-readable mode (`json` or `jsonl`), a tool MUST emit only the structured payload on **stdout**; all diagnostics, prompts, progress indicators, and logs MUST go to **stderr**. The two streams MUST NOT be mixed.
 
-9.2 When `tui` is in effect (selected explicitly or by configuration), a tool MUST auto-degrade to `text` if stdout is not a terminal, producing no terminal control sequences and never blocking on interactive input. The default output mode is already non-interactive `text` (§4.5).
+9.2 **The `text` mode floor.** `text` is the default (§4.5) and MUST be safe to parse and to pipe. A tool MUST emit one `Label: value` field per line, MUST use the same labels across invocations, MUST NOT emit terminal control sequences, and MUST include the task identifier, the context identifier, and the task state for any command that touches a task.
+
+Any interactive mode a tool offers beyond this (for example `chat`, Tier 3) MUST auto-degrade to `text` when stdout is not a terminal, and MUST never block on interactive input in that case.
 
 ### 9.3 Machine-readable modes: `json` and `jsonl`
 
@@ -305,25 +321,31 @@ A conformant tool MUST support **both** machine-readable modes. They serve diffe
 
 | Mode | Shape | Use it when |
 | --- | --- | --- |
-| **`json`** | Exactly **one** complete JSON document written once, when the result is known | The agent responds quickly, or the caller wants the whole result in a single parse — the common scripting case |
+| **`json`** | Exactly **one** complete JSON document — the terminal protocol object — written once, when the result is known | The caller wants the outcome in a single parse — the common scripting case |
 | **`jsonl`** | **One JSON object per line** ([JSON Lines](https://jsonlines.org/)), flushed as each event occurs | The caller consumes progress incrementally — streaming agents, and agentic apps/harnesses that render or act on partial output |
 
-- **`json` MUST buffer**: even when the underlying interaction streams, the tool MUST emit a single final document, never a concatenation of objects. A `json` consumer can always `JSON.parse` stdout in one shot.
+- **`json` MUST be a single document**: even when the underlying interaction streams, the tool MUST emit exactly one object — the **terminal** protocol object (the final `Task`, or the `Message` where no task was created), never a concatenation of events. A `json` consumer can always `JSON.parse` stdout in one shot, and the size is bounded by the task rather than by how many events it produced.
 - **`jsonl` MUST stream**: each line MUST be a complete, independently parseable JSON object terminated by a newline, flushed as it is produced so a reader can consume the stream incrementally. Lines MUST NOT be pretty-printed across multiple physical lines.
 - If a tool cannot stream a given interaction (streaming unsupported by the agent, or a one-shot command such as `cancel`), `jsonl` MUST still be honored by emitting the applicable object(s), one per line — a single-line result is valid JSONL.
-- Both modes MUST use the envelope in Appendix B and MUST include the stable fields defined in §6.3.
+- Both modes MUST emit the A2A protocol's own response types (Appendix B). A tool MUST NOT define a substitute schema, and MUST NOT change the selected mode implicitly — a caller that asked for `json` and received `jsonl` will parse the first line and treat it as the whole result, failing silently with a plausible answer.
 
 9.4 Errors MUST be machine-readable in both modes (the error envelope in Appendix B) and MUST be normalized across transports so that the same A2A error yields the same tool-level result regardless of binding. In `jsonl`, an error terminating the stream MUST be emitted as a final error object on its own line.
 
-The `code` field MUST carry a stable, symbolic error identifier of the form `A2ACLI_ERR_<SYMBOL>`, drawn from the registry in Appendix E. Symbolic codes — rather than bare numbers — let a caller match on meaning, keep working as the registry grows, and read clearly in logs.
+Errors come in two layers, and a tool MUST NOT blur them.
 
-Only the **eight core codes** in Appendix E.1 are required. The extended codes in E.2 are optional refinements for tools that can tell those cases apart; a tool that cannot classify a condition MUST fall back to the applicable core code (`A2ACLI_ERR_INTERNAL` if none is closer). Tools MUST NOT invent codes in the `A2ACLI_ERR_` namespace; vendor-specific codes MUST use a distinct prefix.
+**Protocol failures** carry the A2A error the server reported, by name, unchanged — `TaskNotFoundError`, `UnsupportedOperationError`, `ContentTypeNotSupportedError` and the rest of the set defined in **A2A §3.3.2**, mapped across bindings per **A2A §5.4**. This specification does not restate that set and does not rename it. (§11.6 of A2A defines the same handling for the HTTP+JSON binding only; citing it here would tie the CLI's errors to one transport, contradicting §4.4.)
+
+**CLI-local failures** are the conditions the protocol has no opinion on, because they happen before or outside any request: a malformed flag, an unresolvable `--agent-card` reference, an unreadable local card, no network. Those carry a symbolic `A2ACLI_ERR_<SYMBOL>` identifier from Appendix E.
+
+A condition the protocol already names MUST carry the protocol's error rather than an `A2ACLI_ERR_` code. A tool that cannot classify a CLI-local condition MUST report `A2ACLI_ERR_INTERNAL`. Tools MUST NOT invent codes in the `A2ACLI_ERR_` namespace; vendor-specific codes MUST use a distinct prefix.
 
 A tool SHOULD also populate the envelope's `hint` field with an actionable next step (Appendix B). A precise code tells a program what happened; a good hint tells a person what to do about it, and costs far less to implement than the rest of this section.
 
 9.5 When the caller does not wait for completion (`--async` / `--return-immediately` / `--no-wait`), the tool MUST still emit a result object carrying the identifiers required to resume or poll later — at minimum `taskId` and `contextId` (§6.3) — so the caller can query status with `get` at a later time.
 
-9.6 Exit codes. Every error code in Appendix E maps to exactly one of these: the exit code is the coarse signal for shells and CI, the error code the precise one for programmatic callers.
+9.6 Exit codes. The exit code is the coarse signal for shells and CI; the error code is the precise one for programmatic callers. Every error — whether it carries an A2A error name or an `A2ACLI_ERR_*` identifier — MUST map to exactly one of these.
+
+`0`, `1` and `2` come free with any modern argument parser, and `3` follows from a failed connection. Codes `4` through `7` require the tool to classify the failure, and each exists so a caller can branch on it — retry on a timeout, prompt on input-required, fail a build on a failed task.
 
 | Code | Meaning |
 | --- | --- |
@@ -340,9 +362,11 @@ A tool SHOULD also populate the envelope's `hint` field with an actionable next 
 
 ## 10. Authentication
 
-10.1 **Tier 1 (MUST):** scriptable, caller-supplied credentials — `--bearer`, `--api-key`, and `-H/--header`, with environment-variable equivalents. Credentials are attached per request in transport headers or metadata (A2A conveys identity at the transport layer, not in the payload).
+10.1 **Tier 1 (MUST):** scriptable, caller-supplied credentials — `--bearer` and `--api-key`, with environment-variable equivalents. Credentials are attached per request as **service parameters** (A2A §3.2.6), which each binding maps to its own mechanism — an HTTP header, a query parameter, or gRPC metadata. A2A conveys identity at the transport layer, not in the payload.
 
-10.2 **Tier 2 (SHOULD):** interactive OAuth 2.1 via `auth login`, supporting the device-code flow (designed for CLIs) and the client-credentials flow, with secure token storage and automatic attachment on subsequent calls.
+`-H/--header` is a **separate, general-purpose** option for attaching any additional service parameter, not only credentials, and MUST NOT be documented as an authentication flag.
+
+10.2 **Tier 2 (SHOULD):** interactive OAuth 2.1 via `auth login`, supporting the device-code flow ([RFC 8628](https://www.rfc-editor.org/rfc/rfc8628), designed for input-constrained clients such as a CLI) and the client-credentials flow, with secure token storage and automatic attachment on subsequent calls.
 
 10.3 **Tier 3 (MAY):** mutual TLS and OpenID Connect. A tool at this tier SHOULD also handle the in-task `AUTH_REQUIRED` state, a second authentication path that can occur mid-task.
 
@@ -352,27 +376,43 @@ A tool SHOULD also populate the envelope's `hint` field with an actionable next 
 
 ## 11. Transport & version negotiation
 
-11.1 **Transport selection (MUST):** a tool MUST select a binding from the Agent Card's declared interfaces (honoring the declared preference order) and MUST NOT assume a single transport. When the card offers multiple bindings without a decisive preference, the tool defaults to **HTTP+JSON** (§4.5), overridable with `--transport`. When an interface declares a routing identifier, the tool MUST echo it on every request.
+11.1 **Transport selection (MUST):** a tool MUST select a binding from the Agent Card's declared interfaces and MUST NOT assume a single transport. `supported_interfaces` is **always in server preference order**, so absent any client preference a tool MUST use the first entry it supports.
 
-11.2 **Protocol version (MUST):** a tool MUST signal the A2A protocol version on every request. This is a per-binding service parameter conveyed as an HTTP header, a query parameter, or gRPC metadata depending on the transport; an empty value causes the server to assume a legacy version, so the tool MUST set it explicitly. The tool SHOULD expose `--a2a-version` and MUST surface a version-unsupported error clearly rather than silently downgrading.
+A client MAY express its own preference with `--transport`, which is **repeatable and ordered**: the tool takes the first client-preferred binding the card also offers, and falls back to the card's order when none matches. A single-valued preference is insufficient — it leaves a tool with no way to negotiate against a card that does not offer it. When an interface declares a routing identifier, the tool MUST echo it on every request.
 
-11.3 **Capability validation (SHOULD):** before invoking a capability-gated operation (streaming, push notifications, extended card), a tool SHOULD verify the capability on the Agent Card, and MUST declare any server-required extensions it supports.
+11.2 **Protocol version (MUST):** a tool MUST signal the A2A protocol version on every request. This is a per-binding service parameter conveyed as an HTTP header, a query parameter, or gRPC metadata depending on the transport; an empty value causes the server to assume a legacy version, so the tool MUST set it explicitly. The tool SHOULD expose `--a2a-version`. Absent an explicit value, a tool SHOULD negotiate down to the highest version supported by both itself and the agent as declared on the Agent Card, but MUST NOT negotiate below **1.0** — versions earlier than 1.0 are legacy and MUST require an explicit opt-in. A tool MUST surface a version-unsupported error clearly rather than silently downgrading.
 
----
+11.3 **Capability validation (SHOULD):** before invoking a capability-gated operation (streaming, push notifications, extended card), a tool SHOULD verify the capability on the Agent Card.
 
-## 12. Agent integration (SKILL.md)
-
-12.1 A conformant tool MUST ship a machine-readable agent skill descriptor (`SKILL.md`) that instructs an AI coding agent how to drive the tool: use `--output json` for a single parseable result, or `--output jsonl` to consume progress incrementally (§9.3); rely on blocking completion (the default, or `--wait` on `get`) rather than ad-hoc sleeps; determine success from the reported task state; **capture and replay `taskId` and `contextId` to sustain a multi-turn conversation**; and use scriptable credentials rather than interactive login.
-
-12.2 **One lightweight, generic skill.** A conformant tool MUST ship exactly one skill descriptor — not one per tier, per command, or per capability. It MUST be generic and token-efficient: it MUST NOT enumerate the full command surface or embed all capabilities inline, and instead MUST direct the agent to discover capabilities at runtime (for example, beginning with `a2a-cli help` / `a2a-cli <command> --help`), keeping the always-loaded context footprint minimal.
-
-12.3 **Distinct layers; bundled and self-installable.** The specification (the behavioral contract) and the skill (agent-facing usage guidance) are DISTINCT layers and MUST be maintained separately; the skill MUST NOT restate normative requirements. The tool and its skill SHOULD be distributed as a single bundle that an AI coding agent can discover and install itself, following an established agent-plugin convention.
+Declaring the server-required extensions a tool supports is a separate, Tier 3 requirement (`A2ACLI_VER_002`) and is not required of a Tier 1 tool.
 
 ---
+
+## 12. Agent integration (Agent Skills)
+
+> **Terminology.** "Agent Skill" in this section means a directory containing a `SKILL.md`, per the Agent Skills format [AGENT-SKILLS]. It is unrelated to the `AgentSkill` object A2A defines at §4.4.5, which describes a capability advertised on an Agent Card. The two are different things that unfortunately share a name.
+
+12.1 **Conditional, and exactly one.** A tool is not required to ship an Agent Skill. **If it ships one, it MUST ship exactly one** — not one per tier, per command, or per capability. A specification that standardises the command surface makes a single skill sufficient for any conformant tool, so shipping several is duplication rather than coverage.
+
+The skill instructs an AI coding agent how to drive the tool: use `--output json` for a single parseable result, or `--output jsonl` to consume progress incrementally (§9.3); rely on blocking completion rather than ad-hoc sleeps; determine success from the reported task state; pass `--context-id` and `--task-id` explicitly, since the tool holds no session state (§6); and use scriptable credentials rather than interactive login.
+
+12.2 **Lean, deferring to runtime help.** The `SKILL.md` itself MUST be generic and token-efficient: it MUST NOT enumerate the full command surface or embed every capability inline, and MUST direct the agent to discover capabilities at runtime (for example `a2a-cli help`, `a2a-cli <command> --help`), keeping the always-loaded context footprint small.
+
+Worked examples — a command with representative input and output — are genuinely useful and SHOULD live in a references file alongside `SKILL.md` rather than in the body, so they cost nothing until an agent needs them.
+
+12.3 **Distinct layers.** The specification (the behavioural contract) and the skill (agent-facing usage guidance) are DISTINCT layers and MUST be maintained separately. The skill MUST NOT restate normative requirements: an agent needs to know how to invoke the tool, not which clause obliges it.
+
+12.4 **Distribution.** A skill SHOULD be installable into the cross-client location `<scope>/.agents/skills/a2a-cli/`. *(The Agent Skills format does not define an installation location; this is a widely-adopted convention, not a normative requirement of that format.)*
+
+A skill **MUST NOT** assume it can install the `a2a-cli` binary — no current agent-facing standard defines an installation mechanism. It SHOULD declare the dependency as human-readable prose in the `compatibility` frontmatter field, and SHOULD include a preflight check and install pointers in its body. Binary distribution is out of scope here and belongs to platform package managers.
+
+A tool shipping **more than one** agent-facing component — a skill together with an MCP server, say — MAY additionally distribute them as an Agent Plugin package [AGENT-PLUGINS]. A tool shipping a single skill SHOULD NOT wrap it in a plugin. Agent Plugins defines packaging only; installation, distribution and permissions remain client-controlled.
 
 ## 13. Compliance report & compatibility matrix
 
-13.1 A tool asserting conformance MUST publish a **compliance report** stating: the tier claimed; per-command pass/fail; the A2A TCK version(s) exercised; transports covered; and conformance to the conversation/session (§6) and polling (§7) requirements.
+13.1 A tool asserting conformance MUST publish a **compliance report** stating: the tier claimed; the outcome **per requirement identifier** (§3.3), not merely per command; the agent it was exercised against, and whether that agent is TCK-conformant (§3.2); transports covered; and a note on every result that is not a plain pass.
+
+A requirement the reporter could not provoke — an agent that never returns `INPUT_REQUIRED`, say — MUST be recorded as such with the reason, never assumed to pass. An unobservable requirement and a satisfied one are different results.
 
 13.2 The A2A project publishes a **compatibility matrix** (tools × features/tiers) so users can compare implementations. Entries are backed by compliance reports rather than being self-asserted alone. This evidence-based matrix — not self-declaration — is what substantiates a tool's advertised tier.
 
@@ -400,33 +440,39 @@ This specification does not: define server/agent behavior (`serve` mode is optio
 
 | Command | A2A operation | A2A reference | Tier |
 | --- | --- | --- | --- |
-| `discover` | Get Agent Card / Get Extended Agent Card | §8 / §3.1.11 | 1 (extended: 3) |
+| `agent-inspect` | Get Agent Card / Get Extended Agent Card | §8 / §3.1.11 | 1 (extended: 3) |
 | `send` | Send Message / Send Streaming Message | §3.1.1 / §3.1.2 | 1 |
-| `get` | Get Task | §3.1.3 | 1 |
-| `cancel` | Cancel Task | §3.1.5 | 1 |
-| `list` | List Tasks | §3.1.4 | 2 |
+| `task cancel` | Cancel Task | §3.1.5 | 1 |
+| `task get` | Get Task | §3.1.3 | 1 |
+| `push-config` | Create / Get / List / Delete Push Notification Config | §3.1.7–§3.1.10 | 2 |
 | `subscribe` | Subscribe to Task | §3.1.6 | 2 |
-| `push-config` | Create / Get / List / Delete Push Notification Config | §3.1.7–§3.1.10 | 3 |
+| `task list` | List Tasks | §3.1.4 | 2 |
 
-## Appendix B — Minimal JSON output envelope (normative)
+## Appendix B — Machine-readable output (normative)
 
-In a machine-readable mode (`json` or `jsonl`), task-affecting commands (`send`, `get`, `cancel`, and per-item `list`/`subscribe` output) MUST emit at least the following fields. Tools MAY add fields; consumers MUST ignore unknown fields.
+**This specification defines no output schema of its own.** In `json` and `jsonl` modes a tool MUST emit the A2A protocol's own response types, unmodified, as defined by `spec/a2a.proto` and rendered per A2A's JSON field-naming convention (A2A §5.5). Inventing a CLI-level envelope would oblige every consumer to unwrap it, break protocol schema validators, and commit this specification to a second versioned schema with its own deprecation policy.
 
-**Task-operation object:**
-```json
-{
-  "taskId":    "string | null",
-  "contextId": "string | null",
-  "state":     "TASK_STATE_*",
-  "artifacts": [],
-  "message":   null
-}
-```
-- `taskId`, `contextId`, `state` — REQUIRED (may be `null` only when no task was created, e.g. a direct message response).
-- `artifacts` — REQUIRED when artifacts were requested/available; otherwise MAY be omitted or empty.
-- `message` — the direct message response when the server returned a Message rather than a Task; otherwise `null`.
+**Which type, per command:**
 
-**Error object** (mutually exclusive with a successful result):
+| Command | `--output json` emits | `--output jsonl` emits, one per line |
+| --- | --- | --- |
+| `send` | `SendMessageResponse` — the terminal object: `task` when a task was created, otherwise `message` | `StreamResponse` per event |
+| `task get` | `Task` | `Task` (single line) |
+| `task cancel` | `Task` | `Task` (single line) |
+| `task list` | `ListTasksResponse` | one `Task` per line |
+| `subscribe` | the terminal `Task` | `StreamResponse` per event |
+| `agent-inspect` | `AgentCard` | `AgentCard` (single line) |
+
+`SendMessageResponse` and `StreamResponse` are discriminated unions (protobuf `oneof`), which is what makes them scriptable: a consumer switches on which field is present rather than inspecting the shape. A tool MUST NOT add a discriminator field of its own — the `oneof` is the discriminator.
+
+Tools MAY add fields outside the protocol types only where the protocol provides an extension point; consumers MUST ignore unknown fields.
+
+**Streaming (`--output jsonl`).** One `StreamResponse` per line, flushed as produced, each a complete JSON object on a single physical line. The final line MUST carry the terminal `Task` (or `Message`), so a reader that keeps only the last line still obtains the task identifier, the context identifier, and the state.
+
+**Single document (`--output json`).** Exactly one object for the whole invocation — the terminal object above, or one error object. Never a concatenation, and never the event log.
+
+**Errors.** A failure emits one error object instead of a result:
+
 ```json
 {
   "error": {
@@ -437,22 +483,23 @@ In a machine-readable mode (`json` or `jsonl`), task-affecting commands (`send`,
   }
 }
 ```
-- `code` — REQUIRED, a symbolic `A2ACLI_ERR_<SYMBOL>` identifier from Appendix E (stable across transports).
+- `code` — REQUIRED. For a protocol failure this is the A2A error name (§9.4). For a condition the protocol has no opinion on — a malformed flag, an unresolvable `--agent-card` reference, an unreadable local card — it is an `A2ACLI_ERR_<SYMBOL>` identifier from Appendix E.
 - `message` — REQUIRED, human-readable.
 - `hint` — RECOMMENDED. A short, actionable next step, ideally a copy-pasteable command. Derive it from context where possible — for example, reading the Agent Card's security schemes to name the exact login command for that agent. Omit it, or set `null`, when there is nothing useful to say; never pad it.
-- `a2aCode` — the underlying A2A/transport error code when one exists, else `null`.
-
-**Streaming (`--output jsonl`):** one JSON object per line, flushed as produced. Each line MUST carry a `type` field identifying the event (for example `status`, `artifact`, `result`, `error`), and the final/terminal line MUST include the task-operation fields above so a reader that keeps only the last line still obtains `taskId`, `contextId`, and `state`.
-
-**Single document (`--output json`):** exactly one task-operation object (or one error object) for the whole invocation.
+- `a2aCode` — the underlying transport-level code when one exists, else `null`.
 
 ## Appendix C — References
 
-- A2A Protocol Specification v1.0 — https://a2a-protocol.org/latest/specification/
-- A2A Agent Discovery — https://a2a-protocol.org/latest/topics/agent-discovery/
-- A2A Streaming & Asynchronous Operations — https://a2a-protocol.org/latest/topics/streaming-and-async/
-- RFC 2119 — Key words for requirement levels
-- RFC 8628 — OAuth 2.0 Device Authorization Grant
+**Normative.** These define terms this specification depends on.
+
+- A2A Protocol Specification v1.0 — https://a2a-protocol.org/latest/specification/ — the authority for all protocol semantics, data types, error names and binding behaviour referenced as "A2A §x".
+- RFC 2119 — key words for requirement levels.
+- RFC 8628 — OAuth 2.0 Device Authorization Grant (§10.2).
+- [AGENT-PLUGINS] Agent Plugins Specification v1.0.0 — https://agent-plugins.org/specification (§12.4).
+
+**Informative.**
+
+- [AGENT-SKILLS] Agent Skills specification — https://agentskills.io/specification (accessed 2026-08-11). Cited informatively: the document carries no version and publishes no governance model, so this specification does not bind conformance to it.
 
 ## Appendix D — Revision history
 
@@ -460,48 +507,28 @@ While the specification is in Draft, notable revisions are recorded by date; the
 
 | Version | Date | Notes |
 | --- | --- | --- |
-| 0.1 (Draft) | 2026-08-10 | Added a RECOMMENDED `hint` field to the error envelope (Appendix B, §9.4) — an actionable next step alongside the machine-readable code. Restructured "Why this matters" into three sourced problems, adding testing a running agent as a distinct motivation. Split the error registry into eight required core codes (E.1) and optional extended refinements (E.2) so conformance stays cheap. Added the requirement-identifier convention (§3.3) and a symbolic error vocabulary. |
-| 0.1 (Draft) | 2026-08-06 | Defined two machine-readable output modes — `json` (exactly one buffered document) and `jsonl` (one object per line, flushed as produced) — and required both (§9.3). Renamed NDJSON to JSONL throughout. Added `--no-wait` as an alias for `--async` / `--return-immediately`, and required that not waiting still returns `taskId` and `contextId` for later polling (§9.5). |
-| 0.1 (Draft) | 2026-08-04 | Made governance implementation-neutral: removed the designation of a specific reference implementation and language from §15.3, and aligned §1.4, §14 and §15.2. |
-| 0.1 (Draft) | 2026-08-04 | Initial draft. Tier 1 normative; Tiers 2–3 outlined. Client-only baseline; conversation/session state (§6) and task polling (§7) as first-class; opinionated defaults (§4.5); conformant-vs-official + governance (§1.4, §15); normative output envelope (Appendix B). |
+| 0.1 (Draft) | 2026-08-11 | Terminology: interaction, not conversation. Transport honours the Agent Card's preference order; `--transport` is repeatable and ordered; version negotiates down only within 1.x. Machine-readable output emits the protocol's own types — Appendix B defines no schema — with `json` as the terminal object and no implicit switch to `jsonl`; `tui` removed and §9.2 pins the `text` floor. The CLI is stateless: no capture-and-replay, no `--continue`; §6.4 keeps configuration only, with a documented precedence. Commands namespaced (`task get`, `task list`), `discover` → `agent-inspect`, `--service-url` and `--card-url` → `--agent-card`. Errors defer to the A2A set (§3.3.2, §5.4); Appendix E reduced to CLI-local conditions. `chat` → Tier 3, `push-config` → Tier 2. Shipping a skill is conditional. Conformance is demonstrated against a live agent rather than the TCK, which validates agents rather than clients. Identifier permanence binds from Proposed. |
+| 0.1 (Draft) | 2026-08-04 | Initial draft. Client-only baseline; Tier 1 normative with Tiers 2–3 outlined; interaction and session handling (§6) and task polling (§7) as first-class; opinionated defaults (§4.5); conformant-versus-official and governance (§1.4, §15). |
 
-## Appendix E — Error code registry (normative)
+## Appendix E — CLI-local error codes (normative)
 
-Values for the `code` field of the error envelope (Appendix B).
+Values for the `code` field (Appendix B) **when the failure is the CLI's own**. A failure the protocol already names carries that A2A error instead (§9.4, A2A §3.3.2); this registry does not restate or rename the protocol's error set.
 
-The registry is split so that conformance stays cheap: a tool needs only the **core** codes below. The **extended** codes exist for tools that can tell failures apart more precisely — using them is encouraged but never required, and a tool that cannot distinguish a case simply reports the core code instead.
+The registry stays small by construction: any condition the protocol already names belongs to the protocol, not here.
 
-Identifiers are permanent: once published, a code MUST NOT be reused or redefined. Codes MAY be added later; a consumer MUST tolerate an unrecognized `A2ACLI_ERR_*` value and SHOULD fall back to the exit code.
-
-### E.1 Core codes (required)
-
-A conformant tool MUST be able to emit these. Together they cover every exit code, so a caller can always act on the result.
+A consumer MUST tolerate an unrecognized `A2ACLI_ERR_*` value and SHOULD fall back to the exit code. Codes MAY be added; a published code MUST NOT be reused for a different meaning. Renaming follows the same rule as requirement identifiers (§3.3).
 
 | Code | Meaning | Exit |
 | --- | --- | --- |
 | `A2ACLI_ERR_USAGE` | Invalid arguments, flags, or flag combination | 2 |
-| `A2ACLI_ERR_UNREACHABLE` | Agent could not be reached — DNS, connection, TLS, or no Agent Card | 3 |
+| `A2ACLI_ERR_CARD_NOT_FOUND` | The `--agent-card` reference could not be resolved to a card | 3 |
+| `A2ACLI_ERR_CARD_INVALID` | Card fetched or read but malformed or schema-invalid | 1 |
+| `A2ACLI_ERR_UNREACHABLE` | Agent could not be reached — DNS, connection, or TLS | 3 |
 | `A2ACLI_ERR_AUTH_REQUIRED` | Credentials required but not supplied | 4 |
 | `A2ACLI_ERR_AUTH_FAILED` | Credentials supplied but rejected | 4 |
-| `A2ACLI_ERR_TASK_FAILED` | Task ended unsuccessfully (`FAILED`, or `REJECTED` if not distinguished) | 5 |
+| `A2ACLI_ERR_TASK_FAILED` | Task ended unsuccessfully (`FAILED` or `REJECTED`) | 5 |
 | `A2ACLI_ERR_INPUT_REQUIRED` | Task needs caller input in a non-interactive run | 6 |
 | `A2ACLI_ERR_TIMEOUT` | `--timeout` expired before a terminal state | 7 |
 | `A2ACLI_ERR_INTERNAL` | Unexpected tool-side failure, or any condition with no better code | 1 |
 
-### E.2 Extended codes (optional)
-
-Use when the tool can distinguish the case. Each refines a core code; if unsupported, report the core code shown in brackets.
-
-| Code | Meaning | Refines | Exit |
-| --- | --- | --- | --- |
-| `A2ACLI_ERR_CARD_NOT_FOUND` | No Agent Card at the well-known location or given URL | [`UNREACHABLE`] | 3 |
-| `A2ACLI_ERR_CARD_INVALID` | Agent Card fetched but malformed or schema-invalid | [`INTERNAL`] | 1 |
-| `A2ACLI_ERR_TASK_NOT_FOUND` | Referenced `taskId` does not exist | [`INTERNAL`] | 1 |
-| `A2ACLI_ERR_TASK_REJECTED` | Task reached `REJECTED` rather than `FAILED` | [`TASK_FAILED`] | 5 |
-| `A2ACLI_ERR_TASK_NOT_CANCELABLE` | Task cannot be canceled in its current state | [`INTERNAL`] | 1 |
-| `A2ACLI_ERR_CONTEXT_MISMATCH` | `contextId` and `taskId` do not correspond | [`INTERNAL`] | 1 |
-| `A2ACLI_ERR_CAPABILITY_UNSUPPORTED` | Agent does not advertise a required capability (e.g. streaming) | [`INTERNAL`] | 1 |
-| `A2ACLI_ERR_TRANSPORT_UNSUPPORTED` | No transport in common between tool and Agent Card | [`INTERNAL`] | 1 |
-| `A2ACLI_ERR_VERSION_UNSUPPORTED` | Agent rejected the signaled protocol version | [`INTERNAL`] | 1 |
-| `A2ACLI_ERR_EXTENSION_REQUIRED` | Agent requires an extension the tool does not support | [`INTERNAL`] | 1 |
-| `A2ACLI_ERR_STREAM_INTERRUPTED` | Stream ended before a terminal state and could not be resumed | [`INTERNAL`] | 1 |
+Task states are not protocol errors — a task reaching `FAILED`, or a run stopping at `INPUT_REQUIRED`, is a normal protocol outcome that the CLI classifies so a shell can act on it. That is why those two codes live here rather than in the protocol's set.
