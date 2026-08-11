@@ -57,7 +57,7 @@ A tier is satisfied only when every requirement in it is `✅`. Tiers are cumula
 
 | ID | Requirement | Spec § | Status | Notes |
 | --- | --- | --- | --- | --- |
-| `A2ACLI_INSPECT_001` | `agent-inspect` — resolve and parse an Agent Card from a host, an explicit URL, or a `file://` path | §8.1 | `<>` | |
+| `A2ACLI_INSPECT_001` | `inspect` — resolve and parse an Agent Card from a host, an explicit URL, or a `file://` path | §8.1 | `<>` | |
 | `A2ACLI_SEND_001` | Send a message to start an interaction | §8.2 | `<>` | |
 | `A2ACLI_SEND_002` | Blocking by default; `--async` / `--return-immediately` / `--no-wait` overrides | §8.2, §4.5 | `<>` | |
 | `A2ACLI_SEND_003` | `--stream` consumes SSE when supported; never hangs when unsupported | §8.2, §7.2 | `<>` | |

@@ -79,7 +79,7 @@ Restated from A2A §4 so this document stands alone:
 
 | Tier | Name | Requirements |
 | --- | --- | --- |
-| **Tier 1** | Core | §4.5 default behavior · §6 interaction/session handling · §7 polling · §8.1–8.4 commands (`agent-inspect`, `send`, `task get`, `task cancel`) · §9 output & exit codes · §10.1 auth · §11 transport & versioning · §12 SKILL.md |
+| **Tier 1** | Core | §4.5 default behavior · §6 interaction/session handling · §7 polling · §8.1–8.4 commands (`inspect`, `send`, `task get`, `task cancel`) · §9 output & exit codes · §10.1 auth · §11 transport & versioning · §12 SKILL.md |
 | **Tier 2** | Standard | Tier 1 + `task list`, `subscribe`, OAuth `auth login`, ≥2 transports, configuration scoping, push-notification config CRUD, `download`, wire debug, `conformance`, shell completions |
 | **Tier 3** | Advanced | Tier 2 + a push-notification webhook receiver, interactive `chat`, gRPC transport, authenticated extended Agent Card, Agent Card signature verification, mTLS, OpenID Connect, `serve`/mock mode, catalog/registry, extensions |
 
@@ -157,7 +157,7 @@ The authoritative list of requirement identifiers is the compliance-report templ
 
 | Command | Tier | Purpose |
 | --- | --- | --- |
-| `agent-inspect` | 1 | Fetch and inspect an Agent Card |
+| `inspect` | 1 | Fetch and inspect an Agent Card |
 | `send` | 1 | Send a message to start or continue an interaction |
 | `task cancel` | 1 | Cancel an active task |
 | `task get` | 1 | Retrieve a task's status and artifacts |
@@ -283,10 +283,10 @@ For long-running tasks, a tool SHOULD support reconnection via `subscribe` (whos
 
 ## 8. Command specifications
 
-### 8.1 `agent-inspect` (Tier 1, MUST)
+### 8.1 `inspect` (Tier 1, MUST)
 Resolve the Agent Card from `--agent-card` — a host (the well-known path `/.well-known/agent-card.json` is appended), an explicit card URL, or a local `file://` path — then parse and present: identity, advertised capabilities (streaming, push notifications, extended card), declared interfaces/transports, security schemes, and skills. The tool MUST use the card to select a transport (§11). It SHOULD offer `--validate` to check the card against the A2A schema, SHOULD offer `--extended` to fetch the authenticated extended card (Tier 3, §10.4), and SHOULD cache the card honoring HTTP caching semantics.
 
-The command is named `agent-inspect` rather than `discover` because "discovery" already names the *process* of resolving a card from a reference; using it for the command invites confusion with that broader sense.
+The command is named `inspect` rather than `discover` because "discovery" already names the *process* of resolving a card from a reference; using it for the command invites confusion with that broader sense.
 
 ### 8.2 `send` (Tier 1, MUST)
 Send a message to **start or continue** an interaction.
@@ -456,7 +456,7 @@ This specification does not: define server/agent behavior (`serve` mode is optio
 
 | Command | A2A operation | A2A reference | Tier |
 | --- | --- | --- | --- |
-| `agent-inspect` | Get Agent Card / Get Extended Agent Card | §8 / §3.1.11 | 1 (extended: 3) |
+| `inspect` | Get Agent Card / Get Extended Agent Card | §8 / §3.1.11 | 1 (extended: 3) |
 | `send` | Send Message / Send Streaming Message | §3.1.1 / §3.1.2 | 1 |
 | `task cancel` | Cancel Task | §3.1.5 | 1 |
 | `task get` | Get Task | §3.1.3 | 1 |
@@ -477,7 +477,7 @@ This specification does not: define server/agent behavior (`serve` mode is optio
 | `task cancel` | `Task` | `Task` (single line) |
 | `task list` | `ListTasksResponse` | one `Task` per line |
 | `subscribe` | the terminal `Task` | `StreamResponse` per event |
-| `agent-inspect` | `AgentCard` | `AgentCard` (single line) |
+| `inspect` | `AgentCard` | `AgentCard` (single line) |
 
 `SendMessageResponse` and `StreamResponse` are discriminated unions (protobuf `oneof`), which is what makes them scriptable: a consumer switches on which field is present rather than inspecting the shape. A tool MUST NOT add a discriminator field of its own — the `oneof` is the discriminator.
 
@@ -524,7 +524,7 @@ While the specification is in Draft, notable revisions are recorded by date; the
 | Version | Date | Notes |
 | --- | --- | --- |
 | 0.1 (Draft) | 2026-08-11 | Second review round. Output format is `-o <text\|json>`; `--stream` selects live delivery, rendering events under `text` and emitting JSONL under `json`, so `json` cardinality follows an explicit `--stream` (never inferred from config, env, or a TTY). `-H/--header` is a general-purpose service parameter, split from the credential flags. push-config is Tier 2; only the receiver is Tier 3. A rejected `--task-id` fails and creates nothing, rather than starting a task in an unintended context. Artifacts returned by the server MUST be rendered, never silently stripped. A reserved `--<binding>-<option>` convention allows future per-transport flags. Distribution recommends an Agent Plugin bundling the skill with the tool, co-versioned, with independent installation still allowed. |
-| 0.1 (Draft) | 2026-08-11 | Terminology: interaction, not conversation. Transport honours the Agent Card's preference order; `--transport` is repeatable and ordered; version negotiates down only within 1.x. Machine-readable output emits the protocol's own types — Appendix B defines no schema; `tui` removed and §9.2 pins the `text` floor. The CLI is stateless: no capture-and-replay, no `--continue`; §6.4 keeps configuration only, with a documented precedence. Commands namespaced (`task get`, `task list`), `discover` → `agent-inspect`, `--service-url` and `--card-url` → `--agent-card`. Errors defer to the A2A set (§3.3.2, §5.4); Appendix E reduced to CLI-local conditions. `chat` → Tier 3, `push-config` → Tier 2. Shipping a skill is conditional. Conformance is demonstrated against a live agent rather than the TCK, which validates agents rather than clients. Identifier permanence binds from Proposed. Exit codes split into three required statuses and five reserved ones, so conformance is achievable while the vocabulary stays fixed. |
+| 0.1 (Draft) | 2026-08-11 | Terminology: interaction, not conversation. Transport honours the Agent Card's preference order; `--transport` is repeatable and ordered; version negotiates down only within 1.x. Machine-readable output emits the protocol's own types — Appendix B defines no schema; `tui` removed and §9.2 pins the `text` floor. The CLI is stateless: no capture-and-replay, no `--continue`; §6.4 keeps configuration only, with a documented precedence. Commands namespaced (`task get`, `task list`), `discover` → `inspect`, `--service-url` and `--card-url` → `--agent-card`. Errors defer to the A2A set (§3.3.2, §5.4); Appendix E reduced to CLI-local conditions. `chat` → Tier 3, `push-config` → Tier 2. Shipping a skill is conditional. Conformance is demonstrated against a live agent rather than the TCK, which validates agents rather than clients. Identifier permanence binds from Proposed. Exit codes split into three required statuses and five reserved ones, so conformance is achievable while the vocabulary stays fixed. |
 | 0.1 (Draft) | 2026-08-04 | Initial draft. Client-only baseline; Tier 1 normative with Tiers 2–3 outlined; interaction and session handling (§6) and task polling (§7) as first-class; opinionated defaults (§4.5); conformant-versus-official and governance (§1.4, §15). |
 
 ## Appendix E — CLI-local error codes (normative)

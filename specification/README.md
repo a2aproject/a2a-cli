@@ -17,7 +17,7 @@ Conformance is tiered and cumulative; a tier is satisfied only when every MUST i
 
 | Tier | Name | Summary |
 | --- | --- | --- |
-| **Tier 1** | Core | `agent-inspect`, `send`, `task get`, `task cancel`; explicit interaction state; task polling; the output contract + exit codes; token auth; version signaling. |
+| **Tier 1** | Core | `inspect`, `send`, `task get`, `task cancel`; explicit interaction state; task polling; the output contract + exit codes; token auth; version signaling. |
 | **Tier 2** | Standard | Task listing, streaming subscribe, OAuth login, multiple transports, configuration precedence, push-notification config, artifact download, wire debug, conformance check, completions. |
 | **Tier 3** | Advanced | Push-notification webhook receiver, interactive chat, gRPC, extended card, signature verification, mTLS, OpenID Connect, serve/mock, catalog, extensions. |
 
