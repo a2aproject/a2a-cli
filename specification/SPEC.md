@@ -178,12 +178,13 @@ The authoritative list of requirement identifiers is the compliance-report templ
 | `-a, --agent-card <ref>` | The agent to talk to, given as an Agent Card reference: a host (the well-known path is appended), an explicit card URL (used as-is), or a `file://` path to a local card. |
 | `--context-id <id>` | Continue an existing interaction (§6.2). |
 | `--task-id <id>` | Continue an existing task (§6.2). |
-| `-o, --output <text\|json\|jsonl>` | Output mode. Default `text` (§4.5, §9.2). `json` emits exactly one document; `jsonl` emits one object per line (§9.3). A tool MUST NOT change the selected mode implicitly. |
+| `-o, --output <text\|json\|jsonl>` | Output mode. Default `text` (§4.5, §9.2). `json` emits exactly one document; `jsonl` emits one object per line (§9.3). A tool MUST NOT change the selected mode implicitly; `--stream` with `json` is a usage error (§9.3). |
 | `--transport <binding>` | Client transport preference, **repeatable and ordered** (highest first). Overrides the card's preference order (§11.1); a binding absent from the card is skipped. |
 | `--async` / `--return-immediately` / `--no-wait` | Do not wait; return the task identifiers immediately for later polling (default is to wait, §4.5 / §7.3). |
 | `--wait` / `--watch` | Block until the task reaches a terminal or interrupted state. This is the default for `send` (§4.5); stating it explicitly overrides a configured default. On `get` it turns the one-shot read into a poll loop (§7.3). |
 | `--poll-interval <duration>` / `--timeout <duration>` | Polling controls (§7.3). |
-| `--bearer <token>` / `--api-key <key>` / `-H, --header <k:v>` | Credentials (§10.1). |
+| `--bearer <token>` / `--api-key <key>` | Credentials (§10.1). |
+| `-H, --header <k:v>` | Add an arbitrary service parameter (e.g. an HTTP header), repeatable; general-purpose, not authentication-specific (§10.1). |
 | `--a2a-version <version>` | Protocol version to signal (§11). |
 | `--env <name>` | Named profile (Tier 2). |
 | `-v, --verbose` | **Presentation:** show the full part structure rather than collapsing parts into one representation. |
@@ -215,8 +216,8 @@ A conformant tool MUST allow continuation via explicit options:
 - **`--task-id <id>`** continues an existing task — for example, to respond to a task waiting in `INPUT_REQUIRED` (§7.1).
 
 Rules:
-- `--task-id` MUST be accompanied by `--context-id`, so the pair can never be mismatched.
-- When `--task-id` is supplied, the tool MUST send the message against that task. If the server rejects the identifier — not found, or a terminal-state conflict (A2A §3.1.1) — the tool MUST emit a **warning** naming both the requested and the actual task identifier, then continue in the same context, and MUST carry both identifiers in machine-readable output so the substitution is detectable without reading stderr. It MUST point the caller at `--debug` for the underlying protocol error, and MUST NOT abort: a stale identifier is a routine retry, not a broken invocation.
+- `--task-id` MUST be accompanied by `--context-id` (the task's context). Requiring both does not by itself prevent a mismatch — a caller can pair a valid `--task-id` with the wrong `--context-id` — which is exactly why a rejected pair MUST fail rather than be reconciled (below).
+- When `--task-id` is supplied, the tool MUST send the message against that task. If the server rejects the identifier — not found, a terminal-state conflict (A2A §3.1.1), or a `--context-id` that does not correspond to the task — the tool MUST surface the protocol error, exit non-zero (§9.6), and **MUST NOT create a new task**. Silently starting a fresh task would risk writing into a context the caller did not intend; a rejected identifier is an error to surface, not a condition to work around. The tool MUST point the caller at `--debug` for the underlying protocol error.
 - When only `--context-id` is supplied, the tool sends a message under that context which MAY return a message or Task
 - Both supplied is the normal case for task continuation; the tool MUST pass them through unchanged.
 - Interactive `chat` (Tier 2) MUST carry the `contextId` — and the active `taskId` while a task is interrupted — across turns automatically.
@@ -258,7 +259,7 @@ Task states: `SUBMITTED`, `WORKING`, `INPUT_REQUIRED`, `AUTH_REQUIRED`, `COMPLET
 
 ### 7.2 Update-delivery mechanisms
 
-A2A provides three ways to observe task progress (A2A §3.5). A conformant tool MUST implement **polling**, SHOULD implement **streaming**, and MAY implement **push notifications** (Tier 3):
+A2A provides three ways to observe task progress (A2A §3.5). A conformant tool MUST implement **polling**, SHOULD implement **streaming**, and MAY implement **push notifications**. Managing push-notification *configuration* is an ordinary API call (`push-config`, Tier 2); only *hosting the receiver* is Tier 3:
 
 1. **Streaming (SSE)** — live status/artifact events; the first event MUST be the `Task`. Available only when the Agent Card advertises the streaming capability.
 2. **Polling** — repeated `get` until a terminal or interrupted state. Always available; the REQUIRED fallback when streaming is unsupported or a connection drops.
@@ -324,7 +325,7 @@ A conformant tool MUST support **both** machine-readable modes. They serve diffe
 | **`json`** | Exactly **one** complete JSON document — the terminal protocol object — written once, when the result is known | The caller wants the outcome in a single parse — the common scripting case |
 | **`jsonl`** | **One JSON object per line** ([JSON Lines](https://jsonlines.org/)), flushed as each event occurs | The caller consumes progress incrementally — streaming agents, and agentic apps/harnesses that render or act on partial output |
 
-- **`json` MUST be a single document**: even when the underlying interaction streams, the tool MUST emit exactly one object — the **terminal** protocol object (the final `Task`, or the `Message` where no task was created), never a concatenation of events. A `json` consumer can always `JSON.parse` stdout in one shot, and the size is bounded by the task rather than by how many events it produced.
+- **`json` MUST be a single document** — exactly one object, the **terminal** protocol object (the final `Task`, or the `Message` where no task was created), never a concatenation of events. Because `json` cannot represent a live event stream, **`--stream` together with `-o json` MUST be rejected as a usage error** (exit 2, §9.6), directing the caller to `-o jsonl`; the tool MUST NOT silently buffer events or switch modes. A blocking or one-shot invocation (the default, §4.5) still emits `json` normally — one terminal object, whether the tool streamed or polled internally. A `json` consumer can always `JSON.parse` stdout in one shot.
 - **`jsonl` MUST stream**: each line MUST be a complete, independently parseable JSON object terminated by a newline, flushed as it is produced so a reader can consume the stream incrementally. Lines MUST NOT be pretty-printed across multiple physical lines.
 - If a tool cannot stream a given interaction (streaming unsupported by the agent, or a one-shot command such as `cancel`), `jsonl` MUST still be honored by emitting the applicable object(s), one per line — a single-line result is valid JSONL.
 - Both modes MUST emit the A2A protocol's own response types (Appendix B). A tool MUST NOT define a substitute schema, and MUST NOT change the selected mode implicitly — a caller that asked for `json` and received `jsonl` will parse the first line and treat it as the whole result, failing silently with a plausible answer.
