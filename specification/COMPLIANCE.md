@@ -10,7 +10,7 @@ This file is also the **authoritative registry of requirement identifiers** (`SP
 
 **On authentication.** Authentication, security, and compliance are large topics that need more careful treatment than a checklist row can give them. The `A2ACLI_AUTH_*` requirements below cover the ground the specification defines today, and they are expected to expand. Treat the current coverage as a starting point, not a complete security review.
 
-**On exit codes.** An exit code is the number a command hands back to the shell when it finishes: `0` means success, anything else signals a failure. It matters because it is the only result a script or CI job gets without parsing output — `a2a-cli send … && deploy.sh` behaves correctly only if the tool exits non-zero when the task actually failed. The check confirms the tool returns a meaningful status rather than always `0`, and that the status agrees with the error it reported.
+**On exit codes.** An exit code is the number a command hands back to the shell when it finishes: `0` means success, anything else signals a failure. It matters because it is the only result a script or CI job gets without parsing output — `a2a-cli send … && deploy.sh` behaves correctly only if the tool exits non-zero when the task actually failed. Three statuses are required (`0`, `1`, `2`); the rest are reserved, so a tool that implements them reports more precisely rather than merely more. Record which reserved statuses the tool emits in the notes.
 
 **On errors.** Failures come in two layers (`SPEC.md` §9.4): a protocol failure carries the A2A error by name (A2A §3.3.2, mapped per §5.4), and a CLI-local failure carries an `A2ACLI_ERR_*` identifier from Appendix E. A tool that renames protocol errors into a vocabulary of its own does not satisfy `A2ACLI_OUT_004`.
 
@@ -77,7 +77,7 @@ A tier is satisfied only when every requirement in it is `✅`. Tiers are cumula
 | `A2ACLI_OUT_002` | `--output json` — exactly one document, the **terminal** protocol object rather than an event log, and never switched implicitly to `jsonl` | §9.3, App. B | `<>` | |
 | `A2ACLI_OUT_003` | `--output jsonl` — one complete JSON object per line, flushed as produced | §9.3, App. B | `<>` | |
 | `A2ACLI_OUT_004` | Errors are machine-readable and consistent across transports: protocol failures carry the A2A error name, CLI-local failures an `A2ACLI_ERR_*` code | §9.4, App. E | `<>` | |
-| `A2ACLI_EXIT_001` | Exit status follows the documented scheme and matches the error code reported | §9.6, Appendix E | `<>` | |
+| `A2ACLI_EXIT_001` | Implements the three required exit statuses (`0`, `1`, `2`); any reserved status it emits carries the documented meaning and agrees with the error reported | §9.6, App. E | `<>` | |
 | `A2ACLI_AUTH_001` | Scriptable credentials — bearer, API key, env equivalents, attached as service parameters; `-H/--header` available separately for any service parameter | §10.1 | `<>` | |
 | `A2ACLI_TX_001` | Transport selected from the Agent Card, honoring declared preference | §11.1 | `<>` | |
 | `A2ACLI_TX_002` | Uses the first `supported_interfaces` entry it supports absent a client preference; `--transport` is repeatable and ordered | §11.1, §4.5 | `<>` | |

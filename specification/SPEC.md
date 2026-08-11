@@ -343,20 +343,29 @@ A tool SHOULD also populate the envelope's `hint` field with an actionable next 
 
 9.5 When the caller does not wait for completion (`--async` / `--return-immediately` / `--no-wait`), the tool MUST still emit a result object carrying the identifiers required to resume or poll later — at minimum `taskId` and `contextId` (§6.3) — so the caller can query status with `get` at a later time.
 
-9.6 Exit codes. The exit code is the coarse signal for shells and CI; the error code is the precise one for programmatic callers. Every error — whether it carries an A2A error name or an `A2ACLI_ERR_*` identifier — MUST map to exactly one of these.
+9.6 Exit codes. The exit code is the coarse signal for shells and CI — the only result a caller gets without parsing output. The error code (§9.4) is the precise one.
 
-`0`, `1` and `2` come free with any modern argument parser, and `3` follows from a failed connection. Codes `4` through `7` require the tool to classify the failure, and each exists so a caller can branch on it — retry on a timeout, prompt on input-required, fail a build on a failed task.
+**Required.** A conformant tool MUST implement these:
 
 | Code | Meaning |
 | --- | --- |
-| 0 | Success / task completed |
-| 1 | Generic failure |
-| 2 | Usage error |
+| 0 | Success — the operation completed, and any task it created reached a successful terminal state |
+| 1 | Failure — any error with no more specific code the tool implements |
+| 2 | Usage error — invalid arguments, flags, or flag combination |
+
+**Reserved.** These identifiers carry the meanings below and MUST NOT be used for any other purpose. A tool MAY implement any of them; where it does not, it MUST report `1` instead.
+
+| Code | Meaning |
+| --- | --- |
 | 3 | Agent or transport unreachable |
 | 4 | Authentication required or failed |
 | 5 | Task failed or rejected |
-| 6 | Input required (non-interactive) |
+| 6 | Input required, in a non-interactive run |
 | 7 | Timeout |
+
+Whatever a tool emits MUST agree with the error it reported (§9.4). A run that reports a timeout and exits `5` is non-conformant regardless of which codes it implements.
+
+A later version of this specification MAY promote reserved codes to required. A tool that implements them early is unaffected by that change, and a caller testing only for a non-zero status is unaffected either way.
 
 ---
 
@@ -507,7 +516,7 @@ While the specification is in Draft, notable revisions are recorded by date; the
 
 | Version | Date | Notes |
 | --- | --- | --- |
-| 0.1 (Draft) | 2026-08-11 | Terminology: interaction, not conversation. Transport honours the Agent Card's preference order; `--transport` is repeatable and ordered; version negotiates down only within 1.x. Machine-readable output emits the protocol's own types — Appendix B defines no schema — with `json` as the terminal object and no implicit switch to `jsonl`; `tui` removed and §9.2 pins the `text` floor. The CLI is stateless: no capture-and-replay, no `--continue`; §6.4 keeps configuration only, with a documented precedence. Commands namespaced (`task get`, `task list`), `discover` → `agent-inspect`, `--service-url` and `--card-url` → `--agent-card`. Errors defer to the A2A set (§3.3.2, §5.4); Appendix E reduced to CLI-local conditions. `chat` → Tier 3, `push-config` → Tier 2. Shipping a skill is conditional. Conformance is demonstrated against a live agent rather than the TCK, which validates agents rather than clients. Identifier permanence binds from Proposed. |
+| 0.1 (Draft) | 2026-08-11 | Terminology: interaction, not conversation. Transport honours the Agent Card's preference order; `--transport` is repeatable and ordered; version negotiates down only within 1.x. Machine-readable output emits the protocol's own types — Appendix B defines no schema — with `json` as the terminal object and no implicit switch to `jsonl`; `tui` removed and §9.2 pins the `text` floor. The CLI is stateless: no capture-and-replay, no `--continue`; §6.4 keeps configuration only, with a documented precedence. Commands namespaced (`task get`, `task list`), `discover` → `agent-inspect`, `--service-url` and `--card-url` → `--agent-card`. Errors defer to the A2A set (§3.3.2, §5.4); Appendix E reduced to CLI-local conditions. `chat` → Tier 3, `push-config` → Tier 2. Shipping a skill is conditional. Conformance is demonstrated against a live agent rather than the TCK, which validates agents rather than clients. Identifier permanence binds from Proposed. Exit codes split into three required statuses and five reserved ones, so conformance is achievable while the vocabulary stays fixed. |
 | 0.1 (Draft) | 2026-08-04 | Initial draft. Client-only baseline; Tier 1 normative with Tiers 2–3 outlined; interaction and session handling (§6) and task polling (§7) as first-class; opinionated defaults (§4.5); conformant-versus-official and governance (§1.4, §15). |
 
 ## Appendix E — CLI-local error codes (normative)
@@ -515,6 +524,8 @@ While the specification is in Draft, notable revisions are recorded by date; the
 Values for the `code` field (Appendix B) **when the failure is the CLI's own**. A failure the protocol already names carries that A2A error instead (§9.4, A2A §3.3.2); this registry does not restate or rename the protocol's error set.
 
 The registry stays small by construction: any condition the protocol already names belongs to the protocol, not here.
+
+The **Exit** column gives the status each code maps to when the tool implements that exit code. Codes `0`, `1` and `2` are required; a tool that does not implement a reserved code reports `1` in its place (§9.6).
 
 A consumer MUST tolerate an unrecognized `A2ACLI_ERR_*` value and SHOULD fall back to the exit code. Codes MAY be added; a published code MUST NOT be reused for a different meaning. Renaming follows the same rule as requirement identifiers (§3.3).
 
