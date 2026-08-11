@@ -51,7 +51,7 @@ References of the form "A2A §x" point to the A2A Protocol Specification v1.0. W
 
 1.1 An `a2a-cli` is an **A2A client**: it initiates requests to an A2A server (a remote agent) and renders the responses. Acting *as* a server — publishing an Agent Card, generating server-side identifiers, or serving inbound requests — is **outside the baseline** of this specification (see §8.5, optional).
 
-1.2 The primary purpose of an `a2a-cli` is **interaction with an A2A server**. A2A interactions MAY be multi-turn and MAY be stateful, and MAY span multiple CLI invocations. A conformant tool MUST therefore allow a caller to **start, continue, inspect, and resume** an interaction (§6), and MUST provide a **polling** path for task status in addition to any streaming support (§7).
+1.2 The primary purpose of an `a2a-cli` is **interaction with an A2A server**. A2A interactions MAY be multi-turn and MAY be stateful, and MAY span multiple CLI invocations. A conformant tool MUST therefore allow a caller to **inspect an agent card** and to **start, continue, and resume** an interaction (§6), and MUST provide a **polling** path for task status in addition to any streaming support (§7).
 
 1.3 Conformance is **tiered and evidence-based** (§3). A tool asserts conformance by publishing a compliance report. Any number of **conformant** tools MAY coexist; conformance is open to any implementation, in any language, that passes the specification.
 
@@ -132,20 +132,20 @@ The authoritative list of requirement identifiers is the compliance-report templ
 
 4.1 **Agent-first core.** The default behavioral contract MUST be safe for non-interactive and programmatic use: no interactive prompts, no terminal control sequences, deterministic exit codes, and output whose shape does not vary with the environment. This constrains **predictability, not format** — the default output is human-readable text (§4.5, §9.2); a machine consumer selects a machine format explicitly with `--output`. Any interactive mode a tool adds (for example `chat`) MUST be gated by terminal detection and MUST NOT be the default.
 
-4.2 **Stable, versioned contract.** The machine-readable output modes (`json` and `jsonl` — §9.3) and the exit-code scheme (§9.6) are a stable contract; breaking changes require a specification version bump. The *shapes* themselves are the A2A protocol's, not this document's (Appendix B).
+4.2 **Stable, versioned contract.** The machine-readable output format (`json`, line-delimited as `jsonl` under `--stream` — §9.3) and the exit-code scheme (§9.6) are a stable contract; breaking changes require a specification version bump. The *shapes* themselves are the A2A protocol's, not this document's (Appendix B).
 
 4.3 **Explicit, recoverable state.** Every identifier needed to resume an interaction MUST be observable in output (§6.3). Interaction state MUST NOT exist only in process memory.
 
 4.4 **Transport- and language-agnostic.** Observable behavior MUST be identical across the JSON-RPC, HTTP+JSON, and gRPC bindings and across implementation languages.
 
-4.5 **Opinionated defaults, always overridable.** Good defaults are essential to a seamless experience: common tasks MUST work with minimal flags. A conformant tool MUST ship the baseline defaults below, and MUST make **every** default overridable — by an explicit flag at all times, and MAY additionally be settable via a config profile or environment variable. An explicit flag MUST take precedence over a configured default, which MUST take precedence over the built-in default. A tool SHOULD expose its effective defaults (e.g. via `--help`) so a user can see what will happen before overriding.
+4.5 **Opinionated defaults, always overridable.** Good defaults are essential to a seamless experience: common tasks MUST work with minimal flags. A conformant tool MUST ship the baseline defaults below, and MUST make **every** default overridable — by an explicit flag at all times, and MAY additionally be settable via an environment variable or a configuration file. An explicit flag MUST take precedence over a configured default, which MUST take precedence over the built-in default. A tool SHOULD expose its effective defaults (e.g. via `--help`) so a user can see what will happen before overriding.
 
 | Behavior | Default | Override |
 | --- | --- | --- |
 | Transport | The **first interface in the Agent Card's `supported_interfaces`** — the list is always in server preference order (§11.1) | `--transport <binding>`, repeatable, highest preference first |
 | Task completion | **Wait** (block) until the task reaches a terminal or interrupted state | `--async` / `--return-immediately` / `--no-wait` (return identifiers immediately) |
-| Output presentation | **Human-readable `text`** — labeled fields, one field per line, no control sequences (§9.2) | `--output <text\|json\|jsonl>` |
-| Detail level | **Concise** | `-v, --verbose` for detailed output |
+| Output presentation | **Human-readable `text`** — labeled fields, one field per line, no control sequences (§9.2) | `--output <text\|json>`; `--stream` renders live (text) or emits JSONL (`json`) (§9.3) |
+| Detail level | **Concise** | `--verbose` for detailed output |
 | Protocol version | The **highest version supported by both** tool and agent, signaled explicitly, never below 1.0 (§11.2) | `--a2a-version <version>` |
 | Transport security | **TLS verification enabled** | `--insecure` (development only; MUST warn) |
 
@@ -178,7 +178,8 @@ The authoritative list of requirement identifiers is the compliance-report templ
 | `-a, --agent-card <ref>` | The agent to talk to, given as an Agent Card reference: a host (the well-known path is appended), an explicit card URL (used as-is), or a `file://` path to a local card. |
 | `--context-id <id>` | Continue an existing interaction (§6.2). |
 | `--task-id <id>` | Continue an existing task (§6.2). |
-| `-o, --output <text\|json\|jsonl>` | Output mode. Default `text` (§4.5, §9.2). `json` emits exactly one document; `jsonl` emits one object per line (§9.3). A tool MUST NOT change the selected mode implicitly; `--stream` with `json` is a usage error (§9.3). |
+| `-o, --output <text\|json>` | Output format. Default `text` (§4.5, §9.2). `json` emits the protocol's own types (Appendix B): one document by default, or JSON Lines (JSONL) when `--stream` is set (§9.3). |
+| `--stream` | Consume the agent's live event stream (§7.2). Under `-o text` it renders events as they arrive; under `-o json` it emits JSONL. MUST be set explicitly — never enabled from config, env, or terminal detection (§9.3). |
 | `--transport <binding>` | Client transport preference, **repeatable and ordered** (highest first). Overrides the card's preference order (§11.1); a binding absent from the card is skipped. |
 | `--async` / `--return-immediately` / `--no-wait` | Do not wait; return the task identifiers immediately for later polling (default is to wait, §4.5 / §7.3). |
 | `--wait` / `--watch` | Block until the task reaches a terminal or interrupted state. This is the default for `send` (§4.5); stating it explicitly overrides a configured default. On `get` it turns the one-shot read into a poll loop (§7.3). |
@@ -186,8 +187,8 @@ The authoritative list of requirement identifiers is the compliance-report templ
 | `--bearer <token>` / `--api-key <key>` | Credentials (§10.1). |
 | `-H, --header <k:v>` | Add an arbitrary service parameter (e.g. an HTTP header), repeatable; general-purpose, not authentication-specific (§10.1). |
 | `--a2a-version <version>` | Protocol version to signal (§11). |
-| `--env <name>` | Named profile (Tier 2). |
-| `-v, --verbose` | **Presentation:** show the full part structure rather than collapsing parts into one representation. |
+| `-v, --version` | Print the tool version and exit. |
+| `--verbose` | **Presentation:** show the full part structure rather than collapsing parts into one representation. |
 | `--debug` | **Diagnostics:** verbose logging to stderr. `--dump-wire` (Tier 2) additionally emits raw protocol JSON. |
 | `--insecure` | Disable TLS verification for the negotiated transport (development only; MUST emit a warning). Transport security is on unless this is passed. |
 | `--metadata <json>` | Request metadata, for protocol extensions (A2A §3.2.5). |
@@ -227,7 +228,7 @@ Rules:
 Because the next invocation depends on them, every command that touches a task MUST expose, on completion and on interruption:
 
 - the **`taskId`**, the **`contextId`**, and the current **task state**;
-- in `--output json` and `--output jsonl`, these are carried by the protocol response type itself (Appendix B) — a tool MUST NOT flatten or rename them into fields of its own;
+- in `-o json` (a single document or streamed as JSONL under `--stream`), these are carried by the protocol response type itself (Appendix B) — a tool MUST NOT flatten or rename them into fields of its own;
 - in human-facing modes, these MUST be printed in a copy-pasteable form, and the tool SHOULD print the exact command required to resume (for example, `a2a-cli send --task-id <id> "<reply>"`).
 
 ### 6.4 Configuration (SHOULD)
@@ -297,7 +298,9 @@ Send a message to **start or continue** an interaction.
 - **The tool MUST render produced artifacts**, meaning: a text part is printed as readable text rather than dumped as raw structure; a data part is printed as formatted JSON; a file part has its name, media type and size reported, and its content written to disk only when the caller asked for it (`download`, Tier 2). Rendering never silently discards a part.
 
 ### 8.3 `task get` (Tier 1, MUST)
-Retrieve a task by identifier: state, artifacts (`--include-artifacts`), and optionally history (`--history <n>`). One-shot by default; `--wait` / `--watch` polls until a terminal or interrupted state (§7.3). MUST report `taskId`, `contextId`, and state.
+Retrieve a task by identifier: state, artifacts, and optionally history (`--history <n>`). One-shot by default; `--wait` / `--watch` polls until a terminal or interrupted state (§7.3). MUST report `taskId`, `contextId`, and state.
+
+When a result carries artifacts, the tool MUST render them to stdout in the selected output format (§8.2) — a text part as readable text, a data part as JSON, a file part reported by name, media type, and size. A tool MUST NOT silently strip artifacts the server returned. `--include-artifacts` remains available to request artifact content where a server treats its inclusion as optional; it is not a licence to discard artifacts that were returned, and in `-o json` the full protocol `Task` is emitted unchanged regardless.
 
 ### 8.4 `task cancel` (Tier 1, MUST)
 Cancel an active task by identifier. The operation is idempotent and MAY return a not-cancelable error if the task has already reached a terminal state. MUST report the resulting state.
@@ -310,27 +313,28 @@ Cancel an active task by identifier. The operation is idempotent and MAY return 
 
 ## 9. Output & exit codes
 
-9.1 In a machine-readable mode (`json` or `jsonl`), a tool MUST emit only the structured payload on **stdout**; all diagnostics, prompts, progress indicators, and logs MUST go to **stderr**. The two streams MUST NOT be mixed.
+9.1 In the machine-readable format (`-o json`, whether a single document or streamed as JSONL under `--stream`), a tool MUST emit only the structured payload on **stdout**; all diagnostics, prompts, progress indicators, and logs MUST go to **stderr**. The two streams MUST NOT be mixed.
 
 9.2 **The `text` mode floor.** `text` is the default (§4.5) and MUST be safe to parse and to pipe. A tool MUST emit one `Label: value` field per line, MUST use the same labels across invocations, MUST NOT emit terminal control sequences, and MUST include the task identifier, the context identifier, and the task state for any command that touches a task.
 
 Any interactive mode a tool offers beyond this (for example `chat`, Tier 3) MUST auto-degrade to `text` when stdout is not a terminal, and MUST never block on interactive input in that case.
 
-### 9.3 Machine-readable modes: `json` and `jsonl`
+### 9.3 Machine-readable output: `json`, and its streamed form `jsonl`
 
-A conformant tool MUST support **both** machine-readable modes. They serve different consumers and MUST NOT be conflated.
+The machine-readable format is `-o json`. Its **cardinality follows `--stream`**: one document when the caller waits, JSON Lines when the caller streams. Both carry the A2A protocol's own response types (Appendix B) — never a substitute schema.
 
-| Mode | Shape | Use it when |
+| Invocation | Shape | Use it when |
 | --- | --- | --- |
-| **`json`** | Exactly **one** complete JSON document — the terminal protocol object — written once, when the result is known | The caller wants the outcome in a single parse — the common scripting case |
-| **`jsonl`** | **One JSON object per line** ([JSON Lines](https://jsonlines.org/)), flushed as each event occurs | The caller consumes progress incrementally — streaming agents, and agentic apps/harnesses that render or act on partial output |
+| **`-o json`** (no `--stream`) | Exactly **one** complete JSON document — the terminal protocol object (the final `Task`, or the `Message` where no task was created) | The caller wants the outcome in a single parse — the common scripting case |
+| **`-o json --stream`** | **JSON Lines** ([JSONL](https://jsonlines.org/)): one complete JSON object per line, flushed as each event occurs | The caller consumes progress incrementally — streaming agents, and agentic apps/harnesses that render or act on partial output |
 
-- **`json` MUST be a single document** — exactly one object, the **terminal** protocol object (the final `Task`, or the `Message` where no task was created), never a concatenation of events. Because `json` cannot represent a live event stream, **`--stream` together with `-o json` MUST be rejected as a usage error** (exit 2, §9.6), directing the caller to `-o jsonl`; the tool MUST NOT silently buffer events or switch modes. A blocking or one-shot invocation (the default, §4.5) still emits `json` normally — one terminal object, whether the tool streamed or polled internally. A `json` consumer can always `JSON.parse` stdout in one shot.
-- **`jsonl` MUST stream**: each line MUST be a complete, independently parseable JSON object terminated by a newline, flushed as it is produced so a reader can consume the stream incrementally. Lines MUST NOT be pretty-printed across multiple physical lines.
-- If a tool cannot stream a given interaction (streaming unsupported by the agent, or a one-shot command such as `cancel`), `jsonl` MUST still be honored by emitting the applicable object(s), one per line — a single-line result is valid JSONL.
-- Both modes MUST emit the A2A protocol's own response types (Appendix B). A tool MUST NOT define a substitute schema, and MUST NOT change the selected mode implicitly — a caller that asked for `json` and received `jsonl` will parse the first line and treat it as the whole result, failing silently with a plausible answer.
+- **Without `--stream`, `json` MUST be a single document** — exactly one object, never a concatenation of events, so a consumer can `JSON.parse` stdout in one shot. Size is bounded by the task, not by how many events it produced.
+- **With `--stream`, `json` MUST be emitted as JSONL** — each line a complete, independently parseable JSON object terminated by a newline, flushed as produced. Lines MUST NOT be pretty-printed across multiple physical lines, and the final line MUST carry the terminal object so a reader that keeps only the last line still obtains the identifiers and state.
+- The switch is **caller-controlled, not implicit**: `--stream` MUST be an explicit command-line flag, and a tool MUST NOT enable it from configuration, an environment variable, or terminal detection. A caller that did not pass `--stream` always gets a single document, so the output shape is a function of the invocation the caller wrote.
+- If the caller passes `--stream` but the interaction cannot stream (streaming unsupported by the agent, or a one-shot command such as `cancel`), the tool MUST still honor JSONL by emitting the applicable object(s), one per line — a single-line result is valid JSONL.
+- Both forms MUST emit the A2A protocol's own response types (Appendix B); a tool MUST NOT define a substitute schema.
 
-9.4 Errors MUST be machine-readable in both modes (the error envelope in Appendix B) and MUST be normalized across transports so that the same A2A error yields the same tool-level result regardless of binding. In `jsonl`, an error terminating the stream MUST be emitted as a final error object on its own line.
+9.4 Errors MUST be machine-readable (the error envelope in Appendix B) and MUST be normalized across transports so that the same A2A error yields the same tool-level result regardless of binding. Under `--stream`, an error terminating the stream MUST be emitted as a final error object on its own line.
 
 Errors come in two layers, and a tool MUST NOT blur them.
 
@@ -390,6 +394,8 @@ A later version of this specification MAY promote reserved codes to required. A 
 
 A client MAY express its own preference with `--transport`, which is **repeatable and ordered**: the tool takes the first client-preferred binding the card also offers, and falls back to the card's order when none matches. A single-valued preference is insufficient — it leaves a tool with no way to negotiate against a card that does not offer it. When an interface declares a routing identifier, the tool MUST echo it on every request.
 
+Cross-cutting options such as `--insecure` apply to whichever transport is negotiated. Where a future option is meaningful only for one binding (for example a gRPC keepalive setting that HTTP has no analogue for), a tool SHOULD namespace it per transport rather than overloading a global flag — the reserved convention is `--<binding>-<option>` (for example `--grpc-keepalive`). This specification defines no such per-transport option today; the convention is reserved so that adding one later is not a breaking change.
+
 11.2 **Protocol version (MUST):** a tool MUST signal the A2A protocol version on every request. This is a per-binding service parameter conveyed as an HTTP header, a query parameter, or gRPC metadata depending on the transport; an empty value causes the server to assume a legacy version, so the tool MUST set it explicitly. The tool SHOULD expose `--a2a-version`. Absent an explicit value, a tool SHOULD negotiate down to the highest version supported by both itself and the agent as declared on the Agent Card, but MUST NOT negotiate below **1.0** — versions earlier than 1.0 are legacy and MUST require an explicit opt-in. A tool MUST surface a version-unsupported error clearly rather than silently downgrading.
 
 11.3 **Capability validation (SHOULD):** before invoking a capability-gated operation (streaming, push notifications, extended card), a tool SHOULD verify the capability on the Agent Card.
@@ -404,7 +410,7 @@ Declaring the server-required extensions a tool supports is a separate, Tier 3 r
 
 12.1 **Conditional, and exactly one.** A tool is not required to ship an Agent Skill. **If it ships one, it MUST ship exactly one** — not one per tier, per command, or per capability. A specification that standardises the command surface makes a single skill sufficient for any conformant tool, so shipping several is duplication rather than coverage.
 
-The skill instructs an AI coding agent how to drive the tool: use `--output json` for a single parseable result, or `--output jsonl` to consume progress incrementally (§9.3); rely on blocking completion rather than ad-hoc sleeps; determine success from the reported task state; pass `--context-id` and `--task-id` explicitly, since the tool holds no session state (§6); and use scriptable credentials rather than interactive login.
+The skill instructs an AI coding agent how to drive the tool: use `-o json` for a single parseable result, or `-o json --stream` to consume progress incrementally as JSONL (§9.3); rely on blocking completion rather than ad-hoc sleeps; determine success from the reported task state; pass `--context-id` and `--task-id` explicitly, since the tool holds no session state (§6); and use scriptable credentials rather than interactive login.
 
 12.2 **Lean, deferring to runtime help.** The `SKILL.md` itself MUST be generic and token-efficient: it MUST NOT enumerate the full command surface or embed every capability inline, and MUST direct the agent to discover capabilities at runtime (for example `a2a-cli help`, `a2a-cli <command> --help`), keeping the always-loaded context footprint small.
 
@@ -416,7 +422,7 @@ Worked examples — a command with representative input and output — are genui
 
 A skill **MUST NOT** assume it can install the `a2a-cli` binary — no current agent-facing standard defines an installation mechanism. It SHOULD declare the dependency as human-readable prose in the `compatibility` frontmatter field, and SHOULD include a preflight check and install pointers in its body. Binary distribution is out of scope here and belongs to platform package managers.
 
-A tool shipping **more than one** agent-facing component — a skill together with an MCP server, say — MAY additionally distribute them as an Agent Plugin package [AGENT-PLUGINS]. A tool shipping a single skill SHOULD NOT wrap it in a plugin. Agent Plugins defines packaging only; installation, distribution and permissions remain client-controlled.
+The RECOMMENDED distribution is an **Agent Plugin package** [AGENT-PLUGINS] that bundles the skill together with the tool's agent-facing components, so an agent installs, versions, and updates them as one unit rather than assembling them by hand. This keeps the skill and the tool it describes co-versioned. A caller MAY still install the skill and the `a2a-cli` binary independently — the plugin is a convenience, not a precondition — and Agent Plugins defines packaging only; installation, distribution, and permissions remain client-controlled.
 
 ## 13. Compliance report & compatibility matrix
 
@@ -460,11 +466,11 @@ This specification does not: define server/agent behavior (`serve` mode is optio
 
 ## Appendix B — Machine-readable output (normative)
 
-**This specification defines no output schema of its own.** In `json` and `jsonl` modes a tool MUST emit the A2A protocol's own response types, unmodified, as defined by `spec/a2a.proto` and rendered per A2A's JSON field-naming convention (A2A §5.5). Inventing a CLI-level envelope would oblige every consumer to unwrap it, break protocol schema validators, and commit this specification to a second versioned schema with its own deprecation policy.
+**This specification defines no output schema of its own.** In `json` output — a single document, or streamed as JSONL under `--stream` — a tool MUST emit the A2A protocol's own response types, unmodified, as defined by `spec/a2a.proto` and rendered per A2A's JSON field-naming convention (A2A §5.5). Inventing a CLI-level envelope would oblige every consumer to unwrap it, break protocol schema validators, and commit this specification to a second versioned schema with its own deprecation policy.
 
 **Which type, per command:**
 
-| Command | `--output json` emits | `--output jsonl` emits, one per line |
+| Command | `-o json` emits (one document) | `-o json --stream` emits, one per line |
 | --- | --- | --- |
 | `send` | `SendMessageResponse` — the terminal object: `task` when a task was created, otherwise `message` | `StreamResponse` per event |
 | `task get` | `Task` | `Task` (single line) |
@@ -477,9 +483,9 @@ This specification does not: define server/agent behavior (`serve` mode is optio
 
 Tools MAY add fields outside the protocol types only where the protocol provides an extension point; consumers MUST ignore unknown fields.
 
-**Streaming (`--output jsonl`).** One `StreamResponse` per line, flushed as produced, each a complete JSON object on a single physical line. The final line MUST carry the terminal `Task` (or `Message`), so a reader that keeps only the last line still obtains the task identifier, the context identifier, and the state.
+**Streaming (`-o json --stream`).** One `StreamResponse` per line, flushed as produced, each a complete JSON object on a single physical line. The final line MUST carry the terminal `Task` (or `Message`), so a reader that keeps only the last line still obtains the task identifier, the context identifier, and the state.
 
-**Single document (`--output json`).** Exactly one object for the whole invocation — the terminal object above, or one error object. Never a concatenation, and never the event log.
+**Single document (`-o json`, no `--stream`).** Exactly one object for the whole invocation — the terminal object above, or one error object. Never a concatenation, and never the event log.
 
 **Errors.** A failure emits one error object instead of a result:
 
@@ -517,7 +523,8 @@ While the specification is in Draft, notable revisions are recorded by date; the
 
 | Version | Date | Notes |
 | --- | --- | --- |
-| 0.1 (Draft) | 2026-08-11 | Terminology: interaction, not conversation. Transport honours the Agent Card's preference order; `--transport` is repeatable and ordered; version negotiates down only within 1.x. Machine-readable output emits the protocol's own types — Appendix B defines no schema — with `json` as the terminal object and no implicit switch to `jsonl`; `tui` removed and §9.2 pins the `text` floor. The CLI is stateless: no capture-and-replay, no `--continue`; §6.4 keeps configuration only, with a documented precedence. Commands namespaced (`task get`, `task list`), `discover` → `agent-inspect`, `--service-url` and `--card-url` → `--agent-card`. Errors defer to the A2A set (§3.3.2, §5.4); Appendix E reduced to CLI-local conditions. `chat` → Tier 3, `push-config` → Tier 2. Shipping a skill is conditional. Conformance is demonstrated against a live agent rather than the TCK, which validates agents rather than clients. Identifier permanence binds from Proposed. Exit codes split into three required statuses and five reserved ones, so conformance is achievable while the vocabulary stays fixed. |
+| 0.1 (Draft) | 2026-08-11 | Second review round. Output format is `-o <text\|json>`; `--stream` selects live delivery, rendering events under `text` and emitting JSONL under `json`, so `json` cardinality follows an explicit `--stream` (never inferred from config, env, or a TTY). `-H/--header` is a general-purpose service parameter, split from the credential flags. push-config is Tier 2; only the receiver is Tier 3. A rejected `--task-id` fails and creates nothing, rather than starting a task in an unintended context. Artifacts returned by the server MUST be rendered, never silently stripped. A reserved `--<binding>-<option>` convention allows future per-transport flags. Distribution recommends an Agent Plugin bundling the skill with the tool, co-versioned, with independent installation still allowed. |
+| 0.1 (Draft) | 2026-08-11 | Terminology: interaction, not conversation. Transport honours the Agent Card's preference order; `--transport` is repeatable and ordered; version negotiates down only within 1.x. Machine-readable output emits the protocol's own types — Appendix B defines no schema; `tui` removed and §9.2 pins the `text` floor. The CLI is stateless: no capture-and-replay, no `--continue`; §6.4 keeps configuration only, with a documented precedence. Commands namespaced (`task get`, `task list`), `discover` → `agent-inspect`, `--service-url` and `--card-url` → `--agent-card`. Errors defer to the A2A set (§3.3.2, §5.4); Appendix E reduced to CLI-local conditions. `chat` → Tier 3, `push-config` → Tier 2. Shipping a skill is conditional. Conformance is demonstrated against a live agent rather than the TCK, which validates agents rather than clients. Identifier permanence binds from Proposed. Exit codes split into three required statuses and five reserved ones, so conformance is achievable while the vocabulary stays fixed. |
 | 0.1 (Draft) | 2026-08-04 | Initial draft. Client-only baseline; Tier 1 normative with Tiers 2–3 outlined; interaction and session handling (§6) and task polling (§7) as first-class; opinionated defaults (§4.5); conformant-versus-official and governance (§1.4, §15). |
 
 ## Appendix E — CLI-local error codes (normative)
