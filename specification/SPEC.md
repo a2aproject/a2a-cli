@@ -161,6 +161,7 @@ The authoritative list of requirement identifiers is the compliance-report templ
 | `send` | 1 | Send a message to start or continue an interaction |
 | `task cancel` | 1 | Cancel an active task |
 | `task get` | 1 | Retrieve a task's status and artifacts |
+| `help` | 1 | Show usage for the tool or a specific command |
 | `auth` | 2 | Interactive credential acquisition (OAuth) |
 | `config` | 2 | Inspect and edit configuration (§6.4) |
 | `conformance` | 2 | Smoke-check a live agent against the A2A TCK |
@@ -171,27 +172,30 @@ The authoritative list of requirement identifiers is the compliance-report templ
 | `chat` | 3 | Interactive multi-turn session |
 | `serve` | 3 | Run a local mock agent (out of client baseline) |
 
-5.2 Global options (Tier 1 MUST unless noted):
+5.2 Global options. Unless noted, an option is available from Tier 1; where an option controls a higher-tier feature (for example `--metadata` or `--stream`), its availability follows that feature's tier (§3.1).
 
 | Option | Meaning |
 | --- | --- |
-| `--a2a-version <version>` | Protocol version to signal to the server on every request (§11). |
 | `-a, --agent-card <ref>` | The agent to talk to, given as an Agent Card reference: a host (the well-known path is appended), an explicit card URL (used as-is), or a `file://` path to a local card. |
-| `--async` / `--return-immediately` / `--no-wait` | Do not wait; return the task identifiers immediately for later polling (default is to wait, §4.5 / §7.3). |
-| `--bearer <token>` / `--api-key <key>` | Pass a bearer token or an API key as the request credential (§10.1). |
 | `--context-id <id>` | Group this turn with an existing interaction: the message starts a new task under the given server-assigned context, alongside the tasks already in it (§6.2). |
-| `--debug` | **Diagnostics:** verbose logging to stderr. `--dump-wire` (Tier 2) additionally emits raw protocol JSON. |
-| `-H, --header <k:v>` | Add an arbitrary service parameter (e.g. an HTTP header), repeatable; general-purpose, not authentication-specific (§10.1). |
-| `--insecure` | Disable TLS verification for the negotiated transport (development only; MUST emit a warning). Transport security is on unless this is passed. |
-| `--metadata <json>` | Attach caller-supplied metadata to the outgoing message/request, for protocol extensions (A2A §3.2.5). This sends metadata to the agent; it is not a request for server-side metadata. |
-| `-o, --output <text\|json>` | Output format. Default `text` (§4.5, §9.2). `json` emits the protocol's own types (Appendix B): one document by default, or JSON Lines (JSONL) when `--stream` is set (§9.3). |
-| `--poll-interval <duration>` / `--timeout <duration>` | How often to re-check task status while waiting, and how long to wait before giving up (§7.3). |
-| `--stream` | Consume the agent's live event stream (§7.2). Under `-o text` it renders events as they arrive; under `-o json` it emits JSONL. MUST be set explicitly — never enabled from config, env, or terminal detection (§9.3). |
 | `--task-id <id>` | Continue a specific existing task — for example, to reply to one waiting in `INPUT_REQUIRED`. Requires `--context-id`; a rejected identifier fails rather than starting a new task (§6.2). |
-| `--transport <binding>` | Client transport preference, **repeatable and ordered** (highest first). Overrides the card's preference order (§11.1); a binding absent from the card is skipped. |
+| `--metadata <json>` | Attach caller-supplied metadata to the outgoing message/request, for protocol extensions (A2A §3.2.5). This sends metadata to the agent; it is not a request for server-side metadata. |
+| `--stream` | Consume the agent's live event stream (§7.2). Under `-o text` it renders events as they arrive; under `-o json` it emits JSONL. MUST be set explicitly — never enabled from config, env, or terminal detection (§9.3). |
+| `--wait` / `--watch` | Block until the task reaches a terminal or interrupted state. This is the default for `send` (§4.5); stating it explicitly overrides a configured default. On `task get` it turns the one-shot read into a poll loop (§7.3). |
+| `--async` / `--return-immediately` / `--no-wait` | Do not wait; return the task identifiers immediately for later polling (default is to wait, §4.5 / §7.3). |
+| `--poll-interval <duration>` / `--timeout <duration>` | How often to re-check task status while waiting, and how long to wait before giving up (§7.3). |
+| `-o, --output <text\|json>` | Output format. Default `text` (§4.5, §9.2). `json` emits the protocol's own types (Appendix B): one document by default, or JSON Lines (JSONL) when `--stream` is set (§9.3). |
 | `--verbose` | **Presentation:** show the full part structure rather than collapsing parts into one representation. |
+| `--transport <binding>` | Client transport preference, **repeatable and ordered** (highest first). Overrides the card's preference order (§11.1); a binding absent from the card is skipped. |
+| `--a2a-version <version>` | Protocol version to signal to the server on every request (§11). |
+| `--insecure` | Disable TLS verification for the negotiated transport (development only; MUST emit a warning). Transport security is on unless this is passed. |
+| `--bearer <token>` / `--api-key <key>` | Pass a bearer token or an API key as the request credential (§10.1). |
+| `-H, --header <k:v>` | Add an arbitrary service parameter (e.g. an HTTP header), repeatable; general-purpose, not authentication-specific (§10.1). |
+| `--debug` | **Diagnostics:** verbose logging to stderr; at Tier 2 this includes the raw protocol messages exchanged on the wire. |
+| `-h, --help` | Show usage for the tool or the given command, and exit. |
 | `-v, --version` | Print the tool version and exit. |
-| `--wait` / `--watch` | Block until the task reaches a terminal or interrupted state. This is the default for `send` (§4.5); stating it explicitly overrides a configured default. On `get` it turns the one-shot read into a poll loop (§7.3). |
+
+This table lists **global** options only. Command-specific flags — for example `--history` and `--include-artifacts` on `task get`, `--validate` and `--extended` on `inspect`, or `--text` / `--file` / `--data` on `send` — are defined with each command in §8.
 
 ---
 
@@ -263,21 +267,21 @@ Task states: `SUBMITTED`, `WORKING`, `INPUT_REQUIRED`, `AUTH_REQUIRED`, `COMPLET
 A2A provides three ways to observe task progress (A2A §3.5). A conformant tool MUST implement **polling**, SHOULD implement **streaming**, and MAY implement **push notifications**. Managing push-notification *configuration* is an ordinary API call (`push-config`, Tier 2); only *hosting the receiver* is Tier 3:
 
 1. **Streaming (SSE)** — live status/artifact events; the first event MUST be the `Task`. Available only when the Agent Card advertises the streaming capability.
-2. **Polling** — repeated `get` until a terminal or interrupted state. Always available; the REQUIRED fallback when streaming is unsupported or a connection drops.
+2. **Polling** — repeated `task get` until a terminal or interrupted state. Always available; the REQUIRED fallback when streaming is unsupported or a connection drops.
 3. **Push notifications** — server-initiated webhook callbacks (Tier 3); require the tool to host a receiver, which is beyond the client baseline.
 
 ### 7.3 Polling behavior (MUST)
 
 A conformant tool MUST provide a polling path:
 
-- **`get <taskId>`** — one-shot retrieval of task state (with artifacts via `--include-artifacts`, history via `--history <n>`).
-- **A blocking/watch mode** that repeatedly polls until a **terminal** state and **stops immediately on an interrupted** state, returning so the caller can act. This is the default behavior of `send` (§4.5) and is available on `get` via `--wait` / `--watch`.
+- **`task get <taskId>`** — one-shot retrieval of task state (with artifacts via `--include-artifacts`, history via `--history <n>`).
+- **A blocking/watch mode** that repeatedly polls until a **terminal** state and **stops immediately on an interrupted** state, returning so the caller can act. This is the default behavior of `send` (§4.5) and is available on `task get` via `--wait` / `--watch`.
 - Polling controls: `--poll-interval` (RECOMMENDED default 2 seconds) and `--timeout` (on expiry the tool MUST exit non-zero with the timeout code, §9). A tool SHOULD apply bounded backoff, MUST NOT busy-loop, and MUST remain interruptible without losing the already-printed `taskId`.
 - When both streaming and polling are available, a blocking wait MAY prefer streaming and MUST fall back to polling on stream failure. *(Reconciling after a reconnect needs no separate rule: A2A streaming already re-sends the full `Task` as the first event on reconnect.)*
 
 ### 7.4 Stream resumption (SHOULD)
 
-For long-running tasks, a tool SHOULD support reconnection via `subscribe` (whose first event is the `Task`, closing the gap between a poll and a subscribe) and, where the server supports it, resumption from the last received event. Because that first event carries the full `Task`, state is reconciled by the protocol itself and no additional `get` is required.
+For long-running tasks, a tool SHOULD support reconnection via `subscribe` (whose first event is the `Task`, closing the gap between a poll and a subscribe) and, where the server supports it, resumption from the last received event. Because that first event carries the full `Task`, state is reconciled by the protocol itself and no additional `task get` is required.
 
 ---
 
@@ -306,7 +310,7 @@ When a result carries artifacts, the tool MUST render them to stdout in the sele
 Cancel an active task by identifier. The operation is idempotent and MAY return a not-cancelable error if the task has already reached a terminal state. MUST report the resulting state.
 
 ### 8.5 Higher-tier commands (outline)
-- **Tier 2:** `task list` (cursor-paginated, filterable by status and context); `subscribe` (stream reconnect); `auth login` (OAuth 2.1 device-code and client-credentials flows with a secure token store); multi-transport selection; `config` (inspect and edit configuration, §6.4); `push-config` create/get/list/delete; `download` (save artifacts); `--dump-wire`; `conformance` (TCK smoke check); shell completions.
+- **Tier 2:** `task list` (cursor-paginated, filterable by status and context); `subscribe` (stream reconnect); `auth login` (OAuth 2.1 device-code and client-credentials flows with a secure token store); multi-transport selection; `config` (inspect and edit configuration, §6.4); `push-config` create/get/list/delete; `download` (save artifacts); raw-wire logging via `--debug`; `conformance` (TCK smoke check); shell completions.
 - **Tier 3:** a webhook receiver for push notifications; `chat` (interactive multi-turn); gRPC transport; authenticated extended Agent Card; Agent Card signature verification; mTLS; OpenID Connect; `serve`/mock agent; catalog/registry integration; batch/stdin input; protocol extensions.
 
 ---
@@ -346,7 +350,7 @@ A condition the protocol already names MUST carry the protocol's error rather th
 
 A tool SHOULD also populate the envelope's `hint` field with an actionable next step (Appendix B). A precise code tells a program what happened; a good hint tells a person what to do about it, and costs far less to implement than the rest of this section.
 
-9.5 When the caller does not wait for completion (`--async` / `--return-immediately` / `--no-wait`), the tool MUST still emit a result object carrying the identifiers required to resume or poll later — at minimum `taskId` and `contextId` (§6.3) — so the caller can query status with `get` at a later time.
+9.5 When the caller does not wait for completion (`--async` / `--return-immediately` / `--no-wait`), the tool MUST still emit a result object carrying the identifiers required to resume or poll later — at minimum `taskId` and `contextId` (§6.3) — so the caller can query status with `task get` at a later time.
 
 9.6 Exit codes. The exit code is the coarse signal for shells and CI — the only result a caller gets without parsing output. The error code (§9.4) is the precise one.
 
@@ -418,14 +422,14 @@ Worked examples — a command with representative input and output — are genui
 
 12.3 **Distinct layers.** The specification (the behavioural contract) and the skill (agent-facing usage guidance) are DISTINCT layers and MUST be maintained separately. The skill MUST NOT restate normative requirements: an agent needs to know how to invoke the tool, not which clause obliges it.
 
-12.4 **Distribution.** A skill SHOULD be installable into the cross-client location `<scope>/.agents/skills/a2a-cli/`. *(The Agent Skills format does not define an installation location; this is a widely-adopted convention, not a normative requirement of that format.)*
+12.4 **Distribution.** A skill SHOULD be installable into the cross-client location `<scope>/.agents/skills/<tool>/`. *(The Agent Skills format does not define an installation location; this is a widely-adopted convention, not a normative requirement of that format.)*
 
-A skill **MUST NOT** assume it can install the `a2a-cli` binary — no current agent-facing standard defines an installation mechanism. It SHOULD declare the dependency as human-readable prose in the `compatibility` frontmatter field, and SHOULD include a preflight check and install pointers in its body. Binary distribution is out of scope here and belongs to platform package managers.
+A skill **MUST NOT** assume it can install the tool's binary — no current agent-facing standard defines an installation mechanism. It SHOULD declare the dependency as human-readable prose in the `compatibility` frontmatter field, and SHOULD include a preflight check and install pointers in its body. Binary distribution is out of scope here and belongs to platform package managers.
 
 Distribution is expected to arrive in two stages, because the priority is adoption — the widest set of agents able to use the tool with the least friction:
 
-1. **Baseline — the tool and one skill.** The first form is the `a2a-cli` binary plus a single Agent Skill (§12.1), the skill installed at the location above. When a tool ships a skill, this baseline stands on its own and MUST NOT depend on any plugin machinery, so any agent that understands Agent Skills can use the tool immediately.
-2. **Next — an Agent Plugin.** The project SHOULD then also publish an **Agent Plugin package** [AGENT-PLUGINS], which carries the skill as a plugin component and MAY add an MCP server, so a plugin-aware agent installs, versions, and updates them as one unit. Agent Plugins defines exactly two component types — Agent Skills and MCP servers — so the plugin packages the *agent-facing* pieces; the `a2a-cli` binary itself is not a plugin component and its installation still belongs to platform package managers. The plugin references the binary via the preflight check above rather than embedding it.
+1. **Baseline — the tool and one skill.** The first form is the tool's binary plus a single Agent Skill (§12.1), the skill installed at the location above. When a tool ships a skill, this baseline stands on its own and MUST NOT depend on any plugin machinery, so any agent that understands Agent Skills can use the tool immediately.
+2. **Next — an Agent Plugin.** The project SHOULD then also publish an **Agent Plugin package** [AGENT-PLUGINS], which carries the skill as a plugin component and MAY add an MCP server, so a plugin-aware agent installs, versions, and updates them as one unit. Agent Plugins defines exactly two component types — Agent Skills and MCP servers — so the plugin packages the *agent-facing* pieces; the tool's binary itself is not a plugin component and its installation still belongs to platform package managers. The plugin references the binary via the preflight check above rather than embedding it.
 
 The two are complementary, not exclusive: the skill shipped in stage 1 is the same skill the plugin carries in stage 2, keeping them co-versioned. A caller MAY always install the skill and the binary independently — the plugin is a convenience, never a precondition — and Agent Plugins defines packaging only; installation, distribution, and permissions remain client-controlled.
 
@@ -455,12 +459,12 @@ This specification does not: define server/agent behavior (`serve` mode is optio
 
 15.4 **Change control.** While the specification is a **Draft**, it is still being assembled: normative requirements MAY change without a version bump, and each notable revision is recorded by date in the revision history (Appendix D) and reflected in the **Last updated** date in the header. From the first **Proposed** version onward, any change to a normative requirement MUST go through the ratification process and MUST bump the specification version. Implementers SHOULD therefore treat a Draft as a moving target and pin to a ratified version for conformance claims.
 
-Proposals enter through two channels, both submitted to the TSC for review and disposition:
+Proposals enter through two channels, both submitted for review under the project's governance process:
 
 - a **feature request** proposes a new capability — a command, flag, tier member, or output form not yet covered;
 - a **request for change (RFC)** proposes modifying or withdrawing an existing normative requirement.
 
-The TSC reviews each, and an accepted proposal is applied under the change-control rules above — recorded in the revision history while the specification is a Draft, and gated on ratification with a version bump once it is Proposed or later.
+An accepted proposal is applied under the change-control rules above — recorded in the revision history while the specification is a Draft, and gated on ratification with a version bump once it is Proposed or later.
 
 ---
 
@@ -535,7 +539,7 @@ While the specification is in Draft, notable revisions are recorded by date; the
 
 | Version | Date | Notes |
 | --- | --- | --- |
-| 0.1 (Draft) | 2026-08-11 | Second review round. Output format is `-o <text\|json>`; `--stream` selects live delivery, rendering events under `text` and emitting JSONL under `json`, so `json` cardinality follows an explicit `--stream` (never inferred from config, env, or a TTY). `-H/--header` is a general-purpose service parameter, split from the credential flags. push-config is Tier 2; only the receiver is Tier 3. A rejected `--task-id` fails and creates nothing, rather than starting a task in an unintended context. Artifacts returned by the server MUST be rendered, never silently stripped. A reserved `--<binding>-<option>` convention allows future per-transport flags. Distribution recommends an Agent Plugin bundling the skill with the tool, co-versioned, with independent installation still allowed. |
+| 0.1 (Draft) | 2026-08-11 | Second review round. Output format is `-o <text\|json>`; `--stream` selects live delivery, rendering events under `text` and emitting JSONL under `json`, so `json` cardinality follows an explicit `--stream` (never inferred from config, env, or a TTY). Added `-v/--version`, with `--verbose` keeping only its long form. Dropped named profiles and `--env`: configuration resolves through an environment variable and local/global files, keeping the CLI stateless. `-H/--header` split from the credential flags as a general-purpose service parameter. `--metadata` clarified as caller-sent request metadata. `agent-inspect` renamed to `inspect`. push-config is Tier 2; only the receiver is Tier 3. A rejected `--task-id` fails and creates nothing, rather than starting a task in an unintended context. Artifacts returned by the server MUST be rendered, never silently stripped. A reserved `--<binding>-<option>` convention allows future per-transport flags. Distribution is phased — the tool and one skill first, then an Agent Plugin carrying the skill (and optionally an MCP server), with independent installation still allowed. §15.4 adds feature-request and RFC intake channels. |
 | 0.1 (Draft) | 2026-08-11 | Terminology: interaction, not conversation. Transport honours the Agent Card's preference order; `--transport` is repeatable and ordered; version negotiates down only within 1.x. Machine-readable output emits the protocol's own types — Appendix B defines no schema; `tui` removed and §9.2 pins the `text` floor. The CLI is stateless: no capture-and-replay, no `--continue`; §6.4 keeps configuration only, with a documented precedence. Commands namespaced (`task get`, `task list`), `discover` → `inspect`, `--service-url` and `--card-url` → `--agent-card`. Errors defer to the A2A set (§3.3.2, §5.4); Appendix E reduced to CLI-local conditions. `chat` → Tier 3, `push-config` → Tier 2. Shipping a skill is conditional. Conformance is demonstrated against a live agent rather than the TCK, which validates agents rather than clients. Identifier permanence binds from Proposed. Exit codes split into three required statuses and five reserved ones, so conformance is achievable while the vocabulary stays fixed. |
 | 0.1 (Draft) | 2026-08-04 | Initial draft. Client-only baseline; Tier 1 normative with Tiers 2–3 outlined; interaction and session handling (§6) and task polling (§7) as first-class; opinionated defaults (§4.5); conformant-versus-official and governance (§1.4, §15). |
 
