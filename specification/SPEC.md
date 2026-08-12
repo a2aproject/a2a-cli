@@ -80,7 +80,7 @@ Restated from A2A §4 so this document stands alone:
 | Tier | Name | Requirements |
 | --- | --- | --- |
 | **Tier 1** | Core | §4.5 default behavior · §6 interaction/session handling · §7 polling · §8.1–8.4 commands (`inspect`, `send`, `task get`, `task cancel`) · §9 output & exit codes · §10.1 auth · §11 transport & versioning · §12 SKILL.md |
-| **Tier 2** | Standard | Tier 1 + `task list`, `subscribe`, OAuth `auth login`, ≥2 transports, configuration scoping, push-notification config CRUD, `download`, wire debug, `conformance`, shell completions |
+| **Tier 2** | Standard | Tier 1 + `task list`, `task subscribe`, OAuth `auth login`, ≥2 transports, configuration scoping, push-notification config CRUD, `download`, wire debug, `conformance`, shell completions |
 | **Tier 3** | Advanced | Tier 2 + a push-notification webhook receiver, interactive `chat`, gRPC transport, authenticated extended Agent Card, Agent Card signature verification, mTLS, OpenID Connect, `serve`/mock mode, catalog/registry, extensions |
 
 3.2 Conformance MUST be demonstrated by a **compliance report** (§13): the tool exercised against a live A2A agent, with an outcome recorded for every requirement identifier in the tier claimed. A tool MUST NOT advertise a tier it has not demonstrated.
@@ -167,7 +167,7 @@ The authoritative list of requirement identifiers is the compliance-report templ
 | `conformance` | 2 | Smoke-check a live agent against the A2A TCK |
 | `download` | 2 | Save task artifacts |
 | `push-config` | 2 | Manage push-notification configurations |
-| `subscribe` | 2 | (Re)subscribe to a task's event stream |
+| `task subscribe` | 2 | (Re)subscribe to a task's event stream |
 | `task list` | 2 | List tasks |
 | `chat` | 3 | Interactive multi-turn session |
 | `serve` | 3 | Run a local mock agent (out of client baseline) |
@@ -281,7 +281,7 @@ A conformant tool MUST provide a polling path:
 
 ### 7.4 Stream resumption (SHOULD)
 
-For long-running tasks, a tool SHOULD support reconnection via `subscribe` (whose first event is the `Task`, closing the gap between a poll and a subscribe) and, where the server supports it, resumption from the last received event. Because that first event carries the full `Task`, state is reconciled by the protocol itself and no additional `task get` is required.
+For long-running tasks, a tool SHOULD support reconnection via `task subscribe` (whose first event is the `Task`, closing the gap between a poll and a subscribe) and, where the server supports it, resumption from the last received event. Because that first event carries the full `Task`, state is reconciled by the protocol itself and no additional `task get` is required.
 
 ---
 
@@ -310,7 +310,7 @@ When a result carries artifacts, the tool MUST render them to stdout in the sele
 Cancel an active task by identifier. The operation is idempotent and MAY return a not-cancelable error if the task has already reached a terminal state. MUST report the resulting state.
 
 ### 8.5 Higher-tier commands (outline)
-- **Tier 2:** `task list` (cursor-paginated, filterable by status and context); `subscribe` (stream reconnect); `auth login` (OAuth 2.1 device-code and client-credentials flows with a secure token store); multi-transport selection; `config` (inspect and edit configuration, §6.4); `push-config` create/get/list/delete; `download` (save artifacts); raw-wire logging via `--debug`; `conformance` (TCK smoke check); shell completions.
+- **Tier 2:** `task list` (cursor-paginated, filterable by status and context); `task subscribe` (stream reconnect); `auth login` (OAuth 2.1 device-code and client-credentials flows with a secure token store); multi-transport selection; `config` (inspect and edit configuration, §6.4); `push-config` create/get/list/delete; `download` (save artifacts); raw-wire logging via `--debug`; `conformance` (TCK smoke check); shell completions.
 - **Tier 3:** a webhook receiver for push notifications; `chat` (interactive multi-turn); gRPC transport; authenticated extended Agent Card; Agent Card signature verification; mTLS; OpenID Connect; `serve`/mock agent; catalog/registry integration; batch/stdin input; protocol extensions.
 
 ---
@@ -477,7 +477,7 @@ An accepted proposal is applied under the change-control rules above — recorde
 | `task cancel` | Cancel Task | §3.1.5 | 1 |
 | `task get` | Get Task | §3.1.3 | 1 |
 | `push-config` | Create / Get / List / Delete Push Notification Config | §3.1.7–§3.1.10 | 2 |
-| `subscribe` | Subscribe to Task | §3.1.6 | 2 |
+| `task subscribe` | Subscribe to Task | §3.1.6 | 2 |
 | `task list` | List Tasks | §3.1.4 | 2 |
 
 ## Appendix B — Machine-readable output (normative)
@@ -492,7 +492,7 @@ An accepted proposal is applied under the change-control rules above — recorde
 | `task get` | `Task` | `Task` (single line) |
 | `task cancel` | `Task` | `Task` (single line) |
 | `task list` | `ListTasksResponse` | one `Task` per line |
-| `subscribe` | the terminal `Task` | `StreamResponse` per event |
+| `task subscribe` | the terminal `Task` | `StreamResponse` per event |
 | `inspect` | `AgentCard` | `AgentCard` (single line) |
 
 `SendMessageResponse` and `StreamResponse` are discriminated unions (protobuf `oneof`), which is what makes them scriptable: a consumer switches on which field is present rather than inspecting the shape. A tool MUST NOT add a discriminator field of its own — the `oneof` is the discriminator.
