@@ -145,7 +145,7 @@ The authoritative list of requirement identifiers is the compliance-report templ
 | Transport | The **first interface in the Agent Card's `supported_interfaces`** — the list is always in server preference order (§11.1) | `--transport <binding>`, repeatable, highest preference first |
 | Task completion | **Wait** (block) until the task reaches a terminal or interrupted state | `--async` / `--return-immediately` / `--no-wait` (return identifiers immediately) |
 | Output presentation | **Human-readable `text`** — labeled fields, one field per line, no control sequences (§9.2) | `--output <text\|json>`; `--stream` renders live (text) or emits JSONL (`json`) (§9.3) |
-| Detail level | **Concise** | `--verbose` for detailed output |
+| Detail level | **Concise** | `--verbose` for a full, human-readable view of the data exchanged with the agent |
 | Protocol version | The **highest version supported by both** tool and agent, signaled explicitly, never below 1.0 (§11.2) | `--a2a-version <version>` |
 | Transport security | **TLS verification enabled** | `--insecure` (development only; MUST warn) |
 
@@ -185,13 +185,13 @@ The authoritative list of requirement identifiers is the compliance-report templ
 | `--async` / `--return-immediately` / `--no-wait` | Do not wait; return the task identifiers immediately for later polling (default is to wait, §4.5 / §7.3). |
 | `--poll-interval <duration>` / `--timeout <duration>` | How often to re-check task status while waiting, and how long to wait before giving up (§7.3). |
 | `-o, --output <text\|json>` | Output format. Default `text` (§4.5, §9.2). `json` emits the protocol's own types (Appendix B): one document by default, or JSON Lines (JSONL) when `--stream` is set (§9.3). |
-| `--verbose` | **Presentation:** show the full part structure rather than collapsing parts into one representation. |
+| `--verbose` | **User-facing presentation:** show the full, human-readable breakdown of message parts and the data exchanged with the agent, rather than collapsing parts into one representation. For understanding *what was sent and received*, not how the tool got there. |
 | `--transport <binding>` | Client transport preference, **repeatable and ordered** (highest first). Overrides the card's preference order (§11.1); a binding absent from the card is skipped. |
 | `--a2a-version <version>` | Protocol version to signal to the server on every request (§11). |
 | `--insecure` | Disable TLS verification for the negotiated transport (development only; MUST emit a warning). Transport security is on unless this is passed. |
 | `--bearer <token>` / `--api-key <key>` | Pass a bearer token or an API key as the request credential (§10.1). |
 | `-H, --header <k:v>` | Add an arbitrary service parameter (e.g. an HTTP header), repeatable; general-purpose, not authentication-specific (§10.1). |
-| `--debug` | **Diagnostics:** verbose logging to stderr; at Tier 2 this includes the raw protocol messages exchanged on the wire. |
+| `--debug` | **Developer diagnostics:** verbose logging to stderr for troubleshooting the tool's own behavior — request/response timing, retries, transport and version negotiation; at Tier 2 this includes the raw protocol messages exchanged on the wire. For *how the tool is performing the action*, not for reading the data itself (`--verbose`). |
 | `-h, --help` | Show usage for the tool or the given command, and exit. |
 | `-v, --version` | Print the tool version and exit. |
 
