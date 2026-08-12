@@ -49,7 +49,7 @@ References of the form "A2A §x" point to the A2A Protocol Specification v1.0. W
 
 ## 1. Scope
 
-1.1 An `a2a-cli` is an **A2A client**: it initiates requests to an A2A server (a remote agent) and renders the responses. Acting *as* a server — publishing an Agent Card, generating server-side identifiers, or serving inbound requests — is **outside the baseline** of this specification (see §8.5, optional).
+1.1 An `a2a-cli` is an **A2A client**: it initiates requests to an A2A server (a remote agent) and renders the responses. Acting *as* a server — publishing an Agent Card, generating server-side identifiers, or serving inbound requests — is **outside the baseline** of this specification (§14; `serve` is Tier 3, §5.1).
 
 1.2 The primary purpose of an `a2a-cli` is **interaction with an A2A server**. A2A interactions MAY be multi-turn and MAY be stateful, and MAY span multiple CLI invocations. A conformant tool MUST therefore allow a caller to **inspect an agent card** and to **start, continue, and resume** an interaction (§6), and MUST provide a **polling** path for task status in addition to any streaming support (§7).
 
@@ -106,12 +106,12 @@ Defined areas:
 | `SEND` | Sending messages (§8.2) | `AUTH` | Authentication (§10) |
 | `TASK_GET` | Task retrieval (§8.3) | `TX` | Transport selection (§11.1) |
 | `TASK_CANCEL` | Task cancellation (§8.4) | `VER` | Protocol versioning (§11.2, §11.3) |
-| `TASK_LIST` | Task listing (§8.5) | `SKILL` | Agent skill descriptor (§12) |
-| `SUB` | Subscription / streaming (§7.4, §8.5) | `CHAT` | Interactive session (§8.5) |
-| `INTERACT` | Interaction state (§6) | `CONFIG` | Configuration (§6.4, §8.5) |
-| `POLL` | Task status polling (§7) | `DOWNLOAD` | Artifact retrieval (§8.5) |
-| `PUSH` | Push notifications (§7.2, §8.5) | `CONFORM` | TCK conformance check (§8.5) |
-| `SERVE` | Local agent mode (§8.5) | | |
+| `TASK_LIST` | Task listing (§5.1, App. A) | `SKILL` | Agent skill descriptor (§12) |
+| `SUB` | Subscription / streaming (§7.4) | `CHAT` | Interactive session (§6.2) |
+| `INTERACT` | Interaction state (§6) | `CONFIG` | Configuration (§6.4) |
+| `POLL` | Task status polling (§7) | `DOWNLOAD` | Artifact retrieval (§5.1) |
+| `PUSH` | Push notifications (§7.2, App. A) | `CONFORM` | TCK conformance check (§5.1) |
+| `SERVE` | Local agent mode (§5.1, §14) | | |
 
 `ERR` is **reserved** and is never used as a requirement area: `A2ACLI_ERR_*` identifiers denote **error codes** (Appendix E), which carry a symbolic suffix rather than a number. Requirements about error handling live under `OUT`.
 
@@ -287,6 +287,8 @@ For long-running tasks, a tool SHOULD support reconnection via `task subscribe` 
 
 ## 8. Command specifications
 
+§8.1–§8.4 specify the **Tier 1** commands normatively. Higher-tier commands are listed with their tier in §3.2 and §5.1, and their requirements are enumerated per identifier in `COMPLIANCE.md` (§3.3); this section does not restate them.
+
 ### 8.1 `inspect` (Tier 1, MUST)
 Resolve the Agent Card from `--agent-card` — a host (the well-known path `/.well-known/agent-card.json` is appended), an explicit card URL, or a local `file://` path — then parse and present: identity, advertised capabilities (streaming, push notifications, extended card), declared interfaces/transports, security schemes, and skills. The tool MUST use the card to select a transport (§11). It SHOULD offer `--validate` to check the card against the A2A schema, SHOULD offer `--extended` to fetch the authenticated extended card (Tier 3, §10.4), and SHOULD cache the card honoring HTTP caching semantics.
 
@@ -308,10 +310,6 @@ When a result carries artifacts, the tool MUST render them to stdout in the sele
 
 ### 8.4 `task cancel` (Tier 1, MUST)
 Cancel an active task by identifier. The operation is idempotent and MAY return a not-cancelable error if the task has already reached a terminal state. MUST report the resulting state.
-
-### 8.5 Higher-tier commands (outline)
-- **Tier 2:** `task list` (cursor-paginated, filterable by status and context); `task subscribe` (stream reconnect); `auth login` (OAuth 2.1 device-code and client-credentials flows with a secure token store); multi-transport selection; `config` (inspect and edit configuration, §6.4); `push-config` create/get/list/delete; `download` (save artifacts); raw-wire logging via `--debug`; `conformance` (TCK smoke check); shell completions.
-- **Tier 3:** a webhook receiver for push notifications; `chat` (interactive multi-turn); gRPC transport; authenticated extended Agent Card; Agent Card signature verification; mTLS; OpenID Connect; `serve`/mock agent; catalog/registry integration; batch/stdin input; protocol extensions.
 
 ---
 
