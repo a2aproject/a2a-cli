@@ -163,7 +163,7 @@ This specification defines the identifier **scheme**, not the list of identifier
 | `task get` | 1 | Retrieve a task's status and artifacts |
 | `help` | 1 | Show usage for the tool or a specific command |
 | `auth` | 2 | Interactive credential acquisition (OAuth) |
-| `config` | 2 | Inspect and edit configuration (§6.4) |
+| `show-config` | 2 | Inspect configuration (read-only): show the effective settings and the source each value resolved from (§6.4) |
 | `conformance` | 2 | Smoke-check a live agent against the A2A TCK |
 | `download` | 2 | Save task artifacts |
 | `push-config` | 2 | Manage push-notification configurations |
@@ -191,11 +191,14 @@ This specification defines the identifier **scheme**, not the list of identifier
 | `--insecure` | Disable TLS verification for the negotiated transport (development only; MUST emit a warning). Transport security is on unless this is passed. |
 | `--bearer <token>` / `--api-key <key>` | Pass a bearer token or an API key as the request credential (§10.1). |
 | `-H, --header <k:v>` | Add an arbitrary service parameter (e.g. an HTTP header), repeatable; general-purpose, not authentication-specific (§10.1). |
+| `--config <path>` | Load configuration from an explicit `.env` file in place of the local `.env` in the working directory (§6.4). Environment variables still take precedence over it (§4.5). |
 | `--debug` | **Developer diagnostics:** verbose logging to stderr for troubleshooting the tool's own behavior — request/response timing, retries, transport and version negotiation; at Tier 2 this includes the raw protocol messages exchanged on the wire. For *how the tool is performing the action*, not for reading the data itself (`--verbose`). |
 | `-h, --help` | Show usage for the tool or the given command, and exit. |
 | `-v, --version` | Print the tool version and exit. |
 
 This table lists **global** options only. Command-specific flags — for example `--history` and `--include-artifacts` on `task get`, `--validate` and `--extended` on `inspect`, or `--text` / `--file` / `--data` on `send` — are defined with each command in §8.
+
+**Setting options from the environment or a config file.** Where §4.5 allows an option's value to come from the environment or a configuration file, the environment variable is named `A2ACLI_` followed by the long flag in upper snake case — `--agent-card` → `A2ACLI_AGENT_CARD`, `--context-id` → `A2ACLI_CONTEXT_ID`, `--task-id` → `A2ACLI_TASK_ID`, `--a2a-version` → `A2ACLI_A2A_VERSION`, `--bearer` → `A2ACLI_BEARER` (credential variables are REQUIRED at Tier 1, §10.1). The same names MAY instead live in a `.env` (dotenv) file — one `A2ACLI_KEY=value` per line — loaded per §6.4 (`~/.config/a2a-cli/.env`, then a local `.env`) or from an explicit file via `--config <path>`. Precedence is fixed (§4.5, §6.4): flag > environment variable > `.env` file > built-in default. `--stream` is excluded — it MUST be an explicit flag, never read from the environment or a file (§9.3) — as are the action flags `-h/--help` and `-v/--version`.
 
 ---
 
@@ -243,13 +246,15 @@ Configuration values resolve in one fixed order, highest wins:
 
 1. an explicit flag,
 2. an environment variable,
-3. a local configuration file,
-4. a global configuration file,
+3. a local configuration file (a local `.env`, or the file given by `--config`),
+4. a global configuration file (`~/.config/a2a-cli/.env`),
 5. the built-in default (§4.5).
 
-Files SHOULD be discovered the way `git` discovers its configuration: a global file, then a local file found by walking up from the working directory. Settings SHOULD be scopeable **by agent-card reference**, so a caller supplies the reference and inherits the right credentials and defaults for that agent without naming a profile.
+Files use the `.env` (dotenv) format — one `A2ACLI_<OPTION>=value` per line, the same names as the environment-variable equivalents (§5.2), so the environment and a file share one namespace. They SHOULD be discovered the way `git` discovers its configuration: a global file at `~/.config/a2a-cli/.env`, then a local `.env` found by walking up from the working directory. `--config <path>` loads an explicit file in place of that local `.env`. A real environment variable overrides a same-named value read from any file, matching the order above. Settings SHOULD be scopeable **by agent-card reference** — for example by selecting an agent-specific file with `--config` — so a caller inherits the right credentials and defaults for that agent without naming a profile.
 
-Persisted data MUST reside under a conventional configuration path, MUST NOT store secrets in world-readable files (secret files MUST be mode `0600` or the platform equivalent), and MUST be inspectable and clearable by the user.
+The `show-config` command (§5.1) is **read-only**: it prints the effective value of each setting together with the source it resolved from — an explicit flag, an environment variable, a named file, or the built-in default — so a caller can confirm the tool applied the precedence above. Configuration is added, edited, or removed by setting the environment variables or editing the `.env` files directly; the command itself never mutates them.
+
+Persisted data MUST reside under a conventional configuration path, MUST NOT store secrets in world-readable files (secret files MUST be mode `0600` or the platform equivalent), and MUST be inspectable via the read-only `show-config` command and directly editable and removable by the user.
 
 ---
 
@@ -537,6 +542,7 @@ While the specification is in Draft, notable revisions are recorded by date; the
 
 | Version | Date | Notes |
 | --- | --- | --- |
+| 0.1 (Draft) | 2026-08-12 | Configuration surface. `show-config` is now **read-only** — it shows each effective setting and the source it resolved from (flag, environment, file, or built-in), letting a caller verify precedence (§5.1, §6.4); it no longer edits or clears, which is done by setting environment variables or editing `.env` files directly. §5.2 gains a footer defining the environment-variable convention `A2ACLI_<LONG_FLAG>` (e.g. `A2ACLI_AGENT_CARD`, `A2ACLI_CONTEXT_ID`) shared with a `.env` (dotenv) config file, plus a new `--config <path>` option to load an explicit file in place of the local `.env`; `--stream` and the `-h`/`-v` action flags are excluded. §6.4 names the files (`~/.config/a2a-cli/.env` global, local `.env`), keeps env-over-file precedence, and retains agent-card scoping via `--config`. |
 | 0.1 (Draft) | 2026-08-12 | Consistency pass. `subscribe` renamed to `task subscribe` throughout, matching the resource-namespacing convention already used by `task get`, `task list`, and `task cancel` (§3.2, §5.1, §7.4, Appendices A–B). §5.2 distinguishes `--verbose` (user-facing: the data exchanged with the agent) from `--debug` (developer-facing: how the tool itself is behaving), and §4.5's Detail-level row matches. §8.5 removed: it was a third inventory of higher-tier commands alongside §3.2 and §5.1, it had already drifted from both, and every item it listed is defined more precisely elsewhere; §8 now opens by stating that it specifies Tier 1 only. §3.3: areas `SUB` and `POLL` renamed to `TASK_SUBSCRIBE` and `TASK_POLL` for consistency with `TASK_GET` / `TASK_CANCEL` / `TASK_LIST`; both had cited the wrong sections (`SUB` omitted §7.2, `POLL` claimed all of §7 including streaming); `SERVE` restated as a local demo agent for practising CLI commands; the closing paragraph condensed and every §8.5 citation repointed. |
 | 0.1 (Draft) | 2026-08-11 | Consistency fixes surfaced while aligning the compliance registry. `chat` is Tier 3 in §6.2 (§5.1/§8.5 already agreed). §3.3 area table no longer encodes tiers on `PUSH`/`SERVE` (tier is not encoded in an identifier, §3.3). §3.1 tier satisfaction restated: a tier claim holds the tool to every applicable requirement listed for that tier — SHOULD-worded rows included — with genuinely inapplicable requirements excused and unobservable ones not counted as satisfied (§13.1). |
 | 0.1 (Draft) | 2026-08-11 | Second review round. Output format is `-o <text\|json>`; `--stream` selects live delivery, rendering events under `text` and emitting JSONL under `json`, so `json` cardinality follows an explicit `--stream` (never inferred from config, env, or a TTY). Added `-v/--version`, with `--verbose` keeping only its long form. Dropped named profiles and `--env`: configuration resolves through an environment variable and local/global files, keeping the CLI stateless. `-H/--header` split from the credential flags as a general-purpose service parameter. `--metadata` clarified as caller-sent request metadata. `agent-inspect` renamed to `inspect`. push-config is Tier 2; only the receiver is Tier 3. A rejected `--task-id` fails and creates nothing, rather than starting a task in an unintended context. Artifacts returned by the server MUST be rendered, never silently stripped. A reserved `--<binding>-<option>` convention allows future per-transport flags. Distribution is phased — the tool and one skill first, then an Agent Plugin carrying the skill (and optionally an MCP server), with independent installation still allowed. §15.4 adds feature-request and RFC intake channels. |
