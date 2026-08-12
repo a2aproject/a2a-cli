@@ -2,7 +2,7 @@
 
 **Version:** 0.1
 **Status:** Draft — open for review.
-**Last updated:** 2026-08-11
+**Last updated:** 2026-08-12
 **Applies to:** A2A Protocol v1.0
 
 ## Abstract
@@ -107,11 +107,11 @@ Defined areas:
 | `TASK_GET` | Task retrieval (§8.3) | `TX` | Transport selection (§11.1) |
 | `TASK_CANCEL` | Task cancellation (§8.4) | `VER` | Protocol versioning (§11.2, §11.3) |
 | `TASK_LIST` | Task listing (§5.1, App. A) | `SKILL` | Agent skill descriptor (§12) |
-| `SUB` | Subscription / streaming (§7.4) | `CHAT` | Interactive session (§6.2) |
+| `TASK_SUBSCRIBE` | Subscription / streaming (§7.2, §7.4) | `CHAT` | Interactive session (§6.2) |
 | `INTERACT` | Interaction state (§6) | `CONFIG` | Configuration (§6.4) |
-| `POLL` | Task status polling (§7) | `DOWNLOAD` | Artifact retrieval (§5.1) |
+| `TASK_POLL` | Task status polling (§7.1, §7.3) | `DOWNLOAD` | Artifact retrieval (§5.1) |
 | `PUSH` | Push notifications (§7.2, App. A) | `CONFORM` | TCK conformance check (§5.1) |
-| `SERVE` | Local agent mode (§5.1, §14) | | |
+| `SERVE` | Local demo agent for CLI practice (§5.1, §14) | | |
 
 `ERR` is **reserved** and is never used as a requirement area: `A2ACLI_ERR_*` identifiers denote **error codes** (Appendix E), which carry a symbolic suffix rather than a number. Requirements about error handling live under `OUT`.
 
@@ -124,7 +124,7 @@ Stability rules — these make the identifiers safe to cite in tooling, test sui
 - From **Proposed** onward, a withdrawn requirement MUST be marked `Withdrawn` in the registry rather than deleted, and its number MUST NOT be reused.
 - New areas MAY be added; existing area names MUST NOT be repurposed.
 
-The authoritative list of requirement identifiers is the compliance-report template published alongside this specification.
+This specification defines the identifier **scheme**, not the list of identifiers assigned under it. For the current checklist, see `COMPLIANCE.md`, published alongside this specification.
 
 ---
 
@@ -170,7 +170,7 @@ The authoritative list of requirement identifiers is the compliance-report templ
 | `task subscribe` | 2 | (Re)subscribe to a task's event stream |
 | `task list` | 2 | List tasks |
 | `chat` | 3 | Interactive multi-turn session |
-| `serve` | 3 | Run a local mock agent (out of client baseline) |
+| `serve` | 3 | Run a local demo agent to practise CLI commands (out of client baseline) |
 
 5.2 Global options. Unless noted, an option is available from Tier 1; where an option controls a higher-tier feature (for example `--metadata` or `--stream`), its availability follows that feature's tier (§3.1).
 
@@ -537,6 +537,7 @@ While the specification is in Draft, notable revisions are recorded by date; the
 
 | Version | Date | Notes |
 | --- | --- | --- |
+| 0.1 (Draft) | 2026-08-12 | Consistency pass. `subscribe` renamed to `task subscribe` throughout, matching the resource-namespacing convention already used by `task get`, `task list`, and `task cancel` (§3.2, §5.1, §7.4, Appendices A–B). §5.2 distinguishes `--verbose` (user-facing: the data exchanged with the agent) from `--debug` (developer-facing: how the tool itself is behaving), and §4.5's Detail-level row matches. §8.5 removed: it was a third inventory of higher-tier commands alongside §3.2 and §5.1, it had already drifted from both, and every item it listed is defined more precisely elsewhere; §8 now opens by stating that it specifies Tier 1 only. §3.3: areas `SUB` and `POLL` renamed to `TASK_SUBSCRIBE` and `TASK_POLL` for consistency with `TASK_GET` / `TASK_CANCEL` / `TASK_LIST`; both had cited the wrong sections (`SUB` omitted §7.2, `POLL` claimed all of §7 including streaming); `SERVE` restated as a local demo agent for practising CLI commands; the closing paragraph condensed and every §8.5 citation repointed. |
 | 0.1 (Draft) | 2026-08-11 | Consistency fixes surfaced while aligning the compliance registry. `chat` is Tier 3 in §6.2 (§5.1/§8.5 already agreed). §3.3 area table no longer encodes tiers on `PUSH`/`SERVE` (tier is not encoded in an identifier, §3.3). §3.1 tier satisfaction restated: a tier claim holds the tool to every applicable requirement listed for that tier — SHOULD-worded rows included — with genuinely inapplicable requirements excused and unobservable ones not counted as satisfied (§13.1). |
 | 0.1 (Draft) | 2026-08-11 | Second review round. Output format is `-o <text\|json>`; `--stream` selects live delivery, rendering events under `text` and emitting JSONL under `json`, so `json` cardinality follows an explicit `--stream` (never inferred from config, env, or a TTY). Added `-v/--version`, with `--verbose` keeping only its long form. Dropped named profiles and `--env`: configuration resolves through an environment variable and local/global files, keeping the CLI stateless. `-H/--header` split from the credential flags as a general-purpose service parameter. `--metadata` clarified as caller-sent request metadata. `agent-inspect` renamed to `inspect`. push-config is Tier 2; only the receiver is Tier 3. A rejected `--task-id` fails and creates nothing, rather than starting a task in an unintended context. Artifacts returned by the server MUST be rendered, never silently stripped. A reserved `--<binding>-<option>` convention allows future per-transport flags. Distribution is phased — the tool and one skill first, then an Agent Plugin carrying the skill (and optionally an MCP server), with independent installation still allowed. §15.4 adds feature-request and RFC intake channels. |
 | 0.1 (Draft) | 2026-08-11 | Terminology: interaction, not conversation. Transport honours the Agent Card's preference order; `--transport` is repeatable and ordered; version negotiates down only within 1.x. Machine-readable output emits the protocol's own types — Appendix B defines no schema; `tui` removed and §9.2 pins the `text` floor. The CLI is stateless: no capture-and-replay, no `--continue`; §6.4 keeps configuration only, with a documented precedence. Commands namespaced (`task get`, `task list`), `discover` → `inspect`, `--service-url` and `--card-url` → `--agent-card`. Errors defer to the A2A set (§3.3.2, §5.4); Appendix E reduced to CLI-local conditions. `chat` → Tier 3, `push-config` → Tier 2. Shipping a skill is conditional. Conformance is demonstrated against a live agent rather than the TCK, which validates agents rather than clients. Identifier permanence binds from Proposed. Exit codes split into three required statuses and five reserved ones, so conformance is achievable while the vocabulary stays fixed. |
