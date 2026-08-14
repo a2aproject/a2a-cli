@@ -2,7 +2,7 @@
 
 **Version:** 0.1
 **Status:** Draft — open for review.
-**Last updated:** 2026-08-13
+**Last updated:** 2026-08-14
 **Applies to:** A2A Protocol v1.0
 
 ## Abstract
@@ -69,7 +69,7 @@ Restated from A2A §4 so this document stands alone:
 - **Task** — the stateful unit of work a message may create. Identified by a server-assigned **`taskId`**; advances through a **TaskState** (§7.1); may emit **Artifacts**.
 - **Artifact** — a task output (text, structured data, or file). Task outputs are delivered as Artifacts, not Messages; a conformant tool MUST render Artifacts.
 - **`contextId`** — a server-assigned, opaque identifier that groups related tasks and messages. A2A does not define what the grouping *means*; that is the agent author's decision, and a conformant tool MUST NOT assume it denotes a chat session.
-- **AgentCard** — the server's machine-readable description of identity, capabilities, interfaces (transports), security schemes, and skills, obtained during discovery (§8.1).
+- **AgentCard** — the server's machine-readable description of identity, capabilities, interfaces (transports), security schemes, and skills, obtained by resolving an Agent Card reference (§8.1).
 
 ---
 
@@ -101,7 +101,7 @@ Defined areas:
 
 | Area | Covers | Area | Covers |
 | --- | --- | --- | --- |
-| `DEFAULT` | Default behavior (§4.5) | `OUT` | Output & error contract (§9.1–9.4) |
+| `DEFAULT` | Default behavior (§4.5) | `OUT` | Output & error contract (§9.1–9.5) |
 | `INSPECT` | Agent Card inspection (§8.1) | `EXIT` | Exit codes (§9.6) |
 | `SEND` | Sending messages (§8.2) | `AUTH` | Authentication (§10) |
 | `TASK_GET` | Task retrieval (§8.3) | `TX` | Transport selection (§11.1) |
@@ -142,7 +142,7 @@ This specification defines the identifier **scheme**, not the list of identifier
 
 | Behavior | Default | Override |
 | --- | --- | --- |
-| Transport | The **first interface in the Agent Card's `supported_interfaces`** — the list is always in server preference order (§11.1) | `--transport <binding>`, repeatable, highest preference first |
+| Transport | The **first supported interface in the Agent Card's `supported_interfaces`** — the list is declared in server preference order (§11.1; A2A §8.3.1 makes ordering a SHOULD) | `--transport <binding>`, repeatable, highest preference first |
 | Task completion | **Wait** (block) until the task reaches a terminal or interrupted state | `--async` / `--return-immediately` / `--no-wait` (return identifiers immediately) |
 | Output presentation | **Human-readable `text`** — labeled fields, one field per line, no control sequences (§9.2) | `--output <text\|json>`; `--stream` renders live (text) or emits JSONL (`json`) (§9.3) |
 | Detail level | **Concise** | `--verbose` for a full, human-readable view of the data exchanged with the agent |
@@ -172,7 +172,7 @@ This specification defines the identifier **scheme**, not the list of identifier
 | `chat` | 3 | Interactive multi-turn session |
 | `serve` | 3 | Run a local demo agent to practise CLI commands (out of client baseline) |
 
-Task-status **polling** is not a separate command: it is `task get` with `--wait` / `--watch` — repeated polling until a terminal or interrupted state — and the default blocking wait on `send` (§7.3). *(This is the `TASK_POLL` requirement area, §3.3.)*
+Task-status **polling** is not a separate command: it is `task get` with `--wait` / `--watch` — repeated polling until a terminal or interrupted state — and the default blocking wait on `send` (§7.3). To follow a job started with `--async`, poll it with `task get --watch <taskId>`. *(This is the `TASK_POLL` requirement area, §3.3.)*
 
 5.2 Global options. Unless noted, an option is available from Tier 1; where an option controls a higher-tier feature (for example `--metadata`), its availability follows that feature's tier (§3.1).
 
@@ -216,7 +216,7 @@ A2A interactions MAY span multiple invocations. **The CLI itself is stateless**:
 
 | Identifier | Assigned by | Role | Constraints |
 | --- | --- | --- | --- |
-| `messageId` | Client | Turn identity / idempotency | SHOULD be reused when retrying a turn, because Send is not guaranteed idempotent; reuse avoids duplicated work. |
+| `messageId` | Client | Turn identity / idempotency | SHOULD be reused when retrying a turn: Send is not guaranteed idempotent (A2A §3.3.1 makes idempotency OPTIONAL), so reuse MAY avoid duplicated work with agents that deduplicate on `messageId`. |
 | `taskId` | Server | Unit of work | A tool MUST NOT invent a `taskId` for a new task. A client-supplied `taskId` MUST reference an existing task; otherwise the server returns a not-found error. |
 | `contextId` | Server | Context grouping | Opaque; a tool SHOULD NOT fabricate one. A `contextId` and `taskId` that do not correspond MUST be rejected by the server; a tool MUST NOT attempt to reconcile them. |
 
@@ -277,7 +277,7 @@ Task states: `SUBMITTED`, `WORKING`, `INPUT_REQUIRED`, `AUTH_REQUIRED`, `COMPLET
 
 A2A provides three ways to observe task progress (A2A §3.5). A conformant tool MUST implement **polling**, SHOULD implement **streaming**, and MAY implement **push notifications**. Managing push-notification *configuration* is an ordinary API call (`push-config`, Tier 2); only *hosting the receiver* is Tier 3:
 
-1. **Streaming (SSE)** — live status/artifact events; the first event MUST be the `Task`. Available only when the Agent Card advertises the streaming capability.
+1. **Streaming (SSE)** — live status/artifact events; when the agent creates a task, the first event MUST be the `Task` (a direct `Message` response is streamed as that single `Message`, then the stream closes — §8.2; A2A §3.1.2). Available only when the Agent Card advertises the streaming capability.
 2. **Polling** — repeated `task get` until a terminal or interrupted state. Always available; the REQUIRED fallback when streaming is unsupported or a connection drops.
 3. **Push notifications** — server-initiated webhook callbacks (Tier 3); require the tool to host a receiver, which is beyond the client baseline.
 
@@ -292,7 +292,7 @@ A conformant tool MUST provide a polling path:
 
 ### 7.4 Stream resumption (SHOULD)
 
-For long-running tasks, a tool SHOULD support reconnection via `task subscribe` (whose first event is the `Task`, closing the gap between a poll and a subscribe) and, where the server supports it, resumption from the last received event. Because that first event carries the full `Task`, state is reconciled by the protocol itself and no additional `task get` is required.
+For long-running tasks, a tool SHOULD support reconnection via `task subscribe` (whose first event, when the task exists, is the `Task`, closing the gap between a poll and a subscribe) and, where the server supports it, resumption from the last received event. Because that first event carries the full `Task`, state is reconciled by the protocol itself and no additional `task get` is required.
 
 ---
 
@@ -301,7 +301,7 @@ For long-running tasks, a tool SHOULD support reconnection via `task subscribe` 
 §8.1–§8.4 specify the **Tier 1** commands normatively. Higher-tier commands are listed with their tier in §3.2 and §5.1, and their requirements are enumerated per identifier in `COMPLIANCE.md` (§3.3); this section does not restate them.
 
 ### 8.1 `inspect` (Tier 1, MUST)
-Resolve the Agent Card from `--agent-card` — a bare host or origin (the well-known path `/.well-known/agent-card.json` is appended), a full card URL (used as-is), or a local file path (`file://…` or a plain filesystem path) — then parse and present: identity, advertised capabilities (streaming, push notifications, extended card), declared interfaces/transports, security schemes, and skills. The tool MUST use the card to select a transport (§11). It SHOULD offer `--validate` to check the card against the A2A schema, SHOULD offer `--extended` to fetch the authenticated extended card (Tier 3, §10.4), and SHOULD cache the card honoring HTTP caching semantics.
+Resolve the Agent Card from `--agent-card` — a bare host or origin (the well-known path `/.well-known/agent-card.json` is appended), a full card URL (used as-is), or a local file path (`file://…` or a plain filesystem path) — then parse and present: identity, advertised capabilities (streaming, push notifications, extended card), declared interfaces/transports, security schemes, and skills. The tool MUST use the card to select a transport for subsequent operations (§11). It SHOULD offer `--validate` to check the card against the A2A schema, SHOULD offer `--extended` to fetch the authenticated extended card (Tier 3, §10.4), and SHOULD cache the card honoring HTTP caching semantics.
 
 > The command is named `inspect`, not `discover`, on purpose: in the wider ecosystem *discovery* already names the act of finding *which* agent to use, so the CLI uses `inspect` for examining an agent you have already chosen and hold a reference to.
 
@@ -309,7 +309,7 @@ Resolve the Agent Card from `--agent-card` — a bare host or origin (the well-k
 Send a message to **start or continue** an interaction.
 - Blocking by default (the operation waits until the task reaches a terminal or interrupted state, §4.5); `--async` / `--return-immediately` returns the `taskId` immediately instead.
 - Accepts `--context-id` / `--task-id` (§6.2); `--stream` (§7.2); polling controls (§7.3); `--metadata` for extension data.
-- **Message parts (how a caller attaches content on `send`).** A caller supplies file, binary, and structured content to the agent as message *parts* — the send-side counterpart to artifacts, which are task *outputs* the agent returns (§2); a client never sends an artifact. A message MAY carry more than one part, and the part flags are repeatable and order-preserving: `--text <string>` (a TextPart), `--file <path>` (a FilePart from a local filesystem path), `--data <path|->` (a DataPart from a JSON file, or `-` to read from stdin). A tool MUST let the caller set the media type of a part explicitly — file extensions are not reliable indicators and are frequently absent — and SHOULD infer it only when not given.
+- **Message parts (how a caller attaches content on `send`).** A caller supplies file, binary, and structured content to the agent as message *parts* — the send-side counterpart to artifacts, which are task *outputs* the agent returns (§2); a client never sends an artifact. A message MAY carry more than one part, and the part flags are repeatable and order-preserving: `--text <string>` (a TextPart), `--file <path>` (a FilePart from a local filesystem path), `--data <path|->` (a DataPart from a JSON file, or `-` to read from stdin). A tool MUST let the caller set the media type of a part explicitly — file extensions are not reliable indicators and are frequently absent — and SHOULD infer it only when not given. A local filesystem path becomes a **file-with-bytes** FilePart (inline, base64-encoded); a URL becomes a **file-with-uri** FilePart — a reference the agent fetches, which the CLI does not fetch or re-host. Inline bytes are bounded by the agent's request limits, so large files SHOULD be passed by URI (or the agent's own upload path) rather than inlined.
 - With `--stream`, the tool consumes the event stream when the streaming capability is present. If the agent returns a `Message` rather than a `Task` the stream contains exactly that one object and closes; the tool MUST exit cleanly with the output rather than treating it as an error. If streaming is unsupported the tool MUST fall back or error clearly, and MUST NOT hang.
 - On `INPUT_REQUIRED` or `AUTH_REQUIRED`, the tool MUST stop and report the `taskId`, `contextId`, and state with a resume hint (§6.3), and MUST NOT deadlock.
 - **The tool MUST render produced artifacts**, meaning: a text part is printed as readable text rather than dumped as raw structure; a data part is printed as formatted JSON; a file part has its name, media type and size reported, and its content written to disk only when the caller asked for it (`download`, Tier 2). Rendering never silently discards a part.
@@ -346,10 +346,12 @@ The machine-readable format is `-o json`. Its **cardinality follows `--stream`**
 | **`-o json --stream`** | **JSON Lines** ([JSONL](https://jsonlines.org/)): one complete JSON object per line, flushed as each event occurs | The caller consumes progress incrementally — streaming agents, and agentic apps/harnesses that render or act on partial output |
 
 - **Without `--stream`, `json` MUST be a single document** — exactly one object, never a concatenation of events, so a consumer can `JSON.parse` stdout in one shot. Size is bounded by the task, not by how many events it produced.
-- **With `--stream`, `json` MUST be emitted as JSONL** — each line a complete, independently parseable JSON object terminated by a newline, flushed as produced. Lines MUST NOT be pretty-printed across multiple physical lines, and the final line MUST carry the terminal object so a reader that keeps only the last line still obtains the identifiers and state.
+- **With `--stream`, `json` MUST be emitted as JSONL** — each line a complete, independently parseable JSON object terminated by a newline, flushed as produced. Lines MUST NOT be pretty-printed across multiple physical lines, and the final line MUST carry the terminal event (Appendix B), so a reader that keeps only the last line still obtains the identifiers and state.
 - The switch is **caller-controlled, not implicit**: `--stream` MUST be an explicit command-line flag, and a tool MUST NOT enable it from configuration, an environment variable, or terminal detection. A caller that did not pass `--stream` always gets a single document, so the output shape is a function of the invocation the caller wrote.
 - If the caller passes `--stream` but the interaction cannot stream — the agent does not advertise the streaming capability, or it returns a `Message` rather than a streamable `Task` — the tool MUST still honor JSONL by emitting the applicable object(s), one per line; a single-line result is valid JSONL.
 - Both forms MUST emit the A2A protocol's own response types (Appendix B); a tool MUST NOT define a substitute schema.
+
+**Top-level shape is per command** (Appendix B): `send` emits the `SendMessageResponse` wrapper — switch on whether `task` or `message` is present — while `task get` and `task cancel` emit a bare `Task`, and `inspect` a bare `AgentCard`. A consumer MUST NOT assume every command returns the same top-level shape.
 
 ### 9.4 Error contract
 
@@ -401,7 +403,7 @@ A later version of this specification MAY promote reserved codes to required, or
 
 Authentication is a first-class concern and a genuinely hard one: A2A permits several schemes — API keys, bearer tokens, OAuth 2.x, OpenID Connect, mutual TLS — and none is universally adopted, so a tool must meet each agent on whatever that agent declares. This specification takes it on incrementally, and the tiers below double as the long-term plan: non-interactive credentials first (§10.1), interactive OAuth next (§10.2), the stronger enterprise schemes after (§10.3). The flags are defined in §5.2: `--bearer` and `--api-key` supply credentials directly, `-H/--header` attaches any credential-bearing (or other) service parameter, and interactive OAuth is the `auth login` command (§5.1). `--metadata` is related but distinct — it carries caller-supplied extension data in the request payload, which a deployment MAY use for authorization-relevant context such as user roles; it is not itself an authentication mechanism, since A2A conveys identity at the transport layer, not in the payload. This section gives their semantics per tier.
 
-10.1 **Tier 1 (MUST):** non-interactive, caller-supplied credentials that need no prompt — `--bearer` and `--api-key`, each with an environment-variable equivalent — so a script, CI job, or coding agent can authenticate unattended. Credentials are attached per request as **service parameters** (A2A §3.2.6), which each binding maps to its own mechanism — an HTTP header, a query parameter, or gRPC metadata. A2A conveys identity at the transport layer, not in the payload.
+10.1 **Tier 1 (MUST):** non-interactive, caller-supplied credentials that need no prompt — `--bearer` and `--api-key`, each with an environment-variable equivalent — so a script, CI job, or coding agent can authenticate unattended. Credentials are attached per request according to the agent's declared security scheme (A2A §7.3), which each binding carries in its own transport mechanism — an HTTP header, a query parameter, or gRPC metadata. A2A conveys identity at the transport layer, not in the payload.
 
 `-H/--header` is a **separate, general-purpose** option for attaching any additional service parameter, not only credentials, and MUST NOT be documented as an authentication flag.
 
@@ -415,7 +417,7 @@ Authentication is a first-class concern and a genuinely hard one: A2A permits se
 
 ## 11. Transport & version negotiation
 
-11.1 **Transport selection (MUST):** a tool MUST select a binding from the Agent Card's declared interfaces and MUST NOT assume a single transport. `supported_interfaces` is **always in server preference order**, so absent any client preference a tool MUST use the first entry it supports.
+11.1 **Transport selection (MUST):** a tool MUST select a binding from the Agent Card's declared interfaces and MUST NOT assume a single transport. `supported_interfaces` is **declared in server preference order** — A2A §8.3.1 makes this a SHOULD, not a guarantee — so absent any client preference a tool MUST select the first entry it supports (A2A §8.3.2). Each interface carries its own `protocolVersion` (A2A §4.4.6), so transport and version negotiation (§11.2) resolve together on the chosen interface.
 
 A client MAY express its own preference with `--transport`, which is **repeatable and ordered**: the tool takes the first client-preferred binding the card also offers, and falls back to the card's order when none matches. A single-valued preference is insufficient — it leaves a tool with no way to negotiate against a card that does not offer it. When an interface declares a routing identifier, the tool MUST echo it on every request.
 
@@ -532,7 +534,7 @@ This area is still being explored, including how it relates to A2A's own protoco
 
 Tools MAY add fields outside the protocol types only where the protocol provides an extension point; consumers MUST ignore unknown fields.
 
-**Streaming (`-o json --stream`).** One `StreamResponse` per line, flushed as produced, each a complete JSON object on a single physical line. The final line MUST carry the terminal `Task` (or `Message`), so a reader that keeps only the last line still obtains the task identifier, the context identifier, and the state.
+**Streaming (`-o json --stream`).** One `StreamResponse` per line, flushed as produced, each a complete JSON object on a single physical line. The final line is the terminal `StreamResponse` — normally the `TaskStatusUpdateEvent` on which the task reaches a terminal or interrupted state (which carries the `taskId`, `contextId`, and state), or the single `Message` of a direct reply. A2A only *optionally* resends a full `Task` snapshot before closing (A2A §11.7), so the final line is not guaranteed to be a `Task` or to include artifacts — those arrive on their own `TaskArtifactUpdateEvent`s. A reader that keeps only the last line still obtains the identifiers and state.
 
 **Single document (`-o json`, no `--stream`).** Exactly one object for the whole invocation — the terminal object above, or one error object. Never a concatenation, and never the event log.
 
@@ -572,6 +574,9 @@ While the specification is in Draft, notable revisions are recorded by date; the
 
 | Version | Date | Notes |
 | --- | --- | --- |
+| 0.1 (Draft) | 2026-08-14 | Protocol-accuracy fixes (fresh expert re-eval). Appendix B / §9.3: streaming's final line is the terminal `StreamResponse` — normally a `TaskStatusUpdateEvent` carrying the ids and state — not a guaranteed full `Task`; A2A only optionally resends a `Task` snapshot before closing (A2A §11.7), so the final line may omit artifacts. §10.1: credentials are attached per the agent's declared security scheme (A2A §7.3), not as §3.2.6 service parameters (the `a2a-`-prefixed namespace). §3.3: `OUT` area citation widened to §9.1–§9.5 (non-blocking results live in §9.5). |
+| 0.1 (Draft) | 2026-08-14 | Review follow-up. §7.2: streaming "first event MUST be the `Task`" conditioned on the agent creating a task (a direct `Message` streams as one `Message` then closes — §8.2; A2A §3.1.2); §7.4 wording aligned. §2: AgentCard "obtained during discovery" → "obtained by resolving an Agent Card reference" (§8.1 reserves "discover" for the command). §9.3: added a per-command top-level-shape note pointing to Appendix B (`send`=`SendMessageResponse` wrapper; `task get`/`cancel`=bare `Task`; `inspect`=bare `AgentCard`). `conformance`/TCK command logged as `OPEN-QUESTIONS.md` OQ5 (premise may be unsound — the TCK validates SUTs, not arbitrary live agents), spec left unchanged pending TSC. |
+| 0.1 (Draft) | 2026-08-14 | External expert review (fresh eval), applied. §11.1/§4.5: transport-preference ordering restated as A2A §8.3.1's SHOULD rather than "always", with a note that `protocolVersion` is per-interface (A2A §4.4.6) so transport and version resolve together on the chosen interface. §8.2: `--file` now specifies a **file-with-bytes** FilePart for a local path vs a **file-with-uri** FilePart for a URL, with a request-size caveat for large files. §6.1: `messageId` reuse reworded — A2A §3.3.1 makes idempotency OPTIONAL, so reuse MAY (not "avoids") deduplicate. The §11.2 version floor ("never below 1.0") is left unchanged and logged in `OPEN-QUESTIONS.md` (OQ1) for the A2A TSC. |
 | 0.1 (Draft) | 2026-08-13 | Third external review round. **Exit codes** report whether the CLI conducted and reported the interaction turn, not how the turn ended: `0` covers a task that completed, ended `FAILED`/`REJECTED`, or paused at `INPUT_REQUIRED`/`AUTH_REQUIRED` (a non-success or paused outcome SHOULD be named in a stderr warning and lives in the task state, §6.3). Reserved codes are CLI-execution failures only — `3` unreachable, `4` auth, `5` timeout — and the task-outcome codes are removed (§9.6, App. E). **Continuation:** `--task-id` no longer requires `--context-id` — a `taskId` is unique and the server infers its context (A2A §3.4.3); `--context-id` alone starts a new task grouped in that context, and a mismatched pair is rejected (§5.2, §6.2). **Artifacts:** removed `--include-artifacts` — `GetTask` returns artifacts unconditionally and defines only `historyLength` as a toggle (A2A §3.1.3); §8.2 clarifies a client attaches content on `send` as message *parts* (`--text`/`--file`/`--data`), not artifacts. **Editorial:** §10 opens by framing authentication as essential-but-unstandardised, names the credential flags without mislabelling `-H/--header` or `--metadata` as authentication, and points to `auth login` (§5.2, §5.1); new experimental, non-normative §16 (CLI extensions); `--stream` moved from global options to a command flag on `send`/`task subscribe` (§5.2); §9 subsection headings made uniform (§9.1–§9.6); §8.1 (`inspect` rationale) and §8.3 (`task get`) tightened. `COMPLIANCE.md` realignment to these identifiers follows separately. Held for a later round: the `conformance`/TCK command, `-H/--header` vs `--svc-param`, `--config` vs `--env-file`, and `download`→`task download` namespacing. |
 | 0.1 (Draft) | 2026-08-12 | Configuration surface. `show-config` is now **read-only** — it shows each effective setting and the source it resolved from (flag, environment, file, or built-in), letting a caller verify precedence (§5.1, §6.4); it no longer edits or clears, which is done by setting environment variables or editing `.env` files directly. §5.2 gains a footer defining the environment-variable convention `A2ACLI_<LONG_FLAG>` (e.g. `A2ACLI_AGENT_CARD`, `A2ACLI_CONTEXT_ID`) shared with a `.env` (dotenv) config file, plus a new `--config <path>` option to load an explicit file in place of the local `.env`; `--stream` and the `-h`/`-v` action flags are excluded. §6.4 names the files (`~/.config/a2a-cli/.env` global, local `.env`), keeps env-over-file precedence, and retains agent-card scoping via `--config`. |
 | 0.1 (Draft) | 2026-08-12 | Consistency pass. `subscribe` renamed to `task subscribe` throughout, matching the resource-namespacing convention already used by `task get`, `task list`, and `task cancel` (§3.2, §5.1, §7.4, Appendices A–B). §5.2 distinguishes `--verbose` (user-facing: the data exchanged with the agent) from `--debug` (developer-facing: how the tool itself is behaving), and §4.5's Detail-level row matches. §8.5 removed: it was a third inventory of higher-tier commands alongside §3.2 and §5.1, it had already drifted from both, and every item it listed is defined more precisely elsewhere; §8 now opens by stating that it specifies Tier 1 only. §3.3: areas `SUB` and `POLL` renamed to `TASK_SUBSCRIBE` and `TASK_POLL` for consistency with `TASK_GET` / `TASK_CANCEL` / `TASK_LIST`; both had cited the wrong sections (`SUB` omitted §7.2, `POLL` claimed all of §7 including streaming); `SERVE` restated as a local demo agent for practising CLI commands; the closing paragraph condensed and every §8.5 citation repointed. |
