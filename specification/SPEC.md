@@ -11,6 +11,8 @@ This document specifies the behavior that a command-line interface (CLI) tool MU
 
 This is an **implementer's specification**. Its audience is engineers building or improving an `a2a-cli`. It constrains CLI behavior only and never modifies A2A wire semantics.
 
+> **Naming.** For ease of reference, this document refers to the tool as `a2a-cli` throughout.
+
 ## Why this matters
 
 Two problems, both traceable to the same cause: there is no official A2A command-line tool.
@@ -60,7 +62,7 @@ Cross-cutting terms used throughout. Protocol objects are defined in §2, requir
 
 1.1 An `a2a-cli` is an **A2A client**: it initiates requests to an A2A server (a remote agent) and renders the responses. Acting *as* a server — publishing an Agent Card, generating server-side identifiers, or serving inbound requests — is **outside the baseline** of this specification (§14; `serve` is Tier 3, §5.1).
 
-1.2 The primary purpose of an `a2a-cli` is **interaction with an A2A server**. A2A interactions MAY be multi-turn and MAY be stateful, and MAY span multiple CLI invocations. A conformant tool MUST therefore allow a caller to **inspect an agent card** and to **start, continue, and resume** an interaction (§6), and MUST provide a **polling** path for task status in addition to any streaming support (§7).
+1.2 The primary purpose of an `a2a-cli` is **interaction with an A2A server**. A2A interactions MAY be multi-turn and MAY be stateful, and MAY span multiple CLI invocations. A conformant tool MUST therefore allow a caller to **fetch an Agent Card** and to **start, continue, and resume** an interaction (§6), and MUST provide a **polling** path for task status in addition to any streaming support (§7).
 
 1.3 Conformance is **tiered and evidence-based** (§3). A tool asserts conformance by publishing a compliance report. Any number of **conformant** tools MAY coexist; conformance is open to any implementation, in any language, that passes the specification.
 
@@ -88,7 +90,7 @@ Restated from A2A §4 so this document stands alone:
 
 | Tier | Name | Requirements |
 | --- | --- | --- |
-| **Tier 1** | Core | §4.5 default behavior · §6 interaction/session handling · §7 polling · §8.1–8.4 commands (`inspect`, `send`, `task get`, `task cancel`) · §9 output & exit codes · §10.1 auth · §11 transport & versioning · §12 SKILL.md |
+| **Tier 1** | Core | §4.5 default behavior · §6 interaction/session handling · §7 polling · §8.1–8.4 commands (`card get`, `send`, `task get`, `task cancel`) · §9 output & exit codes · §10.1 auth · §11 transport & versioning · §12 SKILL.md |
 | **Tier 2** | Standard | Tier 1 + `task list`, `task subscribe`, OAuth `auth login`, ≥2 transports, configuration scoping, push-notification config CRUD, `download`, wire debug, `conformance`, shell completions |
 | **Tier 3** | Advanced | Tier 2 + a push-notification webhook receiver, interactive `chat`, gRPC transport, authenticated extended Agent Card, Agent Card signature verification, mTLS, OpenID Connect, `serve`/mock mode, catalog/registry, protocol extensions |
 
@@ -111,7 +113,7 @@ Defined areas:
 | Area | Covers | Area | Covers |
 | --- | --- | --- | --- |
 | `DEFAULT` | Default behavior (§4.5) | `OUT` | Output & error contract (§9.1–9.5) |
-| `INSPECT` | Agent Card inspection (§8.1) | `EXIT` | Exit codes (§9.6) |
+| `CARD_GET` | Agent Card retrieval (§8.1) | `EXIT` | Exit codes (§9.6) |
 | `SEND` | Sending messages (§8.2) | `AUTH` | Authentication (§10) |
 | `TASK_GET` | Task retrieval (§8.3) | `TX` | Transport selection (§11.1) |
 | `TASK_CANCEL` | Task cancellation (§8.4) | `VER` | Protocol versioning (§11.2, §11.3) |
@@ -155,7 +157,7 @@ This specification defines the identifier **scheme**, not the list of identifier
 | --- | --- | --- |
 | Transport | The **first supported interface in the Agent Card's `supported_interfaces`** — the list is declared in server preference order (§11.1; A2A §8.3.1 makes ordering a SHOULD) | `--transport <binding>`, repeatable, highest preference first |
 | Task completion | **Wait** (block) until the task reaches a terminal or interrupted state | `--async` / `--return-immediately` / `--no-wait` (return identifiers immediately) |
-| Output presentation | **Human-readable `text`** — labeled fields, one field per line, no control sequences (§9.2) | `--output <text\|json>`; `--stream` renders live (text) or emits JSONL (`json`) (§9.3) |
+| Output presentation | **Human-readable `text`** — labeled fields, one field per line, no control sequences (§9.2) | `--output <text\|json>` sets the format; `--stream` follows live delivery (JSONL for `json`, §9.3) |
 | Detail level | **Concise** | `--verbose` for a full, human-readable view of the data exchanged with the agent |
 | Protocol version | The **highest version supported by both** tool and agent, signaled explicitly, never below 1.0 (§11.2) | `--a2a-version <version>` |
 | Transport security | **TLS verification enabled** | `--insecure` (development only; MUST warn) |
@@ -168,7 +170,7 @@ This specification defines the identifier **scheme**, not the list of identifier
 
 | Command | Tier | Purpose |
 | --- | --- | --- |
-| `inspect` | 1 | Fetch and inspect an Agent Card |
+| `card get` | 1 | Fetch and render an Agent Card |
 | `send` | 1 | Send a message to start or continue an interaction |
 | `task cancel` | 1 | Cancel an active task |
 | `task get` | 1 | Retrieve a task's status and artifacts |
@@ -192,27 +194,31 @@ Task-status **polling** is not a separate command: it is `task get` with `--wait
 | `-a, --agent-card <ref>` | The agent to talk to, given as an Agent Card reference: a bare host or origin (the well-known path is appended), a full card URL (used as-is), or a local file path (`file://…` or a plain path). |
 | `--context-id <id>` | Group this turn with an existing interaction: the message starts a new task under the given server-assigned context, alongside the tasks already in it (§6.2). |
 | `--task-id <id>` | Continue a specific existing task — for example, to reply to one waiting in `INPUT_REQUIRED`. `--context-id` is optional (the server resolves the task's context) but MUST correspond when given; a rejected identifier fails rather than starting a new task (§6.2). |
-| `--metadata <json-string>` | Attach caller-supplied metadata to the outgoing message/request, for protocol extensions (A2A §3.2.5), given as an inline JSON object string (e.g. `'{"k":"v"}'`). This sends metadata to the agent; it is not a request for server-side metadata. |
+| `--metadata <json-string>` | Attach caller-supplied metadata to the message/request as an inline JSON object string (e.g. `'{"k":"v"}'`); values may be any JSON. Sent in the request **payload** (A2A §3.2.5); distinct from `--svc-param`, which sets transport-level parameters (§3.2.6). |
 | `--wait` / `--watch` | Block until the task reaches a terminal or interrupted state. This is the default for `send` (§4.5); stating it explicitly overrides a configured default. On `task get` it turns the one-shot read into a poll loop (§7.3). |
 | `--async` / `--return-immediately` / `--no-wait` | Do not wait; return the task identifiers immediately for later polling (default is to wait, §4.5 / §7.3). |
 | `--poll-interval <duration>` / `--timeout <duration>` | How often to re-check task status while waiting, and how long to wait before giving up (§7.3). |
-| `-o, --output <text\|json>` | Output format. Default `text` (§4.5, §9.2). `json` emits the protocol's own types (Appendix B): one document by default, or JSON Lines (JSONL) when `--stream` is set (§9.3). |
+| `-o, --output <text\|json>` | Output **format** only: `text` (default, §4.5, §9.2) or `json`, the protocol's own types (Appendix B). Whether `json` is one document or JSONL is set by `--stream`, not this flag (§9.3). |
+| `--stream` | Follow the agent's live event stream instead of blocking, on `send` and `task subscribe`. Sets output **delivery** (peer of `-o`); with `-o json`, emits JSONL (§9.3). Explicit-only. |
 | `--verbose` | **User-facing presentation:** show the full, human-readable breakdown of message parts and the data exchanged with the agent, rather than collapsing parts into one representation. For understanding *what was sent and received*, not how the tool got there. |
 | `--transport <binding>` | Client transport preference, **repeatable and ordered** (highest first). Overrides the card's preference order (§11.1); a binding absent from the card is skipped. |
 | `--a2a-version <version>` | Protocol version to signal to the server on every request (§11). |
 | `--insecure` | Disable TLS verification for the negotiated transport (development only; MUST emit a warning). Transport security is on unless this is passed. |
 | `--bearer <token>` / `--api-key <key>` | Pass a bearer token or an API key as the request credential (§10.1). |
-| `-H, --header <k:v>` | Add an arbitrary service parameter (e.g. an HTTP header), repeatable; general-purpose, not authentication-specific (§10.1). |
+| `--svc-param <k:v>` | Add an A2A **service parameter** (A2A §3.2.6): a transport-level key-value pair the binding carries in its own mechanism — an HTTP header or gRPC metadata — repeatable; general-purpose, not authentication-specific (§10.1). Keys and values are strings. Distinct from `--metadata`, which travels in the request payload (§3.2.5). |
 | `--config <path>` | Load configuration from an explicit `.env` file in place of the local `.env` in the working directory (§6.4). Environment variables still take precedence over it (§4.5). |
 | `--debug` | **Developer diagnostics:** verbose logging to stderr for troubleshooting the tool's own behavior — request/response timing, retries, transport and version negotiation; at Tier 2 this includes the raw protocol messages exchanged on the wire. For *how the tool is performing the action*, not for reading the data itself (`--verbose`). |
 | `-h, --help` | Show usage for the tool or the given command, and exit. |
 | `-v, --version` | Print the tool version and exit. |
 
-This table lists **global** options only. Command-specific flags are defined with their commands:
+`--metadata` and `--svc-param` are two different layers and are not interchangeable: `--metadata '{"tenant":"acme"}'` embeds a key in the request **payload** (§3.2.5), whereas `--svc-param x-trace-id:abc123` sets a **transport** parameter the binding sends as an HTTP header or gRPC metadata (§3.2.6).
 
-- **`--stream`** — on `send` and `task subscribe`: consume the agent's live event stream. It is deliberately **not** a global option; it MUST be set explicitly (never from configuration, an environment variable, or terminal detection), and its effect on output shape is specified in §9.3.
+`-o/--output` and `--stream` are orthogonal peers: the first chooses the **format** (`text`/`json`), the second the **delivery** (block vs. follow live). `--stream` is meaningful only on the streaming-capable commands `send` and `task subscribe`; to follow an existing task use `task subscribe` (live) or `task get --watch` (polling, §7.3), not `--stream` on `task get`.
+
+Other command-specific flags are defined with their commands:
+
 - **`--history <n>`** — on `task get`.
-- **`--validate`**, **`--extended`** — on `inspect` (§8.1).
+- **`--validate`**, **`--extended`** — on `card get` (§8.1).
 - **`--text`**, **`--file`**, **`--data`** — on `send` (§8.2).
 
 **Setting options from the environment or a config file.** Where §4.5 allows an option's value to come from the environment or a configuration file, the environment variable is named `A2ACLI_` followed by the long flag in upper snake case: `--agent-card` → `A2ACLI_AGENT_CARD`, `--context-id` → `A2ACLI_CONTEXT_ID`, `--task-id` → `A2ACLI_TASK_ID`, `--a2a-version` → `A2ACLI_A2A_VERSION`, `--bearer` → `A2ACLI_BEARER` (credential variables are REQUIRED at Tier 1, §10.1). The same names MAY instead live in a `.env` (dotenv) file (one `A2ACLI_KEY=value` per line), loaded per §6.4 (`~/.config/a2a-cli/.env`, then a local `.env`) or from an explicit file via `--config <path>`. Precedence is fixed (§4.5, §6.4): flag > environment variable > `.env` file > built-in default. `--stream` is excluded: it MUST be an explicit flag, never read from the environment or a file (§9.3), as are the action flags `-h/--help` and `-v/--version`.
@@ -398,10 +404,8 @@ For long-running tasks, a tool SHOULD support reconnection via `task subscribe` 
 
 §8.1–§8.4 specify the **Tier 1** commands normatively. Higher-tier commands are listed with their tier in §3.2 and §5.1, and their requirements are enumerated per identifier in `COMPLIANCE.md` (§3.3); this section does not restate them.
 
-### 8.1 `inspect` (Tier 1, MUST)
-Resolve the Agent Card from `--agent-card` — a bare host or origin (the well-known path `/.well-known/agent-card.json` is appended), a full card URL (used as-is), or a local file path (`file://…` or a plain filesystem path) — then parse and present: identity, advertised capabilities (streaming, push notifications, extended card), declared interfaces/transports, security schemes, and skills. The tool MUST use the card to select a transport for subsequent operations (§11). It SHOULD offer `--validate` to check the card against the A2A schema, SHOULD offer `--extended` to fetch the authenticated extended card (Tier 3, §10.4), and SHOULD cache the card honoring HTTP caching semantics.
-
-> The command is named `inspect`, not `discover`, on purpose: in the wider ecosystem *discovery* already names the act of finding *which* agent to use, so the CLI uses `inspect` for examining an agent you have already chosen and hold a reference to.
+### 8.1 `card get` (Tier 1, MUST)
+Resolve the Agent Card reference given by `--agent-card` (§5.2) — a bare host or origin (the well-known path `/.well-known/agent-card.json` is appended), a full card URL (used as-is), or a local file path (`file://…` or a plain filesystem path) — then parse and present: identity, advertised capabilities (streaming, push notifications, extended card), declared interfaces/transports, security schemes, and skills. The tool MUST use the card to select a transport for subsequent operations (§11). It SHOULD offer `--validate` to check the card against the A2A schema, SHOULD offer `--extended` to fetch the authenticated extended card (Tier 3, §10.4), and SHOULD cache the card honoring HTTP caching semantics.
 
 ### 8.2 `send` (Tier 1, MUST)
 Send a message to **start or continue** an interaction.
@@ -449,7 +453,7 @@ The machine-readable format is `-o json`. Its **cardinality follows `--stream`**
 - If the caller passes `--stream` but the interaction cannot stream — the agent does not advertise the streaming capability, or it returns a `Message` rather than a streamable `Task` — the tool MUST still honor JSONL by emitting the applicable object(s), one per line; a single-line result is valid JSONL.
 - Both forms MUST emit the A2A protocol's own response types (Appendix B); a tool MUST NOT define a substitute schema.
 
-**Top-level shape is per command** (Appendix B): `send` emits the `SendMessageResponse` wrapper — switch on whether `task` or `message` is present — while `task get` and `task cancel` emit a bare `Task`, and `inspect` a bare `AgentCard`. A consumer MUST NOT assume every command returns the same top-level shape.
+**Top-level shape is per command** (Appendix B): `send` emits the `SendMessageResponse` wrapper — switch on whether `task` or `message` is present — while `task get` and `task cancel` emit a bare `Task`, and `card get` a bare `AgentCard`. A consumer MUST NOT assume every command returns the same top-level shape.
 
 ### 9.4 Error contract
 
@@ -503,11 +507,13 @@ Whatever a tool emits MUST agree with the error it reported (§9.4). A run that 
 
 A2A permits several authentication schemes: API keys, bearer tokens, OAuth 2.x, OpenID Connect, and mutual TLS. None is universally adopted, so a tool must support whatever scheme the agent declares. This specification takes authentication on incrementally, and the tiers below double as the long-term plan: non-interactive credentials first (§10.1), interactive OAuth next (§10.2), the stronger enterprise schemes after (§10.3).
 
-The flags are defined in §5.2: `--bearer` and `--api-key` supply credentials directly, `-H/--header` attaches any credential-bearing (or other) service parameter, and interactive OAuth is the `auth login` command (§5.1). `--metadata` is related but distinct: it carries caller-supplied extension data in the request payload, which a deployment MAY use for authorization-relevant context such as user roles. It is not itself an authentication mechanism, since A2A conveys identity at the transport layer, not in the payload. This section gives their semantics per tier.
+The flags are defined in §5.2: `--bearer` and `--api-key` supply credentials directly, `--svc-param` attaches any credential-bearing (or other) service parameter, and interactive OAuth is the `auth login` command (§5.1). `--metadata` is related but distinct: it carries caller-supplied extension data in the request payload, which a deployment MAY use for authorization-relevant context such as user roles. It is not itself an authentication mechanism, since A2A conveys identity at the transport layer, not in the payload. This section gives their semantics per tier.
 
 10.1 **Tier 1 (MUST):** non-interactive, caller-supplied credentials that need no prompt — `--bearer` and `--api-key`, each with an environment-variable equivalent — so a script, CI job, or coding agent can authenticate unattended. Credentials are attached per request according to the agent's declared security scheme (A2A §7.3), which each binding carries in its own transport mechanism — an HTTP header, a query parameter, or gRPC metadata. A2A conveys identity at the transport layer, not in the payload.
 
-`-H/--header` is a **separate, general-purpose** option for attaching any additional service parameter, not only credentials, and MUST NOT be documented as an authentication flag.
+`--svc-param` is a **separate, general-purpose** option for attaching any additional service parameter, not only credentials, and MUST NOT be documented as an authentication flag.
+
+A tool MUST redact credential material — bearer tokens, API keys, and any credential carried in a service parameter (`--svc-param`) — from all diagnostic output, including the raw protocol messages logged under `--debug` (§5.2). This redaction MUST NOT be defeasible by a verbosity or debug flag.
 
 10.2 **Tier 2 (SHOULD):** interactive OAuth 2.1 via `auth login`, supporting the device-code flow ([RFC 8628](https://www.rfc-editor.org/rfc/rfc8628), designed for input-constrained clients such as a CLI) and the client-credentials flow, with secure token storage and automatic attachment on subsequent calls.
 
@@ -527,7 +533,7 @@ A client MAY express its own preference with `--transport`, which is **repeatabl
 
 Cross-cutting options such as `--insecure` apply to whichever transport is negotiated. Where a future option is meaningful only for one binding (for example a gRPC keepalive setting that HTTP has no analogue for), a tool SHOULD namespace it per transport rather than overloading a global flag; the reserved convention is `--<binding>-<option>` (for example `--grpc-keepalive`). This specification defines no such per-transport option today; the convention is reserved so that adding one later is not a breaking change.
 
-11.2 **Protocol version (MUST):** a tool MUST signal the A2A protocol version on every request. This is a per-binding service parameter conveyed as an HTTP header, a query parameter, or gRPC metadata depending on the transport; an empty value causes the server to assume a legacy version, so the tool MUST set it explicitly. The tool SHOULD expose `--a2a-version`. Absent an explicit value, a tool SHOULD negotiate down to the highest version supported by both itself and the agent as declared on the Agent Card, but MUST NOT negotiate below **1.0**: versions earlier than 1.0 are legacy and MUST require an explicit opt-in. A tool MUST surface a version-unsupported error clearly rather than silently downgrading.
+11.2 **Protocol version (MUST):** a tool MUST signal the A2A protocol version on every request. This is a per-binding service parameter conveyed as an HTTP header or gRPC metadata depending on the transport; an empty value causes the server to assume a legacy version, so the tool MUST set it explicitly. The tool SHOULD expose `--a2a-version`. Absent an explicit value, a tool SHOULD negotiate down to the highest version supported by both itself and the agent as declared on the Agent Card, but MUST NOT negotiate below **1.0**: versions earlier than 1.0 are legacy and MUST require an explicit opt-in. A tool MUST surface a version-unsupported error clearly rather than silently downgrading.
 
 11.3 **Capability validation (SHOULD):** before invoking a capability-gated operation (streaming, push notifications, extended card), a tool SHOULD verify the capability on the Agent Card.
 
@@ -615,7 +621,7 @@ This area is still being explored, including how it relates to A2A's own protoco
 
 | Command | A2A operation | A2A reference | Tier |
 | --- | --- | --- | --- |
-| `inspect` | Get Agent Card / Get Extended Agent Card | §8 / §3.1.11 | 1 (extended: 3) |
+| `card get` | Get Agent Card / Get Extended Agent Card | §8 / §3.1.11 | 1 (extended: 3) |
 | `send` | Send Message / Send Streaming Message | §3.1.1 / §3.1.2 | 1 |
 | `task cancel` | Cancel Task | §3.1.5 | 1 |
 | `task get` | Get Task | §3.1.3 | 1 |
@@ -638,7 +644,7 @@ This area is still being explored, including how it relates to A2A's own protoco
 | `task cancel` | `Task` | `Task` (single line) |
 | `task list` | `ListTasksResponse` | one `Task` per line |
 | `task subscribe` | the terminal `Task` | `StreamResponse` per event |
-| `inspect` | `AgentCard` | `AgentCard` (single line) |
+| `card get` | `AgentCard` | `AgentCard` (single line) |
 
 `SendMessageResponse` and `StreamResponse` are discriminated unions (protobuf `oneof`), which is what makes them scriptable: a consumer switches on which field is present rather than inspecting the shape. A tool MUST NOT add a discriminator field of its own — the `oneof` is the discriminator.
 
@@ -684,6 +690,11 @@ While the specification is in Draft, notable revisions are recorded by date; the
 
 | Version | Date | Notes |
 | --- | --- | --- |
+| 0.2 (Review) | 2026-08-17 | Renamed the Tier-1 command `inspect` → `card get` (§1.2, §3.1, §5.1, §8.1, App. A, App. B) and the requirement-area symbol `INSPECT` → `CARD_GET` (§3.3); removed the "inspect vs discover" rationale note. Command-surface change; `COMPLIANCE.md` realignment (`INSPECT_*` → `CARD_GET_*`) follows separately. The scope of `card get` vs `--agent-card` (how the target agent is named — positional vs flag, hosted vs local file) is deferred to `OPEN-QUESTIONS.md` OQ9; §8.1 keeps the current `--agent-card` model. |
+| 0.2 (Review) | 2026-08-17 | Renamed the service-parameter flag `-H/--header` → `--svc-param` (§5.2, §10.1); `-H`/`--header` dropped (no alias — nothing released). Maps to A2A §3.2.6 **Service Parameters** (transport-level: HTTP header or gRPC metadata); corrected §10.1/§11.2 to drop "query parameter", which A2A reserves for request parameters, not service parameters (A2A §9.2/§10.2/§11.2). `--metadata` retained (A2A §3.2.5 payload) and clarified with a worked example (§5.2). Resolves the item held on 2026-08-13. |
+| 0.2 (Review) | 2026-08-17 | Made `--stream` a first-class option in the §5.2 global-options table and decoupled it from `-o`: `-o/--output` now defines the output **format** only (`text`/`json`), while `--stream` (its orthogonal peer) defines **delivery** and — for `json` — the cardinality (single document vs JSONL). No behavior change: the canonical `json`/`jsonl` contract (§9.3, including its MUSTs), the env/config carve-out excluding `--stream`, and the Appendix B shapes are unchanged. |
+| 0.2 (Review) | 2026-08-17 | Added a non-normative **Naming** note (document intro): for ease of reference the tool is referred to as `a2a-cli` throughout (the invocation-name question remains OQ6). |
+| 0.2 (Review) | 2026-08-14 | Normative: §10.1 now requires credential material (bearer tokens, API keys, and header/service-parameter credentials) to be redacted from all diagnostic output, including `--debug` raw-wire logging, with the redaction not defeasible by a verbosity flag. Grounds the compliance registry's credential-redaction requirement. |
 | 0.2 (Review) | 2026-08-14 | Editorial readability pass (presentation only, no normative change). Rationale separated from requirements into `> **Rationale.**` call-outs (§3.2, §4.1, §6.4, §9.6, §11.1); redundant restatements collapsed, keeping one canonical statement and cross-referencing the rest (the exit-code litany now lives only in the §9.6 table row). AI-slop removed: em-dash pile-ups reduced, filler intensifiers ("genuinely", "at once", "first-class") cut, and the §16 / §2 openings de-marketed. Added an informative **Terminology** block (interaction, turn, transport/binding, interface). Fixed one stray "conversation" → "interaction" in §9.6 for term consistency. Every requirement, identifier, default, exit code, and cross-reference is unchanged. |
 | 0.1 (Draft) | 2026-08-14 | Protocol-accuracy fixes (fresh expert re-eval). Appendix B / §9.3: streaming's final line is the terminal `StreamResponse` — normally a `TaskStatusUpdateEvent` carrying the ids and state — not a guaranteed full `Task`; A2A only optionally resends a `Task` snapshot before closing (A2A §11.7), so the final line may omit artifacts. §10.1: credentials are attached per the agent's declared security scheme (A2A §7.3), not as §3.2.6 service parameters (the `a2a-`-prefixed namespace). §3.3: `OUT` area citation widened to §9.1–§9.5 (non-blocking results live in §9.5). |
 | 0.1 (Draft) | 2026-08-14 | Review follow-up. §7.2: streaming "first event MUST be the `Task`" conditioned on the agent creating a task (a direct `Message` streams as one `Message` then closes — §8.2; A2A §3.1.2); §7.4 wording aligned. §2: AgentCard "obtained during discovery" → "obtained by resolving an Agent Card reference" (§8.1 reserves "discover" for the command). §9.3: added a per-command top-level-shape note pointing to Appendix B (`send`=`SendMessageResponse` wrapper; `task get`/`cancel`=bare `Task`; `inspect`=bare `AgentCard`). `conformance`/TCK command logged as `OPEN-QUESTIONS.md` OQ5 (premise may be unsound — the TCK validates SUTs, not arbitrary live agents), spec left unchanged pending TSC. |
