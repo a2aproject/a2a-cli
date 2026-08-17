@@ -92,7 +92,7 @@ A tier is satisfied when every **applicable** requirement in it is `✅`. A cond
 
 | ID | Requirement | Spec § | Status | Notes |
 | --- | --- | --- | --- | --- |
-| `A2ACLI_INSPECT_001` | `inspect` — resolve and parse an Agent Card from a host, an explicit URL, or a `file://` path, and use it to select a transport | §8.1, §11 | `<>` | |
+| `A2ACLI_CARD_GET_001` | `card get` — resolve and parse an Agent Card from a host, an explicit URL, or a `file://` path, and use it to select a transport | §8.1, §11 | `<>` | |
 | `A2ACLI_SEND_001` | Send a message to start an interaction | §8.2 | `<>` | |
 | `A2ACLI_SEND_002` | Blocking by default; `--async` / `--return-immediately` / `--no-wait` return identifiers immediately | §8.2, §4.5 | `<>` | |
 | `A2ACLI_SEND_003` | `--stream` consumes SSE when supported and never hangs when unsupported; a `Message`-only response (no task created) exits cleanly rather than erroring | §8.2, §7.2 | `<>` | |
@@ -147,7 +147,7 @@ A tier is satisfied when every **applicable** requirement in it is `✅`. A cond
 
 | ID | Requirement | Spec § | Status | Notes |
 | --- | --- | --- | --- | --- |
-| `A2ACLI_INSPECT_002` | `inspect --validate` — validate the Agent Card against the A2A schema | §8.1 | `<>` | |
+| `A2ACLI_CARD_GET_002` | `card get --validate` — validate the Agent Card against the A2A schema | §8.1 | `<>` | |
 | `A2ACLI_TASK_LIST_001` | `task list` — cursor-paginated, filterable by status and context | §5.1, App. A | `<>` | |
 | `A2ACLI_TASK_SUBSCRIBE_001` | `task subscribe` — (re)subscribe to a task's event stream | §5.1, §7.2 | `<>` | |
 | `A2ACLI_TASK_SUBSCRIBE_002` | Stream resumption after disconnect; the first event re-delivers the full `Task`, so no separate `get` is required | §7.4, §7.2 | `<>` | |
@@ -167,10 +167,10 @@ A tier is satisfied when every **applicable** requirement in it is `✅`. A cond
 
 | ID | Requirement | Spec § | Status | Notes |
 | --- | --- | --- | --- | --- |
-| `A2ACLI_INSPECT_003` | Authenticated extended Agent Card, fetched only via a security scheme advertised on the public card | §8.1, §10.4 | `<>` | |
+| `A2ACLI_CARD_GET_003` | Authenticated extended Agent Card, fetched only via a security scheme advertised on the public card | §8.1, §10.4 | `<>` | |
 | `A2ACLI_AUTH_008` | Never presents a credential to an Agent Card endpoint that has not declared a scheme accepting it | §10.4 | `<>` | |
-| `A2ACLI_INSPECT_004` | Agent Card signature verification | §3.1 | `<>` | |
-| `A2ACLI_INSPECT_005` | Catalog / registry integration | §3.1 | `<>` | |
+| `A2ACLI_CARD_GET_004` | Agent Card signature verification | §3.1 | `<>` | |
+| `A2ACLI_CARD_GET_005` | Catalog / registry integration | §3.1 | `<>` | |
 | `A2ACLI_PUSH_002` | Local webhook receiver able to accept push notifications | §7.2, §3.1 | `<>` | |
 | `A2ACLI_CHAT_001` | Interactive `chat` carrying context and task across turns | §6.2, §5.1 | `<>` | |
 | `A2ACLI_TX_005` | gRPC transport | §11.1 | `<>` | |
@@ -262,11 +262,11 @@ summary:                           # aggregator-produced; only pass/na satisfy (
   # tier_2 (15) and tier_3 (12): same shape
 
 requirements:                      # ID-keyed; every ID of the claimed tier MUST appear
-  A2ACLI_INSPECT_001:
+  A2ACLI_CARD_GET_001:
     tier: 1
-    area: INSPECT
+    area: CARD_GET
     spec: "§8.1, §11"
-    requirement: "inspect — resolve/parse an Agent Card; select a transport"
+    requirement: "card get — resolve/parse an Agent Card; select a transport"
     status: not_measured           # closed vocabulary: §A.2
     note: "<REQUIRED unless status is pass>"
     evidence: null                 # optional: log path / CI link
