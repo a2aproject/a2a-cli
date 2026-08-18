@@ -1,22 +1,36 @@
 # A2A CLI
 
-The official command-line interface for interacting with A2A (Agent-to-Agent) compatible agents. Like netcat for agents.
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
+The official command-line client interface for interacting with A2A (Agent-to-Agent) compatible agents.
+
+> [!WARNING] This repository is in an alpha stage.
+
+## About
+This project uses the A2A Go SDK internal CLI tool as a first step to build our specification-defined CLI tool.
+
+## Resources
+* **Specification Document (v0.2):** [Read the Specification](https://github.com/a2aproject/a2a-cli/blob/spec_v02/specification/SPEC.md)
+* **Conformance Report (v0.2):** [View Conformance Tests](https://github.com/a2aproject/a2a-cli/blob/spec_v02/specification/COMPLIANCE.md)
+
 
 ## Install
 
-### Prebuilt binaries
+### From source (recommended)
 
-Download an archive for your platform from the [latest release](https://github.com/a2aproject/a2a-cli/releases/latest), extract
-it, and put the `a2a` binary on your `PATH`. Verify the download against the
-`checksums.txt` published with the release.
-
-### From source
+The easiest way to install and keep `a2a` updated is installing using
 
 ```bash
 go install github.com/a2aproject/a2a-cli@latest
 ```
 
-## Command Grammar
+If you are new to using GO, kindly follow https://go.dev/doc/install to set up your PATH environment variable correctly.
+
+### Prebuilt binaries
+
+Download an archive for your platform from the [latest release](https://github.com/a2aproject/a2a-cli/releases/latest), extract it, and put the `a2a` binary on your `PATH`. Verify the download against the `checksums.txt` published with the release.
+
+### Command Grammar
 
 ```
 a2a <verb> [noun] <url> [positional-args] [flags] [global-flags]
@@ -24,7 +38,7 @@ a2a <verb> [noun] <url> [positional-args] [flags] [global-flags]
 
 The agent URL is always the first positional argument. Flags can appear in any position after the verb. Verbs that operate on a single resource type drop the noun (`send` always sends a message, `cancel` always cancels a task). Verbs that span multiple resource types require it (`get task`, `list tasks`).
 
-## Global Flags
+### Global Flags
 
 These apply to every client-mode command.
 
@@ -40,9 +54,9 @@ These apply to every client-mode command.
 
 ---
 
-## Client Commands
+### Client Commands
 
-### `discover` - Agent Card Discovery
+#### `discover` - Agent Card Discovery
 
 Fetch and display an agent card from its base URL or complete agent card URL.
 
@@ -57,7 +71,7 @@ a2a discover <url> --extended --auth "Bearer <token>"
 ```
 `discover` is a convenience alias for `get card <url>`.
 
-### `send` - Send a Message
+#### `send` - Send a Message
 
 Send a message to an agent and print the response.
 
@@ -98,7 +112,7 @@ a2a send <url> --context <context-id> "Related question"
 | `--context <id>` | Set `ContextID` on the message. |
 | `--history <n>` | Request `n` history messages in the response. |
 
-### `get task` - Get Task Details
+#### `get task` - Get Task Details
 
 ```bash
 a2a get task <url> <id>
@@ -109,7 +123,7 @@ a2a get task <url> <id> --history 10 -o json
 |---|---|
 | `--history <n>` | Include up to `n` history messages. |
 
-### `list tasks` - List Tasks
+#### `list tasks` - List Tasks
 
 ```bash
 a2a list tasks <url>
@@ -127,7 +141,7 @@ a2a list tasks <url> --limit 50
 | `--history <n>` | Include up to `n` history messages per task. |
 | `--since <time>` | Only tasks with status updates after this timestamp (RFC 3339). |
 
-### `cancel` - Cancel a Task
+#### `cancel` - Cancel a Task
 
 ```bash
 a2a cancel <url> <task-id>
@@ -135,7 +149,7 @@ a2a cancel <url> <task-id>
 
 Prints the updated task status.
 
-### `subscribe` - Subscribe to Task Events
+#### `subscribe` - Subscribe to Task Events
 
 ```bash
 a2a subscribe <url> <task-id>
@@ -144,11 +158,11 @@ Streams events to stdout until the task reaches a terminal state. Output format 
 
 ---
 
-## Server Mode
+### Server Mode
 
 `a2a serve` starts an A2A-compliant server backed by one of three modes.
 
-### Common Server Flags
+#### Common Server Flags
 
 | Flag | Description |
 |---|---|
@@ -162,7 +176,7 @@ Streams events to stdout until the task reaches a terminal state. Output format 
 | `--card-compat` | Serve the agent card in a dual v0.3/v1.0 format so both old and new clients can discover the agent. |
 | `--quiet` | Suppress traffic logging to stderr. |
 
-### `--echo` - Echo Mode
+#### `--echo` - Echo Mode
 
 ```bash
 a2a serve --echo
@@ -170,7 +184,7 @@ a2a serve --echo --port 9090 --name "Echo Agent"
 ```
 Returns the user's message text back as an agent response. The "ping" for agents - useful for connectivity testing and client development.
 
-### `--proxy` - Proxy Mode
+#### `--proxy` - Proxy Mode
 
 Forward all requests to an upstream A2A agent. Logs traffic to stderr. Useful for debugging agent interactions, injecting service parameters, or acting as an authenticated gateway.
 
@@ -189,7 +203,7 @@ a2a serve --proxy https://upstream-agent.com \
 
 The proxy creates an `a2aclient.Client` for the upstream agent and forwards each A2A operation. Service parameters specified via `--svc-param` are injected into every forwarded request using `a2aclient.AttachServiceParams`. The proxy's own agent card is derived from the upstream card with the local interface address substituted.
 
-### `--exec` - Exec Mode
+#### `--exec` - Exec Mode
 
 Run any command as an A2A agent. Message text goes to stdin, stdout becomes the response artifact. The subprocess does not need to know anything about A2A.
 ```bash
@@ -197,7 +211,7 @@ a2a serve --exec "python -u a2a_unaware_agent.py"
 a2a serve --exec "./content-generator.sh"
 ```
 
-#### Subprocess Interface
+##### Subprocess Interface
 
 **stdin:** The first text part of the incoming A2A message.
 **stdout:** Response content. Interpretation depends on whether `--chunk` is set (see below).
@@ -207,7 +221,7 @@ a2a serve --exec "./content-generator.sh"
 - `0` → `TaskStateCompleted`
 - Non-zero → `TaskStateFailed`
 
-#### Output Modes
+##### Output Modes
 
 **Default (no `--chunk`):** The entire stdout is collected and emitted as a single text artifact when the process exits.
 ```
@@ -239,7 +253,8 @@ StatusUpdate:          completed
 
 ---
 
-## Output Formatting
+### Output Formatting
 
 All commands support `-o json` for machine-readable output and emits raw protocol objects.
 Text mode is the default and is designed for human consumption in a terminal.
+
