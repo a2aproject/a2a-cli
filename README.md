@@ -102,14 +102,12 @@ a2a send <url> --context <context-id> "Related question"
 
 ```bash
 a2a get task <url> <id>
-a2a get task <url> <id> --history 10
-a2a get task <url> <id> --with-artifacts -o json
+a2a get task <url> <id> --history 10 -o json
 ```
 
 | Flag | Description |
 |---|---|
 | `--history <n>` | Include up to `n` history messages. |
-| `--with-artifacts` | Include artifacts in the response. |
 
 ### `list tasks` - List Tasks
 
@@ -128,7 +126,6 @@ a2a list tasks <url> --limit 50
 | `--page-token <t>` | Pagination token from a previous response. |
 | `--history <n>` | Include up to `n` history messages per task. |
 | `--since <time>` | Only tasks with status updates after this timestamp (RFC 3339). |
-| `--with-artifacts` | Include artifacts in the response. |
 
 ### `cancel` - Cancel a Task
 
