@@ -33,7 +33,7 @@ report:
   maintainer: <name or org>
   report_date: <YYYY-MM-DD>          # when this report was produced
   spec_version: "0.2"                # SPEC.md "Version"
-  spec_revision: <YYYY-MM-DD>        # SPEC.md "Last updated" — needed to interpret Draft results
+  spec_revision: <YYYY-MM-DD>        # SPEC.md "Last updated" — needed to interpret a pre-Proposed result
   a2a_versions: ["1.0"]
   agent_tested: <name or URL>
   agent_tck_conformant: unknown      # yes | no | unknown
@@ -43,18 +43,18 @@ report:
 
 # Aggregator-produced. Recompute from the statuses below; do not hand-wave.
 summary:
-  tier_1: {total: 37, pass: 0, partial: 0, fail: 0, not_measured: 37, na: 0, satisfied: false}
+  tier_1: {total: 39, pass: 0, partial: 0, fail: 0, not_measured: 39, na: 0, satisfied: false}
   tier_2: {total: 15, pass: 0, partial: 0, fail: 0, not_measured: 15, na: 0, satisfied: false}
   tier_3: {total: 12, pass: 0, partial: 0, fail: 0, not_measured: 12, na: 0, satisfied: false}
 
 requirements:
 
   # ─────────────── Tier 1 — Core (required) ───────────────
-  A2ACLI_INSPECT_001:
+  A2ACLI_CARD_GET_001:
     tier: 1
-    area: INSPECT
+    area: CARD_GET
     spec: "§8.1, §11"
-    requirement: "inspect — resolve/parse an Agent Card from host, URL, or file:// path; select a transport"
+    requirement: "card get — resolve/parse an Agent Card from host, URL, or file:// path; select a transport"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
@@ -70,7 +70,7 @@ requirements:
     tier: 1
     area: SEND
     spec: "§8.2, §4.5"
-    requirement: "Blocking by default; --async / --return-immediately / --no-wait return identifiers immediately"
+    requirement: "Blocking by default; --async returns identifiers immediately (--return-immediately / --no-wait are OPTIONAL aliases)"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
@@ -94,7 +94,7 @@ requirements:
     tier: 1
     area: SEND
     spec: "§8.2"
-    requirement: "Caller can set a message part's media type explicitly; inferred only when not given"
+    requirement: "Caller can set a part's media type with --media-type, bound to the part flag it follows; inferred only when none given"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
@@ -166,7 +166,7 @@ requirements:
     tier: 1
     area: TASK_POLL
     spec: "§7.3"
-    requirement: "Polling path available — get plus wait/watch"
+    requirement: "Polling path available — one-shot task get, plus task get --wait to a terminal or interrupted state"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
@@ -182,7 +182,7 @@ requirements:
     tier: 1
     area: TASK_POLL
     spec: "§7.1, §7.3"
-    requirement: "Stops immediately on interrupted states (INPUT_REQUIRED / AUTH_REQUIRED) without deadlock"
+    requirement: "Stops immediately on interrupted states (INPUT_REQUIRED / AUTH_REQUIRED); TASK_STATE_UNSPECIFIED is neither, so polling continues under --timeout"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
@@ -230,7 +230,7 @@ requirements:
     tier: 1
     area: OUT
     spec: "§9.2, §4.1"
-    requirement: "text floor: one Label: value per line, stable labels, no control sequences; interactive auto-degrades to text off-TTY"
+    requirement: "text floor: one Label: value per line, stable labels, no control sequences; block content under its own Label: line, blank-line terminated, never interleaved; interactive auto-degrades to text off-TTY"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
@@ -238,7 +238,7 @@ requirements:
     tier: 1
     area: OUT
     spec: "§9.5"
-    requirement: "When not waiting (--async/--no-wait), still emits a result object carrying at least taskId and contextId"
+    requirement: "When not waiting (--async), still emits a result object carrying at least taskId and contextId"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
@@ -250,11 +250,19 @@ requirements:
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
+  A2ACLI_EXIT_002:
+    tier: 1
+    area: EXIT
+    spec: "§4.6, §9.6"
+    requirement: "Execution decoupled from outcome: exits 0 on a reported turn even when the task is FAILED/REJECTED or paused at INPUT_REQUIRED/AUTH_REQUIRED; outcome carried in task state"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
   A2ACLI_AUTH_001:
     tier: 1
     area: AUTH
     spec: "§10.1"
-    requirement: "Scriptable credentials — bearer, API key, env equivalents attached per the agent's declared security scheme; -H/--header separate"
+    requirement: "Scriptable credentials — bearer, API key, env equivalents attached per the agent's declared security scheme; --svc-param separate, never an auth flag"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
@@ -294,7 +302,7 @@ requirements:
     tier: 1
     area: TX
     spec: "§11.1, §4.5"
-    requirement: "Uses first supported_interfaces entry it supports absent a client preference; --transport repeatable and ordered"
+    requirement: "Uses first supportedInterfaces entry it supports absent a client preference; --transport repeatable and ordered"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
@@ -302,7 +310,7 @@ requirements:
     tier: 1
     area: TX
     spec: "§11.1"
-    requirement: "Echoes an interface's routing identifier on every request when the card declares one (na if none declared)"
+    requirement: "Sets the selected AgentInterface tenant in every request message exactly as declared; omits it when none declared (na if none declared)"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
@@ -310,7 +318,7 @@ requirements:
     tier: 1
     area: VER
     spec: "§11.2"
-    requirement: "Protocol version signaled explicitly on every request; down only within 1.x, never below 1.0; no silent downgrade"
+    requirement: "A2A-Version signaled explicitly on every request (never empty, which A2A reads as 0.3); down only within 1.x, never below 1.0; no silent downgrade"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
@@ -326,7 +334,15 @@ requirements:
     tier: 1
     area: CONFIG
     spec: "§6.4"
-    requirement: "Persisted config (if any): conventional path, secrets 0600, inspectable/clearable; never records session state to resume"
+    requirement: "Persisted config (if any): conventional path, secrets 0600, inspectable via read-only config show, user-editable; never records session state to resume"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_CLI_001:
+    tier: 1
+    area: CLI
+    spec: "§5.1, §5.2, §4.5"
+    requirement: "help and <command> --help print usage and exit; -v/--version prints the tool version; --help shows the effective defaults"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
@@ -348,11 +364,11 @@ requirements:
     evidence: null
 
   # ─────────────── Tier 2 — Standard ───────────────
-  A2ACLI_INSPECT_002:
+  A2ACLI_CARD_GET_002:
     tier: 2
-    area: INSPECT
+    area: CARD_GET
     spec: "§8.1"
-    requirement: "inspect --validate — validate the Agent Card against the A2A schema"
+    requirement: "card get --validate — validate the Agent Card against the A2A schema"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
@@ -424,7 +440,7 @@ requirements:
     tier: 2
     area: CONFIG
     spec: "§6.4"
-    requirement: "Configuration precedence (flag > env > local > global > built-in), scopeable by agent-card reference"
+    requirement: "Configuration precedence (flag > env > local > global > built-in), scopeable by agent-card reference; config show reports each value and its source"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
@@ -432,7 +448,7 @@ requirements:
     tier: 2
     area: DOWNLOAD
     spec: "§5.1"
-    requirement: "download — save task artifacts to disk"
+    requirement: "task download — save task artifacts to disk"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
@@ -452,11 +468,11 @@ requirements:
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
-  A2ACLI_OUT_008:
+  A2ACLI_CLI_002:
     tier: 2
-    area: OUT
-    spec: "§3.1"
-    requirement: "Shell completions provided"
+    area: CLI
+    spec: "§5.1"
+    requirement: "completion <shell> — emits a shell completion script for the named shell"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
@@ -464,40 +480,40 @@ requirements:
     tier: 2
     area: PUSH
     spec: "§5.1, App. A"
-    requirement: "push-config create / get / list / delete"
+    requirement: "task push-config create / get / list / delete"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
 
   # ─────────────── Tier 3 — Advanced ───────────────
-  A2ACLI_INSPECT_003:
+  A2ACLI_CARD_GET_003:
     tier: 3
-    area: INSPECT
+    area: CARD_GET
     spec: "§8.1, §10.4"
     requirement: "Authenticated extended Agent Card, fetched only via a security scheme advertised on the public card"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
-  A2ACLI_INSPECT_004:
+  A2ACLI_CARD_GET_004:
     tier: 3
-    area: INSPECT
-    spec: "§3.1"
-    requirement: "Agent Card signature verification"
+    area: CARD_GET
+    spec: "§8.1"
+    requirement: "Agent Card signature verification per A2A 8.4.3 — verify when present, report verified/unverifiable/absent; never present an unverified card as verified"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
-  A2ACLI_INSPECT_005:
+  A2ACLI_CARD_GET_005:
     tier: 3
-    area: INSPECT
-    spec: "§3.1"
-    requirement: "Catalog / registry integration"
+    area: CARD_GET
+    spec: "§8.1"
+    requirement: "Catalog / registry resolution — accept a catalog entry wherever --agent-card takes a reference; resolve it to a card first"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
   A2ACLI_PUSH_002:
     tier: 3
     area: PUSH
-    spec: "§7.2, §3.1"
+    spec: "§7.2"
     requirement: "Local webhook receiver able to accept push notifications"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
@@ -550,11 +566,11 @@ requirements:
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
-  A2ACLI_SERVE_001:
+  A2ACLI_DEMO_SERVER_001:
     tier: 3
-    area: SERVE
+    area: DEMO_SERVER
     spec: "§5.1, §14"
-    requirement: "serve / mock agent mode"
+    requirement: "demo-server / mock agent mode"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
     evidence: null
@@ -582,7 +598,7 @@ error_codes:
   A2ACLI_ERR_CARD_NOT_FOUND:   {emitted: no, note: null}
   A2ACLI_ERR_CARD_INVALID:     {emitted: no, note: null}
   A2ACLI_ERR_UNREACHABLE:      {emitted: no, note: null}
-  A2ACLI_ERR_AUTH_REQUIRED:    {emitted: no, note: null}
+  A2ACLI_ERR_CREDENTIALS_MISSING: {emitted: no, note: null}
   A2ACLI_ERR_AUTH_FAILED:      {emitted: no, note: null}
   A2ACLI_ERR_TIMEOUT:          {emitted: no, note: null}
   A2ACLI_ERR_INTERNAL:         {emitted: no, note: null}

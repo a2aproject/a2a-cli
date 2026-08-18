@@ -1,8 +1,8 @@
 # a2a-cli Compliance Report
 
-**Status:** Review.
-**Last updated:** 2026-08-14
-**Applies to:** `SPEC.md` v0.2 (revised 2026-08-14)
+**Status:** Review — a pre-Proposed state (`SPEC.md` §15.1).
+**Last updated:** 2026-08-17
+**Applies to:** `SPEC.md` v0.2 (revised 2026-08-17)
 
 ## About this document
 
@@ -23,7 +23,9 @@ It serves two roles at once:
      specification repository, not to any individual tool's report.
      ───────────────────────────────────────────────────────────────────────── -->
 
-> **Identifier stability.** An identifier is never **reused** (a retired number never returns meaning something else), but **renumbering is permitted while the specification is pre-Proposed (Draft or Review)** and freezes from its first Proposed version. Tier membership is *not* encoded in the identifier, so a requirement can move tiers and still be tracked by the same ID. From Proposed onward, withdrawn requirements stay listed and marked `Withdrawn`.
+> **Identifier stability.** An identifier is never **reused** (a retired number never returns meaning something else), but **renumbering is permitted while the specification is pre-Proposed (Draft or Review, `SPEC.md` §15.1)** and freezes from its first Proposed version. Tier membership is *not* encoded in the identifier, so a requirement can move tiers and still be tracked by the same ID. From Proposed onward, withdrawn requirements stay listed and marked `Withdrawn`.
+>
+> **Numbers already spent.** `A2ACLI_OUT_008` (shell completions) was renumbered to `A2ACLI_CLI_002` while pre-Proposed, when the `CLI` area was added for the tool's own surface; `A2ACLI_SERVE_001` was renamed to `A2ACLI_DEMO_SERVER_001` when the command it covers was renamed `serve` → `demo-server` to avoid reading as a generic "server" area. Neither `OUT_008` nor `SERVE` is reused; both are retired for good.
 >
 > **The list is expected to grow.** If you are building a tool and hit a real use case that no requirement covers, open a request against the specification repository; it can be added in a future revision. Adding requirements never changes existing identifiers, so reports and test suites that cite them keep working.
 >
@@ -80,7 +82,7 @@ A future revision MAY introduce **optional (capability-badge)** requirements —
 
 | Tier | Requirements | `✅` | `◐` | `❌` | `⊘` | `—` | Tier satisfied? |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Tier 1 — Core | 37 | `<>` | `<>` | `<>` | `<>` | `<>` | `<yes/no>` |
+| Tier 1 — Core | 39 | `<>` | `<>` | `<>` | `<>` | `<>` | `<yes/no>` |
 | Tier 2 — Standard | 15 | `<>` | `<>` | `<>` | `<>` | `<>` | `<yes/no>` |
 | Tier 3 — Advanced | 12 | `<>` | `<>` | `<>` | `<>` | `<>` | `<yes/no>` |
 
@@ -94,10 +96,10 @@ A tier is satisfied when every **applicable** requirement in it is `✅`. A cond
 | --- | --- | --- | --- | --- |
 | `A2ACLI_CARD_GET_001` | `card get` — resolve and parse an Agent Card from a host, an explicit URL, or a `file://` path, and use it to select a transport | §8.1, §11 | `<>` | |
 | `A2ACLI_SEND_001` | Send a message to start an interaction | §8.2 | `<>` | |
-| `A2ACLI_SEND_002` | Blocking by default; `--async` / `--return-immediately` / `--no-wait` return identifiers immediately | §8.2, §4.5 | `<>` | |
+| `A2ACLI_SEND_002` | Blocking by default; `--async` returns identifiers immediately (`--return-immediately` / `--no-wait` are OPTIONAL aliases) | §8.2, §4.5 | `<>` | |
 | `A2ACLI_SEND_003` | `--stream` consumes SSE when supported and never hangs when unsupported; a `Message`-only response (no task created) exits cleanly rather than erroring | §8.2, §7.2 | `<>` | |
 | `A2ACLI_SEND_004` | Renders produced artifacts; never silently discards a part | §8.2 | `<>` | |
-| `A2ACLI_SEND_005` | Lets the caller set a message part's media type explicitly; infers it only when not given | §8.2 | `<>` | |
+| `A2ACLI_SEND_005` | Lets the caller set a message part's media type explicitly with `--media-type`, bound to the part flag it follows; infers the type only when none was given | §8.2 | `<>` | |
 | `A2ACLI_SEND_006` | Message-part flags `--text` / `--file` / `--data` are repeatable and order-preserving, so one message can carry multiple ordered parts (`--data -` reads stdin) | §8.2 | `<>` | |
 | `A2ACLI_TASK_GET_001` | `task get` — retrieve task state, artifacts, and history by identifier; renders returned artifacts and never silently strips them | §8.3 | `<>` | |
 | `A2ACLI_TASK_CANCEL_001` | `task cancel` — cancel a task; idempotent; reports the resulting state | §8.4 | `<>` | |
@@ -106,27 +108,29 @@ A tier is satisfied when every **applicable** requirement in it is `✅`. A cond
 | `A2ACLI_INTERACT_003` | Never invents server-assigned identifiers, and never assumes `contextId` denotes a chat session | §6.1, §2 | `<>` | |
 | `A2ACLI_INTERACT_004` | Reports `taskId` / `contextId` / `state` on completion and interruption, in copy-pasteable form, and prints the exact command to resume | §6.3 | `<>` | |
 | `A2ACLI_INTERACT_005` | Stateless: never stores the last `taskId` / `contextId` to replay on the caller's behalf; provides no `--continue`; interaction state never lives only in process memory | §4.3, §6.1, §6.4 | `<>` | |
-| `A2ACLI_TASK_POLL_001` | Polling path available — `get` plus wait/watch | §7.3 | `<>` | |
+| `A2ACLI_TASK_POLL_001` | Polling path available — one-shot `task get`, plus `task get --wait` polling to a terminal or interrupted state | §7.3 | `<>` | |
 | `A2ACLI_TASK_POLL_002` | `--poll-interval` and `--timeout` honored; bounded backoff; no busy-loop; remains interruptible without losing the already-printed `taskId` | §7.3 | `<>` | |
-| `A2ACLI_TASK_POLL_003` | Stops immediately on interrupted states (`INPUT_REQUIRED` / `AUTH_REQUIRED`) without deadlock | §7.1, §7.3 | `<>` | |
+| `A2ACLI_TASK_POLL_003` | Stops immediately on interrupted states (`INPUT_REQUIRED` / `AUTH_REQUIRED`) without deadlock; treats `TASK_STATE_UNSPECIFIED` as neither terminal nor interrupted, continuing to poll under `--timeout` | §7.1, §7.3 | `<>` | |
 | `A2ACLI_TASK_POLL_004` | When a wait prefers streaming, falls back to polling on stream failure and drives the task to a terminal/interrupted state | §7.3 | `<>` | |
 | `A2ACLI_OUT_001` | **Standard output** — every response about a task names its context, its task, and its state, in every output mode; the payload goes to stdout and diagnostics to stderr, never mixed | §9.1, §9.5, §6.3 | `<>` | |
 | `A2ACLI_OUT_002` | `-o json` (no `--stream`) — exactly one document, the **terminal** protocol object rather than an event log, and never switched implicitly to its streamed JSONL form | §9.3, App. B | `<>` | |
 | `A2ACLI_OUT_003` | `-o json --stream` — JSONL: one complete JSON object per line, flushed as produced, final line carrying the terminal object; a stream-terminating error is emitted as a final error object on its own line | §9.3, §9.4, App. B | `<>` | |
 | `A2ACLI_OUT_004` | Errors are machine-readable and consistent across transports: protocol failures carry the A2A error name, CLI-local failures an `A2ACLI_ERR_*` code; the tool never invents codes in the `A2ACLI_ERR_*` namespace (vendor codes use a distinct prefix) and SHOULD populate the `hint` field | §9.4, App. B, App. E | `<>` | |
-| `A2ACLI_OUT_005` | **`text` floor** — one `Label: value` field per line, the same labels across invocations, no terminal control sequences; any interactive mode auto-degrades to `text` when stdout is not a TTY and never blocks on interactive input there | §9.2, §4.1 | `<>` | |
-| `A2ACLI_OUT_006` | When the caller does not wait (`--async` / `--return-immediately` / `--no-wait`), still emits a result object carrying at least `taskId` and `contextId` for later polling | §9.5 | `<>` | |
+| `A2ACLI_OUT_005` | **`text` floor** — one `Label: value` field per line, the same labels across invocations, no terminal control sequences; block content (a rendered artifact, a formatted data part) sits under its own `Label:` line, closed by a blank line and never interleaved with field lines; any interactive mode auto-degrades to `text` when stdout is not a TTY and never blocks on interactive input there | §9.2, §4.1 | `<>` | |
+| `A2ACLI_OUT_006` | When the caller does not wait (`--async`), still emits a result object carrying at least `taskId` and `contextId` for later polling | §9.5 | `<>` | |
 | `A2ACLI_EXIT_001` | Implements the three required exit statuses (`0`, `1`, `2`); any reserved status it emits carries the documented meaning and agrees with the error reported | §9.6, App. E | `<>` | |
-| `A2ACLI_AUTH_001` | Scriptable credentials — bearer, API key, env equivalents, attached per the agent's declared security scheme; `-H/--header` available separately for any service parameter | §10.1 | `<>` | |
+| `A2ACLI_EXIT_002` | Tool execution and agent outcome stay decoupled: a turn the CLI conducted and reported exits `0` even when the task ends `FAILED`/`REJECTED` or pauses at `INPUT_REQUIRED`/`AUTH_REQUIRED`; the outcome is carried in the task state, and a non-success or paused outcome SHOULD be named in a stderr warning | §4.6, §9.6 | `<>` | |
+| `A2ACLI_AUTH_001` | Scriptable credentials — bearer, API key, env equivalents, attached per the agent's declared security scheme; `--svc-param` available separately for any service parameter, and never documented as an authentication flag | §10.1 | `<>` | |
 | `A2ACLI_AUTH_002` | Offers an environment-variable equivalent for each credential flag and documents that a flag-supplied credential is exposed via the process table and shell history; this guidance does not alter the flag > environment precedence (§4.5) | §10.1, §4.5 | `<>` | |
 | `A2ACLI_AUTH_003` | Emits a prominent security warning to stderr when a credential is sent over a connection with certificate verification disabled (`--insecure`); never disables TLS verification silently | §10.1, §4.5 | `<>` | |
 | `A2ACLI_AUTH_004` | Redacts credential material from diagnostic output, including `--debug` raw-wire logging; the redaction is not defeasible by a verbosity flag | §10.1, §5.2 | `<>` | |
 | `A2ACLI_TX_001` | Transport selected from the Agent Card, honoring declared preference order | §11.1 | `<>` | |
-| `A2ACLI_TX_002` | Uses the first `supported_interfaces` entry it supports absent a client preference; `--transport` is repeatable and ordered | §11.1, §4.5 | `<>` | |
-| `A2ACLI_TX_003` | *(Conditional — `— N/A` if no card interface declares a routing identifier.)* Echoes an interface's routing identifier on every request when the card declares one | §11.1 | `<>` | |
-| `A2ACLI_VER_001` | Protocol version signaled explicitly on every request; negotiates down only within 1.x, never below 1.0; no silent downgrade | §11.2 | `<>` | |
+| `A2ACLI_TX_002` | Uses the first `supportedInterfaces` entry it supports absent a client preference; `--transport` is repeatable and ordered | §11.1, §4.5 | `<>` | |
+| `A2ACLI_TX_003` | *(Conditional — `— N/A` if the selected interface declares no `tenant`.)* Sets the selected `AgentInterface`'s routing identifier (`tenant`) in every request message, exactly as declared, and omits the field when the entry declares none | §11.1 | `<>` | |
+| `A2ACLI_VER_001` | `A2A-Version` signaled explicitly on every request (never left empty, which A2A reads as 0.3); negotiates down only within 1.x, never below 1.0; no silent downgrade | §11.2 | `<>` | |
 | `A2ACLI_DEFAULT_001` | Ships the baseline defaults, each overridable by an explicit flag, and exposes its effective defaults (e.g. via `--help`). **Complete the breakdown in §4a** — a bare pass hides which default is missing | §4.5 | `<>` | |
-| `A2ACLI_CONFIG_001` | Persisted configuration *(if any)*: conventional path, secrets not world-readable (mode `0600` or platform equivalent), user-inspectable and clearable; never records session state (`taskId` / `contextId`) to offer resume | §6.4 | `<>` | |
+| `A2ACLI_CONFIG_001` | Persisted configuration *(if any)*: conventional path, secrets not world-readable (mode `0600` or platform equivalent), inspectable via the read-only `config show` and directly editable and removable by the user; never records session state (`taskId` / `contextId`) to offer resume | §6.4 | `<>` | |
+| `A2ACLI_CLI_001` | `help` and `<command> --help` print usage and exit; `-v/--version` prints the tool version; `--help` shows the effective defaults so a caller can see them before overriding | §5.1, §5.2, §4.5 | `<>` | |
 | `A2ACLI_SKILL_001` | *(Conditional — mark `— N/A` if the tool ships no skill.)* Ships **exactly one** Agent Skill, generic and token-efficient, deferring to runtime `help` rather than inlining the command surface | §12.1, §12.2 | `<>` | |
 | `A2ACLI_SKILL_002` | *(Conditional — mark `— N/A` if the tool ships no skill.)* Skill and specification kept as distinct layers; the skill does not restate normative requirements | §12.3 | `<>` | |
 
@@ -156,12 +160,12 @@ A tier is satisfied when every **applicable** requirement in it is `✅`. A cond
 | `A2ACLI_AUTH_007` | Secure token storage with automatic attachment on later calls | §10.2 | `<>` | |
 | `A2ACLI_TX_004` | At least two transports supported and selectable | §11.1 | `<>` | |
 | `A2ACLI_VER_003` | Verifies a capability on the Agent Card before invoking a capability-gated operation (streaming, push, extended card) | §11.3 | `<>` | |
-| `A2ACLI_CONFIG_002` | Configuration precedence (flag → env → local → global → built-in), scopeable by agent-card reference | §6.4 | `<>` | |
-| `A2ACLI_DOWNLOAD_001` | `download` — save task artifacts to disk | §5.1 | `<>` | |
+| `A2ACLI_CONFIG_002` | Configuration precedence (flag → env → local → global → built-in), scopeable by agent-card reference; `config show` reports each effective value with the source it resolved from | §6.4 | `<>` | |
+| `A2ACLI_DOWNLOAD_001` | `task download` — save task artifacts to disk | §5.1 | `<>` | |
 | `A2ACLI_OUT_007` | `--debug` enables diagnostic logging to stderr, including the raw protocol messages exchanged on the wire | §5.2 | `<>` | |
 | `A2ACLI_CONFORM_001` | `conformance` — smoke-check a live agent against the A2A TCK | §5.1 | `<>` | |
-| `A2ACLI_OUT_008` | Shell completions provided | §3.1 | `<>` | |
-| `A2ACLI_PUSH_001` | `push-config` create / get / list / delete | §5.1, App. A | `<>` | |
+| `A2ACLI_CLI_002` | `completion <shell>` — emits a shell completion script for the named shell | §5.1 | `<>` | |
+| `A2ACLI_PUSH_001` | `task push-config` create / get / list / delete | §5.1, App. A | `<>` | |
 
 ## 6. Tier 3 — Advanced
 
@@ -169,15 +173,15 @@ A tier is satisfied when every **applicable** requirement in it is `✅`. A cond
 | --- | --- | --- | --- | --- |
 | `A2ACLI_CARD_GET_003` | Authenticated extended Agent Card, fetched only via a security scheme advertised on the public card | §8.1, §10.4 | `<>` | |
 | `A2ACLI_AUTH_008` | Never presents a credential to an Agent Card endpoint that has not declared a scheme accepting it | §10.4 | `<>` | |
-| `A2ACLI_CARD_GET_004` | Agent Card signature verification | §3.1 | `<>` | |
-| `A2ACLI_CARD_GET_005` | Catalog / registry integration | §3.1 | `<>` | |
-| `A2ACLI_PUSH_002` | Local webhook receiver able to accept push notifications | §7.2, §3.1 | `<>` | |
+| `A2ACLI_CARD_GET_004` | Agent Card signature verification per A2A §8.4.3 — verifies signatures when the card carries them and reports the outcome (verified / unverifiable / absent); never presents an unverified card as verified, and does not fail on an absent signature (A2A §8.4 makes signing optional) | §8.1 | `<>` | |
+| `A2ACLI_CARD_GET_005` | Catalog / registry resolution — accepts a catalog or registry entry wherever `--agent-card` takes a reference and resolves it to an Agent Card before any other operation | §8.1 | `<>` | |
+| `A2ACLI_PUSH_002` | Local webhook receiver able to accept push notifications | §7.2 | `<>` | |
 | `A2ACLI_CHAT_001` | Interactive `chat` carrying context and task across turns | §6.2, §5.1 | `<>` | |
 | `A2ACLI_TX_005` | gRPC transport | §11.1 | `<>` | |
 | `A2ACLI_AUTH_009` | Mutual TLS | §10.3 | `<>` | |
 | `A2ACLI_AUTH_010` | OpenID Connect | §10.3 | `<>` | |
 | `A2ACLI_AUTH_011` | Handles in-task `AUTH_REQUIRED` resolution | §10.3 | `<>` | |
-| `A2ACLI_SERVE_001` | `serve` / mock agent mode | §5.1, §14 | `<>` | |
+| `A2ACLI_DEMO_SERVER_001` | `demo-server` / mock agent mode | §5.1, §14 | `<>` | |
 | `A2ACLI_VER_002` | Declares server-required protocol extensions | §11.3, A2A §4.6 | `<>` | |
 
 ## 7. Test evidence
@@ -197,7 +201,7 @@ Which `A2ACLI_ERR_*` codes (`SPEC.md` Appendix E) the tool can emit. Helps consu
 | `A2ACLI_ERR_CARD_NOT_FOUND` | `<>` | |
 | `A2ACLI_ERR_CARD_INVALID` | `<>` | |
 | `A2ACLI_ERR_UNREACHABLE` | `<>` | |
-| `A2ACLI_ERR_AUTH_REQUIRED` | `<>` | |
+| `A2ACLI_ERR_CREDENTIALS_MISSING` | `<>` | |
 | `A2ACLI_ERR_AUTH_FAILED` | `<>` | |
 | `A2ACLI_ERR_TIMEOUT` | `<>` | |
 | `A2ACLI_ERR_INTERNAL` | `<>` | |
@@ -249,7 +253,7 @@ report:
   maintainer: <name or org>
   report_date: <YYYY-MM-DD>        # when this report was produced
   spec_version: "0.2"              # SPEC.md "Version"
-  spec_revision: <YYYY-MM-DD>      # SPEC.md "Last updated" — pins a Draft/Review result
+  spec_revision: <YYYY-MM-DD>      # SPEC.md "Last updated" — pins a pre-Proposed (Draft/Review) result
   a2a_versions: ["1.0"]
   agent_tested: <name or URL>
   agent_tck_conformant: unknown    # yes | no | unknown
@@ -258,7 +262,7 @@ report:
   designation: conformant          # ALWAYS "conformant" (§A.3)
 
 summary:                           # aggregator-produced; only pass/na satisfy (§A.3)
-  tier_1: {total: 37, pass: 0, partial: 0, fail: 0, not_measured: 37, na: 0, satisfied: false}
+  tier_1: {total: 39, pass: 0, partial: 0, fail: 0, not_measured: 39, na: 0, satisfied: false}
   # tier_2 (15) and tier_3 (12): same shape
 
 requirements:                      # ID-keyed; every ID of the claimed tier MUST appear

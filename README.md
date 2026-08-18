@@ -12,7 +12,7 @@ This repository holds the **specification** for `a2a-cli` and the compliance-rep
 
 ## Status
 
-Early work in progress. The specification is a **v0.1 draft**, open for review — expect changes. Feedback via issues and pull requests is welcome.
+Early work in progress. The specification is **v0.2, in review** — pre-Proposed and not yet ratified, so expect changes. Feedback via issues and pull requests is welcome.
 
 ## License
 
