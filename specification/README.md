@@ -1,42 +1,43 @@
 # a2a-cli Specification
 
-This directory holds the specification for **`a2a-cli`** — a command-line client for the [Agent2Agent (A2A) Protocol](https://a2a-protocol.org/latest/specification/) — together with the compliance-report template used to demonstrate conformance.
+This directory holds the specification for **`a2a-cli`** — the command-line client for the [Agent2Agent (A2A) Protocol](https://a2a-protocol.org/latest/specification/) — together with the material used to verify an implementation against it.
 
-`a2a-cli` lets developers and AI coding agents inspect, message, stream, poll, and manage A2A agents from the terminal. The specification defines the behavior a tool must exhibit so that independently built CLIs — in any language — converge on one predictable command surface, output contract, and interaction model, verifiable through a published compliance report.
+`a2a-cli` lets developers and AI coding agents fetch Agent Cards, send messages, stream and poll tasks, and read artifacts from the terminal. `SPEC.md` defines how the tool behaves, in terms an implementation in any language can follow.
 
 ## Contents
 
 | File | Description |
 | --- | --- |
-| [`SPEC.md`](./SPEC.md) | The a2a-cli behavior specification (normative). |
-| [`COMPLIANCE.md`](./COMPLIANCE.md) | The requirement registry, and the template a tool completes to declare and evidence its conformance. |
-| [`compliance-report.template.yaml`](./compliance-report.template.yaml) | The same report in machine form — the artifact a tool links from the compatibility matrix. |
-| [`OPEN-QUESTIONS.md`](./OPEN-QUESTIONS.md) | Questions the specification deliberately leaves open, each with the position it takes today. |
+| [`SPEC.md`](./SPEC.md) | The behavior specification (normative). Self-contained: everything needed to build the tool. |
+| [`COMPLIANCE.md`](./COMPLIANCE.md) | The conformance model, the requirement-identifier registry, and the report form an implementation completes. |
+| [`compliance-report.template.yaml`](./compliance-report.template.yaml) | The same report in machine form — the artifact an implementation publishes. |
 
-## Conformance at a glance
+## Capability tiers at a glance
 
-Conformance is tiered and cumulative. A tier is satisfied only when every applicable requirement listed for it is satisfied — including the ones worded as SHOULD, which a tier claim promotes to required (`SPEC.md` §3.1).
+`SPEC.md` §3 groups its requirements into three **cumulative** tiers. A tier describes *scope* — what the tool does first, next, and later — not a rank awarded to an implementation.
 
 | Tier | Name | Summary |
 | --- | --- | --- |
-| **Tier 1** | Core | `card get`, `send`, `task get`, `task cancel`, `help`; explicit interaction state; task polling; the output contract + exit codes; token auth; version signaling. |
+| **Tier 1** | Core | `card get`, `send`, `task get`, `task cancel`, `help`; explicit interaction state; task polling; the output contract and exit codes; token auth; version signaling. |
 | **Tier 2** | Standard | `task list`, `task subscribe`, `auth login`, multiple transports, configuration precedence, `task push-config`, `task download`, wire debug, `conformance`, `completion`. |
-| **Tier 3** | Advanced | Push-notification webhook receiver, interactive `chat`, gRPC, extended card, signature verification, mTLS, OpenID Connect, `serve`/mock, catalog resolution, extensions. |
+| **Tier 3** | Advanced | Push-notification webhook receiver, interactive `chat`, gRPC, extended card, signature verification, mTLS, OpenID Connect, `demo-server`/mock, catalog resolution, extensions. |
 
 See [`SPEC.md`](./SPEC.md) for the normative detail.
 
-## Claiming conformance
+## Verifying an implementation
+
+Tier membership is a scope decision and lives in `SPEC.md`. Everything about *claiming* a tier — what counts as satisfying a requirement, and the evidence a claim needs — lives in [`COMPLIANCE.md`](./COMPLIANCE.md).
 
 1. Implement a tier of the specification.
-2. Exercise your tool against a live A2A agent — ideally one that is itself TCK-conformant, so a failure can be attributed to the CLI rather than to the agent. The TCK validates *agents*, not clients, so it cannot grade a CLI directly (`SPEC.md` §3.2).
-3. Copy [`COMPLIANCE.md`](./COMPLIANCE.md) into your tool's repository and fill it in, recording an outcome for every requirement identifier in the tier you claim.
-4. Publish the machine-readable report and submit it to be listed in the A2A **compatibility matrix**.
+2. Exercise the tool against a live A2A agent — ideally one that is itself TCK-conformant, so a failure can be attributed to the client rather than to the agent. The TCK validates *agents*, not clients, so it cannot grade a CLI directly.
+3. Complete [`COMPLIANCE.md`](./COMPLIANCE.md), recording an outcome for every requirement identifier in the tier claimed.
+4. Publish the machine-readable report alongside the implementation.
 
-Conformance is open to any implementation, in any language. "Official" is a separate, project-level designation (see `SPEC.md` §1.4 and §15.3) made outside the specification; it does not restrict or privilege conformance.
+The registry is open: any implementation, in any language, can measure itself against it and publish the result.
 
 ## Status
 
-**v0.2 — Review.** Open for comment; pre-Proposed and not yet ratified, so normative requirements may still change (`SPEC.md` §15.1, §15.4). Feedback is welcome via issues and pull requests.
+**v0.2 — Review.** Open for comment; pre-Proposed and not yet ratified, so normative requirements may still change (`SPEC.md` §14.1, §14.3). Feedback is welcome via issues and pull requests.
 
 ## References
 

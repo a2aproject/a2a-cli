@@ -2,7 +2,7 @@
 #
 # Companion to COMPLIANCE.md (see its Appendix A). The Markdown registry is
 # CANONICAL; this file is the same measurement in machine form — the single,
-# self-contained artifact a tool links from the A2A compatibility matrix.
+# self-contained artifact an implementation publishes alongside itself.
 #
 # HOW TO USE
 #   1. Copy this file into your tool's repository.
@@ -18,7 +18,6 @@
 #     rolls up to `satisfied: false`.
 #   - Only `pass` (and a genuine `na`) satisfies a tier. `partial` / `fail` /
 #     `not_measured` / any unrecognized value block it — never skipped.
-#   - `designation` is ALWAYS `conformant`; "official" is never self-asserted.
 #   - `A2ACLI_DEFAULT_001: pass` is invalid unless every default_001_breakdown
 #     row is shipped:yes AND overridable:yes.
 #
@@ -39,7 +38,6 @@ report:
   agent_tck_conformant: unknown      # yes | no | unknown
   transports_covered: []             # subset of [HTTP+JSON, JSON-RPC, gRPC]
   tier_claimed: <1 | 2 | 3>
-  designation: conformant            # ALWAYS "conformant"
 
 # Aggregator-produced. Recompute from the statuses below; do not hand-wave.
 summary:
@@ -221,7 +219,7 @@ requirements:
   A2ACLI_OUT_004:
     tier: 1
     area: OUT
-    spec: "§9.4, App. B, App. E"
+    spec: "§9.4, App. B, App. D"
     requirement: "Errors machine-readable, consistent across transports; protocol error name vs A2ACLI_ERR_* code; no invented codes; hint field"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
@@ -245,7 +243,7 @@ requirements:
   A2ACLI_EXIT_001:
     tier: 1
     area: EXIT
-    spec: "§9.6, App. E"
+    spec: "§9.6, App. D"
     requirement: "Implements exit statuses 0/1/2; any reserved status carries its documented meaning and agrees with the reported error"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
@@ -569,7 +567,7 @@ requirements:
   A2ACLI_DEMO_SERVER_001:
     tier: 3
     area: DEMO_SERVER
-    spec: "§5.1, §14"
+    spec: "§5.1, §13"
     requirement: "demo-server / mock agent mode"
     status: not_measured
     note: "<REQUIRED unless status is pass>"
@@ -592,7 +590,7 @@ default_001_breakdown:
   protocol_version_highest_mutual:   {shipped: no, overridable: no, note: null}
   transport_security_tls_on:         {shipped: no, overridable: no, note: "MUST warn on --insecure"}
 
-# Which A2ACLI_ERR_* codes the tool can emit (SPEC.md Appendix E).
+# Which A2ACLI_ERR_* codes the tool can emit (SPEC.md Appendix D).
 error_codes:
   A2ACLI_ERR_USAGE:            {emitted: no, note: null}
   A2ACLI_ERR_CARD_NOT_FOUND:   {emitted: no, note: null}
