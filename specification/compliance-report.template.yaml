@@ -1,0 +1,607 @@
+# a2a-cli compliance report — machine-readable template
+#
+# Companion to COMPLIANCE.md (see its Appendix A). The Markdown registry is
+# CANONICAL; this file is the same measurement in machine form — the single,
+# self-contained artifact an implementation publishes alongside itself.
+#
+# HOW TO USE
+#   1. Copy this file into your tool's repository.
+#   2. Fill the `report:` identity block.
+#   3. For every requirement below, set `status:` (pass | partial | fail |
+#      not_measured | na) and a `note:` for anything that is not `pass`.
+#   4. Fill `default_001_breakdown:`, `error_codes:`, `attestation:`.
+#   5. Recompute `summary:` from the requirement statuses (aggregator step).
+#
+# FAIL-CLOSED (COMPLIANCE.md Appendix A.3) — a broken/empty report is NEVER a pass:
+#   - Every requirement ID for the claimed tier AND every lower tier MUST be
+#     present. A missing key, an empty `requirements:`, or all-`not_measured`
+#     rolls up to `satisfied: false`.
+#   - Only `pass` (and a genuine `na`) satisfies a tier. `partial` / `fail` /
+#     `not_measured` / any unrecognized value block it — never skipped.
+#   - `A2ACLI_DEFAULT_001: pass` is invalid unless every default_001_breakdown
+#     row is shipped:yes AND overridable:yes.
+#
+# PUBLICATION: this file is public. Placeholders only — no secrets, no
+# internal-only URLs in any `note`/`evidence`.
+
+report:
+  tool: <tool-name>
+  tool_version: <x.y.z>
+  language: <Go | Rust | Python | ...>
+  repository: <url>
+  maintainer: <name or org>
+  report_date: <YYYY-MM-DD>          # when this report was produced
+  spec_version: "0.2"                # SPEC.md "Version"
+  spec_revision: <YYYY-MM-DD>        # SPEC.md "Last updated" — needed to interpret a pre-Proposed result
+  a2a_versions: ["1.0"]
+  agent_tested: <name or URL>
+  agent_tck_conformant: unknown      # yes | no | unknown
+  transports_covered: []             # subset of [HTTP+JSON, JSON-RPC, gRPC]
+  tier_claimed: <1 | 2 | 3>
+
+# Aggregator-produced. Recompute from the statuses below; do not hand-wave.
+summary:
+  tier_1: {total: 39, pass: 0, partial: 0, fail: 0, not_measured: 39, na: 0, satisfied: false}
+  tier_2: {total: 15, pass: 0, partial: 0, fail: 0, not_measured: 15, na: 0, satisfied: false}
+  tier_3: {total: 12, pass: 0, partial: 0, fail: 0, not_measured: 12, na: 0, satisfied: false}
+
+requirements:
+
+  # ─────────────── Tier 1 — Core (required) ───────────────
+  A2ACLI_CARD_GET_001:
+    tier: 1
+    area: CARD_GET
+    spec: "§10.1, §13"
+    requirement: "card get — resolve/parse an Agent Card from host, URL, or file:// path; select a transport"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_SEND_001:
+    tier: 1
+    area: SEND
+    spec: "§10.2"
+    requirement: "Send a message to start an interaction"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_SEND_002:
+    tier: 1
+    area: SEND
+    spec: "§10.2, §6.5"
+    requirement: "Blocking by default; --async returns identifiers immediately (--return-immediately / --no-wait are OPTIONAL aliases)"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_SEND_003:
+    tier: 1
+    area: SEND
+    spec: "§10.2, §9.2"
+    requirement: "--stream consumes SSE when supported, never hangs when unsupported; a Message-only response exits cleanly"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_SEND_004:
+    tier: 1
+    area: SEND
+    spec: "§10.2"
+    requirement: "Renders produced artifacts; never silently discards a part"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_SEND_005:
+    tier: 1
+    area: SEND
+    spec: "§10.2"
+    requirement: "Caller can set a part's media type with --media-type, bound to the part flag it follows; inferred only when none given"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_SEND_006:
+    tier: 1
+    area: SEND
+    spec: "§10.2"
+    requirement: "--text / --file / --data repeatable and order-preserving; --data - reads stdin"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_TASK_GET_001:
+    tier: 1
+    area: TASK_GET
+    spec: "§10.3"
+    requirement: "task get — state, artifacts, history by id; renders artifacts, never silently strips them"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_TASK_CANCEL_001:
+    tier: 1
+    area: TASK_CANCEL
+    spec: "§10.4"
+    requirement: "task cancel — idempotent; reports resulting state"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_INTERACT_001:
+    tier: 1
+    area: INTERACT
+    spec: "§8.1"
+    requirement: "Continue an interaction via --context-id"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_INTERACT_002:
+    tier: 1
+    area: INTERACT
+    spec: "§8.1"
+    requirement: "--task-id with or without --context-id (server resolves context); when both given they MUST correspond; a rejected id fails non-zero, creates no new task, surfaces the protocol error"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_INTERACT_003:
+    tier: 1
+    area: INTERACT
+    spec: "§4.1, §4"
+    requirement: "Never invents server-assigned identifiers; never assumes contextId denotes a chat session"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_INTERACT_004:
+    tier: 1
+    area: INTERACT
+    spec: "§8.2"
+    requirement: "Reports taskId/contextId/state on completion and interruption, copy-pasteable, with an exact resume command"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_INTERACT_005:
+    tier: 1
+    area: INTERACT
+    spec: "§6.3, §4.1, §8.3"
+    requirement: "Stateless: no stored last taskId/contextId replay; no --continue; state never only in process memory"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_TASK_POLL_001:
+    tier: 1
+    area: TASK_POLL
+    spec: "§9.3"
+    requirement: "Polling path available — one-shot task get, plus task get --wait to a terminal or interrupted state"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_TASK_POLL_002:
+    tier: 1
+    area: TASK_POLL
+    spec: "§9.3"
+    requirement: "--poll-interval / --timeout honored; bounded backoff; no busy-loop; interruptible without losing printed taskId"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_TASK_POLL_003:
+    tier: 1
+    area: TASK_POLL
+    spec: "§9.1, §9.3"
+    requirement: "Stops immediately on interrupted states (INPUT_REQUIRED / AUTH_REQUIRED); TASK_STATE_UNSPECIFIED is neither, so polling continues under --timeout"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_TASK_POLL_004:
+    tier: 1
+    area: TASK_POLL
+    spec: "§9.3"
+    requirement: "When a wait prefers streaming, falls back to polling on stream failure and drives to terminal/interrupted"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_OUT_001:
+    tier: 1
+    area: OUT
+    spec: "§11.1, §11.5, §8.2"
+    requirement: "Standard output names context/task/state in every mode; payload to stdout, diagnostics to stderr, never mixed"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_OUT_002:
+    tier: 1
+    area: OUT
+    spec: "§11.3, App. B"
+    requirement: "-o json (no --stream): exactly one terminal protocol document, never an event log, never implicit JSONL"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_OUT_003:
+    tier: 1
+    area: OUT
+    spec: "§11.3, §11.4, App. B"
+    requirement: "-o json --stream: JSONL one object per line, final line terminal; a stream-terminating error is a final error line"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_OUT_004:
+    tier: 1
+    area: OUT
+    spec: "§11.4, App. B, App. D"
+    requirement: "Errors machine-readable, consistent across transports; protocol error name vs A2ACLI_ERR_* code; no invented codes; hint field"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_OUT_005:
+    tier: 1
+    area: OUT
+    spec: "§11.2, §6.1"
+    requirement: "text floor: one Label: value per line, stable labels, no control sequences; block content under its own Label: line, blank-line terminated, never interleaved; interactive auto-degrades to text off-TTY"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_OUT_006:
+    tier: 1
+    area: OUT
+    spec: "§11.5"
+    requirement: "When not waiting (--async), still emits a result object carrying at least taskId and contextId"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_EXIT_001:
+    tier: 1
+    area: EXIT
+    spec: "§11.6, App. D"
+    requirement: "Implements exit statuses 0/1/2; any reserved status carries its documented meaning and agrees with the reported error"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_EXIT_002:
+    tier: 1
+    area: EXIT
+    spec: "§6.6, §11.6"
+    requirement: "Execution decoupled from outcome: exits 0 on a reported turn even when the task is FAILED/REJECTED or paused at INPUT_REQUIRED/AUTH_REQUIRED; outcome carried in task state"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_AUTH_001:
+    tier: 1
+    area: AUTH
+    spec: "§12.1"
+    requirement: "Scriptable credentials — bearer, API key, env equivalents attached per the agent's declared security scheme; --svc-param separate, never an auth flag"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_AUTH_002:
+    tier: 1
+    area: AUTH
+    spec: "§12.1, §6.5"
+    requirement: "Offers an env-var equivalent for each credential flag; documents process-table and shell-history exposure of a flag-supplied credential; does not alter flag > env precedence"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_AUTH_003:
+    tier: 1
+    area: AUTH
+    spec: "§12.1, §6.5"
+    requirement: "Emits a prominent stderr security warning when a credential is sent with certificate verification disabled (--insecure); never disables TLS verification silently"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_AUTH_004:
+    tier: 1
+    area: AUTH
+    spec: "§12.1, §7.2"
+    requirement: "Redacts credential material from diagnostic output including --debug raw-wire logging; not defeasible by a verbosity flag"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_TX_001:
+    tier: 1
+    area: TX
+    spec: "§13.1"
+    requirement: "Transport selected from the Agent Card, honoring declared preference order"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_TX_002:
+    tier: 1
+    area: TX
+    spec: "§13.1, §6.5"
+    requirement: "Uses first supportedInterfaces entry it supports absent a client preference; --transport repeatable and ordered"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_TX_003:
+    tier: 1
+    area: TX
+    spec: "§13.1"
+    requirement: "Sets the selected AgentInterface tenant in every request message exactly as declared; omits it when none declared (na if none declared)"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_VER_001:
+    tier: 1
+    area: VER
+    spec: "§13.2"
+    requirement: "A2A-Version signaled explicitly on every request (never empty, which A2A reads as 0.3); down only within 1.x, never below 1.0; no silent downgrade"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_DEFAULT_001:
+    tier: 1
+    area: DEFAULT
+    spec: "§6.5"
+    requirement: "Ships baseline defaults, each overridable by an explicit flag; exposes effective defaults (see default_001_breakdown)"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_CONFIG_001:
+    tier: 1
+    area: CONFIG
+    spec: "§8.3"
+    requirement: "Persisted config (if any): conventional path, secrets 0600, inspectable via read-only config show, user-editable; never records session state to resume"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_CLI_001:
+    tier: 1
+    area: CLI
+    spec: "§7.1, §7.2, §6.5"
+    requirement: "help and <command> --help print usage and exit; -v/--version prints the tool version; --help shows the effective defaults"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_SKILL_001:
+    tier: 1
+    area: SKILL
+    spec: "§14.1, §14.2"
+    requirement: "Conditional (na if no skill): ships exactly one Agent Skill, generic and token-efficient, deferring to runtime help"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_SKILL_002:
+    tier: 1
+    area: SKILL
+    spec: "§14.3"
+    requirement: "Conditional (na if no skill): skill and specification kept as distinct layers; skill does not restate normative reqs"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+
+  # ─────────────── Tier 2 — Standard ───────────────
+  A2ACLI_CARD_GET_002:
+    tier: 2
+    area: CARD_GET
+    spec: "§10.1"
+    requirement: "card get --validate — validate the Agent Card against the A2A schema"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_TASK_LIST_001:
+    tier: 2
+    area: TASK_LIST
+    spec: "§7.1, App. A"
+    requirement: "task list — cursor-paginated, filterable by status and context"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_TASK_SUBSCRIBE_001:
+    tier: 2
+    area: TASK_SUBSCRIBE
+    spec: "§7.1, §9.2"
+    requirement: "task subscribe — (re)subscribe to a task's event stream"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_TASK_SUBSCRIBE_002:
+    tier: 2
+    area: TASK_SUBSCRIBE
+    spec: "§9.4, §9.2"
+    requirement: "Stream resumption after disconnect; first event re-delivers the full Task, so no separate get is required"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_AUTH_005:
+    tier: 2
+    area: AUTH
+    spec: "§12.2"
+    requirement: "auth login — OAuth 2.1 device-code flow"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_AUTH_006:
+    tier: 2
+    area: AUTH
+    spec: "§12.2"
+    requirement: "auth login — OAuth 2.1 client-credentials flow"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_AUTH_007:
+    tier: 2
+    area: AUTH
+    spec: "§12.2"
+    requirement: "Secure token storage with automatic attachment on later calls"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_TX_004:
+    tier: 2
+    area: TX
+    spec: "§13.1"
+    requirement: "At least two transports supported and selectable"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_VER_003:
+    tier: 2
+    area: VER
+    spec: "§13.3"
+    requirement: "Verifies a capability on the Agent Card before invoking a capability-gated operation"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_CONFIG_002:
+    tier: 2
+    area: CONFIG
+    spec: "§8.3"
+    requirement: "Configuration precedence (flag > env > local > global > built-in), scopeable by agent-card reference; config show reports each value and its source"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_DOWNLOAD_001:
+    tier: 2
+    area: DOWNLOAD
+    spec: "§7.1"
+    requirement: "task download — save task artifacts to disk"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_OUT_007:
+    tier: 2
+    area: OUT
+    spec: "§7.2"
+    requirement: "--debug enables diagnostic logging to stderr, including the raw protocol messages exchanged on the wire"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_CONFORM_001:
+    tier: 2
+    area: CONFORM
+    spec: "§7.1"
+    requirement: "conformance — smoke-check a live agent against the A2A TCK"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_CLI_002:
+    tier: 2
+    area: CLI
+    spec: "§7.1"
+    requirement: "completion <shell> — emits a shell completion script for the named shell"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_PUSH_001:
+    tier: 2
+    area: PUSH
+    spec: "§7.1, App. A"
+    requirement: "task push-config create / get / list / delete"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+
+  # ─────────────── Tier 3 — Advanced ───────────────
+  A2ACLI_CARD_GET_003:
+    tier: 3
+    area: CARD_GET
+    spec: "§10.1, §12.4"
+    requirement: "Authenticated extended Agent Card, fetched only via a security scheme advertised on the public card"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_CARD_GET_004:
+    tier: 3
+    area: CARD_GET
+    spec: "§10.1"
+    requirement: "Agent Card signature verification per A2A 8.4.3 — verify when present, report verified/unverifiable/absent; never present an unverified card as verified"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_CARD_GET_005:
+    tier: 3
+    area: CARD_GET
+    spec: "§10.1"
+    requirement: "Catalog / registry resolution — accept a catalog entry wherever --agent-card takes a reference; resolve it to a card first"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_PUSH_002:
+    tier: 3
+    area: PUSH
+    spec: "§9.2"
+    requirement: "Local webhook receiver able to accept push notifications"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_CHAT_001:
+    tier: 3
+    area: CHAT
+    spec: "§8.1, §7.1"
+    requirement: "Interactive chat carrying context and task across turns"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_TX_005:
+    tier: 3
+    area: TX
+    spec: "§13.1"
+    requirement: "gRPC transport"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_AUTH_008:
+    tier: 3
+    area: AUTH
+    spec: "§12.4"
+    requirement: "Never presents a credential to an Agent Card endpoint that has not declared a scheme accepting it"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_AUTH_009:
+    tier: 3
+    area: AUTH
+    spec: "§12.3"
+    requirement: "Mutual TLS"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_AUTH_010:
+    tier: 3
+    area: AUTH
+    spec: "§12.3"
+    requirement: "OpenID Connect"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_AUTH_011:
+    tier: 3
+    area: AUTH
+    spec: "§12.3"
+    requirement: "Handles in-task AUTH_REQUIRED resolution"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_DEMO_SERVER_001:
+    tier: 3
+    area: DEMO_SERVER
+    spec: "§7.1, §3"
+    requirement: "demo-server / mock agent mode"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+  A2ACLI_VER_002:
+    tier: 3
+    area: VER
+    spec: "§13.3, A2A §4.6"
+    requirement: "Declares server-required protocol extensions"
+    status: not_measured
+    note: "<REQUIRED unless status is pass>"
+    evidence: null
+
+# DEFAULT_001 passes only when every row is shipped:yes AND overridable:yes.
+default_001_breakdown:
+  transport_server_preference_order: {shipped: no, overridable: no, note: null}
+  task_completion_wait_by_default:   {shipped: no, overridable: no, note: null}
+  output_human_readable_text:        {shipped: no, overridable: no, note: null}
+  detail_level_concise:              {shipped: no, overridable: no, note: null}
+  protocol_version_highest_mutual:   {shipped: no, overridable: no, note: null}
+  transport_security_tls_on:         {shipped: no, overridable: no, note: "MUST warn on --insecure"}
+
+# Which A2ACLI_ERR_* codes the tool can emit (SPEC.md Appendix D).
+error_codes:
+  A2ACLI_ERR_USAGE:            {emitted: no, note: null}
+  A2ACLI_ERR_CARD_NOT_FOUND:   {emitted: no, note: null}
+  A2ACLI_ERR_CARD_INVALID:     {emitted: no, note: null}
+  A2ACLI_ERR_UNREACHABLE:      {emitted: no, note: null}
+  A2ACLI_ERR_CREDENTIALS_MISSING: {emitted: no, note: null}
+  A2ACLI_ERR_AUTH_FAILED:      {emitted: no, note: null}
+  A2ACLI_ERR_TIMEOUT:          {emitted: no, note: null}
+  A2ACLI_ERR_INTERNAL:         {emitted: no, note: null}
+
+attestation:
+  reported_by: <name, role>
+  date: <YYYY-MM-DD>
+  statement: "The tier claimed reflects the evidence recorded above."
