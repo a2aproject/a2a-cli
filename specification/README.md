@@ -1,6 +1,6 @@
 # a2a-cli Specification
 
-This directory holds the specification for **`a2a-cli`** — the command-line client for the [Agent2Agent (A2A) Protocol](https://a2a-protocol.org/latest/specification/) — together with the material used to verify an implementation against it.
+This directory holds the specification for **`a2a-cli`** — the command-line client for the [Agent2Agent (A2A) Protocol](https://a2a-protocol.org/latest/specification/) — together with the material for verifying an implementation against it.
 
 `a2a-cli` lets developers and AI coding agents fetch Agent Cards, send messages, stream and poll tasks, and read artifacts from the terminal. `SPEC.md` defines how the tool behaves, in terms an implementation in any language can follow.
 
@@ -29,7 +29,7 @@ See [`SPEC.md`](./SPEC.md) for the normative detail.
 Tier membership is a scope decision and lives in `SPEC.md`. Everything about *claiming* a tier — what counts as satisfying a requirement, and the evidence a claim needs — lives in [`COMPLIANCE.md`](./COMPLIANCE.md).
 
 1. Implement a tier of the specification.
-2. Exercise the tool against a live A2A agent — ideally one that is itself TCK-conformant, so a failure can be attributed to the client rather than to the agent. The TCK validates *agents*, not clients, so it cannot grade a CLI directly.
+2. Exercise the tool against a live A2A agent — ideally one that is itself TCK-conformant, so you can attribute a failure to the client, not the agent. The TCK validates *agents*, not clients, so it cannot grade a CLI directly.
 3. Complete [`COMPLIANCE.md`](./COMPLIANCE.md), recording an outcome for every requirement identifier in the tier claimed.
 4. Publish the machine-readable report alongside the implementation.
 
