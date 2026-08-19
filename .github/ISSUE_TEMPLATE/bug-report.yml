@@ -1,0 +1,72 @@
+name: 🐞 Bug Report
+description: Report a bug in the A2A CLI
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report! The more detail you can share, the faster we can reproduce and fix it.
+
+        **Note:** Commits, issue titles, and pull request titles all follow the [Conventional Commits](https://www.conventionalcommits.org/) specification.
+  - type: checkboxes
+    id: area
+    attributes:
+      label: Which area does this relate to?
+      description: Select all that apply.
+      options:
+        - label: CLI code
+        - label: SPEC or COMPLIANCE file
+        - label: Other doc files
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the bug, and tell us what you expected to happen instead.
+      placeholder: When I run `a2a ...`, I see ... but I expected ...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: If you can, list the exact steps — including the full command — to reproduce the bug.
+      placeholder: |
+        1. Run `a2a ...`
+        2. ...
+        3. See the error
+  - type: input
+    id: cli-version
+    attributes:
+      label: CLI version
+      description: Run `a2a --version` and paste the output.
+      placeholder: e.g. a2a 0.2.1
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system & environment
+      description: Your OS and version, plus architecture if you know it.
+      placeholder: e.g. macOS 14.5 (arm64), Ubuntu 24.04 (x86_64), Windows 11
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output or error messages
+      description: Paste any relevant logs, stack traces, or error output. Re-run with `--debug` for more detail if you can. This is formatted as code automatically — no backticks needed.
+      render: shell
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else that helps us understand or recreate the bug — screenshots, the agent or endpoint involved, relevant config, etc.
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/a2aproject/a2a-cli/blob/main/CODE_OF_CONDUCT.md)
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

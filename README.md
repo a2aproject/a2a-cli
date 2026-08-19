@@ -48,6 +48,8 @@ We invite review and input from engineers and the broader community:
 2. Review the **[Compliance Checklist (`COMPLIANCE.md`)](./specification/COMPLIANCE.md)**.
 3. Open an issue or pull request in this repository to share suggestions, questions, or edge cases.
 
+You can also help us in other ways like sharing how you use the tool. See the **[Contributing guide](CONTRIBUTING.md)** to get started.
+
 
 ## License
 
