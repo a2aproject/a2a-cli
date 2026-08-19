@@ -3,7 +3,7 @@
 > [!WARNING]
 > This repository is in an alpha stage.
 
-A command-line client for developers to send messages to A2A agents and services and receive task updates from them.
+A command-line client for developers to send messages to A2A agents and services and receive task updates.
 
 ## Install
 
@@ -191,7 +191,7 @@ a2a serve --proxy https://upstream-agent.com \
   --svc-param "X-Trace-ID=debug-session-1"
 ```
 
-The proxy creates an `a2aclient.Client` for the upstream agent and forwards each A2A operation. Service parameters specified via `--svc-param` are injected into every forwarded request using `a2aclient.AttachServiceParams`. The proxy's own agent card is derived from the upstream card with the local interface address substituted.
+The proxy creates an `a2aclient.Client` for the upstream agent and forwards each A2A operation. It injects any `--svc-param` service parameters into every forwarded request via `a2aclient.AttachServiceParams`, and derives its own agent card from the upstream card, substituting the local interface address.
 
 ### `--exec` - Exec Mode
 
@@ -213,12 +213,12 @@ a2a serve --exec "./content-generator.sh"
 
 #### Output Modes
 
-**Default (no `--chunk`):** The entire stdout is collected and emitted as a single text artifact when the process exits.
+**Default (no `--chunk`):** The CLI collects all stdout and emits it as a single text artifact when the process exits.
 ```
 Status: working → [process runs] → Artifact (full output) → Status: completed
 ```
 
-**With `--chunk=<delimiter>`:** stdout is read incrementally and split by the delimiter. Each piece is streamed as an artifact chunk event (`Append: true`) as soon as it's available. This enables streaming without requiring the subprocess to know about A2A's event model.
+**With `--chunk=<delimiter>`:** The CLI reads stdout incrementally and splits it on the delimiter. It streams each piece as an artifact chunk event (`Append: true`) as soon as it's available, so the subprocess never needs to know A2A's event model.
 
 ```bash
 # Emit 3 chunks with 500ms delay - useful for verifying client streaming
@@ -246,4 +246,4 @@ StatusUpdate:          completed
 ## Output Formatting
 
 All commands support `-o json` for machine-readable output, emitting raw protocol objects.
-Text mode is the default and is intended for reading in a terminal.
+Text mode is the default, meant for reading in a terminal.
