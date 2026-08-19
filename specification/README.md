@@ -14,7 +14,7 @@ This directory holds the specification for **`a2a-cli`** — the command-line cl
 
 ## Capability tiers at a glance
 
-`SPEC.md` §3 groups its requirements into three **cumulative** tiers. A tier describes *scope* — what the tool does first, next, and later — not a rank awarded to an implementation.
+`SPEC.md` §5 groups its requirements into three **cumulative** tiers. A tier describes *scope* — what the tool does first, next, and later — not a rank awarded to an implementation.
 
 | Tier | Name | Summary |
 | --- | --- | --- |
@@ -37,7 +37,7 @@ The registry is open: any implementation, in any language, can measure itself ag
 
 ## Status
 
-**v0.2 — Review.** Open for comment; pre-Proposed and not yet ratified, so normative requirements may still change (`SPEC.md` §14.1, §14.3). Feedback is welcome via issues and pull requests.
+**v0.2 — Review.** Open for comment; pre-Proposed and not yet ratified, so normative requirements may still change (`SPEC.md` §15.1, §15.3). Feedback is welcome via issues and pull requests.
 
 ## References
 
