@@ -1,260 +1,54 @@
 # A2A CLI
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+<div align="center">
+   <img src="https://raw.githubusercontent.com/a2aproject/A2A/refs/heads/main/docs/assets/a2a_logo/color/SVG/a2a_color.svg" width="800" alt="Agent2Agent Protocol Logo"/>
+   <h3>
+       The <strong>A2A CLI</strong> (<code>a2a</code>) is an official tool developed and maintained by the <a href="https://a2a-protocol.org/latest/"><strong>A2A Project Team</strong></a>.
+   </h3>
+</div>
 
-The official command-line client interface for interacting with A2A (Agent-to-Agent) compatible agents.
 
-> [!WARNING] This repository is in an alpha stage.
+The **A2A CLI** (`a2a`) provides a standardized command-line client interface for discovering, interacting with, and managing [A2A (Agent2Agent) agents](https://a2a-protocol.org/latest/).
 
-## About
-This project uses the A2A Go SDK internal CLI tool as a first step to build our specification-defined CLI tool.
+> [!IMPORTANT]
+> **Specification in Active Review (v0.2)**  
+> This repository is currently focused on formalizing and reviewing the **A2A CLI Specification**. We welcome feedback, questions, and contributions on the specification documents as we prepare for v0.2 finalization in **August 2026**.
 
-## Resources
-* **Specification Document (v0.2):** [Read the Specification](https://github.com/a2aproject/a2a-cli/blob/spec_v02/specification/SPEC.md)
-* **Conformance Report (v0.2):** [View Conformance Tests](https://github.com/a2aproject/a2a-cli/blob/spec_v02/specification/COMPLIANCE.md)
 
+## About the Project
 
-## Install
+While several community-driven CLI tools exist across different languages, they vary in coverage and behavior. To prevent ecosystem fragmentation, this project defines the **standardized, officially supported CLI specification and reference implementation** designed for long-term stability, cross-transport consistency, and community alignment.
 
-### From source (recommended)
+To bootstrap development, the initial codebase is based on the foundational CLI from the [A2A Go SDK](https://github.com/a2aproject/a2a-go/tree/9d95b95445f4208ba77f48a137a278067937adb7#-cli), which will be refined and expanded to conform with the finalized specification.
 
-The easiest way to install and keep `a2a` updated is installing using
 
-```bash
-go install github.com/a2aproject/a2a-cli@latest
-```
+## Specification & Conformance (Core Focus)
 
-If you are new to using GO, kindly follow https://go.dev/doc/install to set up your PATH environment variable correctly.
+The specification is a standalone document to defines the CLI behavior, command surface, output schemas, and transport rules for `a2a-cli`:
 
-### Prebuilt binaries
+* **[Specification Document (v0.2)](./specification/SPEC.md):** The normative behavior specification covering command taxonomy, output contracts, polling/streaming rules, and exit codes.
+* **[Compliance Model (v0.2)](./specification/COMPLIANCE.md):** The requirement registry and verification model for claiming conformance.
+* **[Compliance Report Template](./specification/compliance-report.template.yaml):** The standardized machine-readable report for implementations.
 
-Download an archive for your platform from the [latest release](https://github.com/a2aproject/a2a-cli/releases/latest), extract it, and put the `a2a` binary on your `PATH`. Verify the download against the `checksums.txt` published with the release.
 
-### Command Grammar
+## CLI Development Phases & Roadmap
 
-```
-a2a <verb> [noun] <url> [positional-args] [flags] [global-flags]
-```
+The specification organizes CLI capabilities into three cumulative tiers. Its development and implementation will roll out sequentially across these tiers:
 
-The agent URL is always the first positional argument. Flags can appear in any position after the verb. Verbs that operate on a single resource type drop the noun (`send` always sends a message, `cancel` always cancels a task). Verbs that span multiple resource types require it (`get task`, `list tasks`).
+* **Tier 1 (Core Requirements):** Essential foundation — agent card discovery (`discover`), basic messaging (`send`), task inspection (`get task`), cancellation (`cancel`), polling, exit codes, and standard text/JSON output contracts.
+* **Tier 2 (Standard Features):** Expanded capabilities — task listing (`list tasks`), real-time event streaming (`subscribe`), transport auto-negotiation (REST, JSON-RPC, gRPC), push-configuration, and auth management.
+* **Tier 3 (Advanced & Ergonomics):** Advanced tooling — interactive terminal chat, push-notification webhook receivers, extended card verification, and mTLS / OpenID Connect authentication.
 
-### Global Flags
 
-These apply to every client-mode command.
+## How to Contribute & Provide Feedback
 
-| Flag | Short | Description |
-|---|---|---|
-| `--output <fmt>` | `-o` | Output format: `text` (default), `json`. |
-| `--transport <name>` | | Force transport: `rest`, `jsonrpc`, `grpc`. Default: auto-detect from card. |
-| `--svc-param <k=v>` | | Service parameter (repeatable). The chosen transport defines how it's passed. Split on the first `=`. |
-| `--auth <creds>` | | Shorthand for `--svc-param "Authorization=<creds>"`. |
-| `--tenant <id>` | | Tenant identifier. Passed on every request. |
-| `--timeout <dur>` | | Request timeout. Default `30s`. |
-| `--verbose` | `-v` | Verbose output to stderr. |
+We actively invite review and input from engineers and the broader community:
 
----
+1. Read the **[Specification Document (`SPEC.md`)](./specification/SPEC.md)**.
+2. Review the **[Compliance Checklist (`COMPLIANCE.md`)](./specification/COMPLIANCE.md)**.
+3. Open an issue or pull request in this repository to share suggestions, questions, or edge cases.
 
-### Client Commands
 
-#### `discover` - Agent Card Discovery
+## License
 
-Fetch and display an agent card from its base URL or complete agent card URL.
-
-```bash
-a2a discover <url>
-a2a discover <url> -o json
-```
-To fetch the extended card (if supported):
-
-```bash
-a2a discover <url> --extended --auth "Bearer <token>"
-```
-`discover` is a convenience alias for `get card <url>`.
-
-#### `send` - Send a Message
-
-Send a message to an agent and print the response.
-
-```bash
-# Simple text message
-a2a send <url> "Hello, what can you do?"
-
-# Streaming response - events printed as they arrive
-a2a send <url> --stream "Summarize this document"
-
-# Fire-and-forget - get the task ID back immediately
-a2a send <url> --immediate "Start a long analysis"
-
-# Full structured message as JSON (the Message object)
-a2a send <url> --json '{"role":"ROLE_USER","parts":[{"text":"analyze this"},{"fileUrl":"s3://..."}]}'
-
-# Just the parts array
-a2a send <url> --parts '[{"text":"analyze this"},{"fileUrl":"s3://..."}]'
-
-# From file
-a2a send <url> -f message.json
-
-# Continue a conversation (same task)
-a2a send <url> --task <task-id> "Follow-up question"
-
-# Group under a context (new task, shared context)
-a2a send <url> --context <context-id> "Related question"
-```
-
-| Flag | Description |
-|---|---|
-| `--stream` | Use `SendStreamingMessage`. Events are printed incrementally. |
-| `--immediate` | Set `ReturnImmediately` in `SendMessageConfig`. |
-| `--json <body>` | Raw JSON `Message` object. |
-| `--parts <json>` | Raw JSON `parts` array. A `Message` is constructed with `ROLE_USER` and the given parts. |
-| `-f <file>` | Read message from a JSON file. |
-| `--task <id>` | Set `TaskID` on the message to continue an existing task. |
-| `--context <id>` | Set `ContextID` on the message. |
-| `--history <n>` | Request `n` history messages in the response. |
-
-#### `get task` - Get Task Details
-
-```bash
-a2a get task <url> <id>
-a2a get task <url> <id> --history 10 -o json
-```
-
-| Flag | Description |
-|---|---|
-| `--history <n>` | Include up to `n` history messages. |
-
-#### `list tasks` - List Tasks
-
-```bash
-a2a list tasks <url>
-a2a list tasks <url> --context <ctx-id>
-a2a list tasks <url> --status working
-a2a list tasks <url> --limit 50
-```
-
-| Flag | Description |
-|---|---|
-| `--context <id>` | Filter by context ID. |
-| `--status <state>` | Filter by task state. Accepts short forms: `submitted`, `working`, `completed`, `failed`, `canceled`, `rejected`, `input-required`, `auth-required`. |
-| `--limit <n>` | Page size. |
-| `--page-token <t>` | Pagination token from a previous response. |
-| `--history <n>` | Include up to `n` history messages per task. |
-| `--since <time>` | Only tasks with status updates after this timestamp (RFC 3339). |
-
-#### `cancel` - Cancel a Task
-
-```bash
-a2a cancel <url> <task-id>
-```
-
-Prints the updated task status.
-
-#### `subscribe` - Subscribe to Task Events
-
-```bash
-a2a subscribe <url> <task-id>
-```
-Streams events to stdout until the task reaches a terminal state. Output format matches `send --stream`.
-
----
-
-### Server Mode
-
-`a2a serve` starts an A2A-compliant server backed by one of three modes.
-
-#### Common Server Flags
-
-| Flag | Description |
-|---|---|
-| `--port <n>` | Listen port. Default `8080`. |
-| `--host <addr>` | Bind address. Default `127.0.0.1`. |
-| `--name <name>` | Agent name for the auto-generated card. |
-| `--description <desc>` | Agent description. |
-| `--transport <proto>` | Transport to serve: `rest` (default), `jsonrpc`, `grpc`. |
-| `--protocol <ver>` | Protocol version: `latest` (default), `0.3`. When set to `0.3`, the server uses the compat transport layer (`a2agrpc/v0` for gRPC, `a2acompat/a2av0` for REST/JSON-RPC) to accept v0.3 clients. |
-| `--card <file>` | Serve a custom agent card JSON instead of auto-generating. |
-| `--card-compat` | Serve the agent card in a dual v0.3/v1.0 format so both old and new clients can discover the agent. |
-| `--quiet` | Suppress traffic logging to stderr. |
-
-#### `--echo` - Echo Mode
-
-```bash
-a2a serve --echo
-a2a serve --echo --port 9090 --name "Echo Agent"
-```
-Returns the user's message text back as an agent response. The "ping" for agents - useful for connectivity testing and client development.
-
-#### `--proxy` - Proxy Mode
-
-Forward all requests to an upstream A2A agent. Logs traffic to stderr. Useful for debugging agent interactions, injecting service parameters, or acting as an authenticated gateway.
-
-```bash
-# Basic proxy with traffic logging
-a2a serve --proxy https://upstream-agent.com
-
-# Inject auth for an upstream that requires it
-a2a serve --proxy https://upstream-agent.com --auth "<token>"
-
-# Add tracing headers
-a2a serve --proxy https://upstream-agent.com \
-  --svc-param "X-Request-Source=a2a-proxy" \
-  --svc-param "X-Trace-ID=debug-session-1"
-```
-
-The proxy creates an `a2aclient.Client` for the upstream agent and forwards each A2A operation. Service parameters specified via `--svc-param` are injected into every forwarded request using `a2aclient.AttachServiceParams`. The proxy's own agent card is derived from the upstream card with the local interface address substituted.
-
-#### `--exec` - Exec Mode
-
-Run any command as an A2A agent. Message text goes to stdin, stdout becomes the response artifact. The subprocess does not need to know anything about A2A.
-```bash
-a2a serve --exec "python -u a2a_unaware_agent.py"
-a2a serve --exec "./content-generator.sh"
-```
-
-##### Subprocess Interface
-
-**stdin:** The first text part of the incoming A2A message.
-**stdout:** Response content. Interpretation depends on whether `--chunk` is set (see below).
-**stderr:** Logged by the CLI at debug level. On non-zero exit, stderr content is included in the failure status message.
-
-**Exit code:**
-- `0` → `TaskStateCompleted`
-- Non-zero → `TaskStateFailed`
-
-##### Output Modes
-
-**Default (no `--chunk`):** The entire stdout is collected and emitted as a single text artifact when the process exits.
-```
-Status: working → [process runs] → Artifact (full output) → Status: completed
-```
-
-**With `--chunk=<delimiter>`:** stdout is read incrementally and split by the delimiter. Each piece is streamed as an artifact chunk event (`Append: true`) as soon as it's available. This enables streaming without requiring the subprocess to know about A2A's event model.
-
-```bash
-# Emit 3 chunks with 500ms delay - useful for verifying client streaming
-a2a serve --exec "for i in 1 2 3; do echo \$i; sleep 0.5; done" --chunk=$'\n'
-
-# Space-delimited chunks
-a2a serve --exec "echo 'alpha beta gamma'" --chunk=' '
-
-# Paragraph-level chunks
-a2a serve --exec "cat essay.txt" --chunk=$'\n\n'
-```
-
-The event sequence with `--chunk`:
-
-```
-StatusUpdate:          working
-ArtifactUpdateEvent:   {id: new, append: false, parts: ["1"]}
-ArtifactUpdateEvent:   {id: same, append: true,  parts: ["2"]}
-ArtifactUpdateEvent:   {id: same, append: true,  parts: ["3"], lastChunk: true}
-StatusUpdate:          completed
-```
-
----
-
-### Output Formatting
-
-All commands support `-o json` for machine-readable output and emits raw protocol objects.
-Text mode is the default and is designed for human consumption in a terminal.
-
+The A2A CLI and Specification are open-source and licensed under the [**Apache License 2.0**](LICENSE).
