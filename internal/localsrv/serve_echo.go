@@ -23,6 +23,8 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 )
 
+// ServeEcho runs a local server whose agent echoes each incoming message back
+// to the caller as an artifact.
 func ServeEcho(ctx context.Context, cfg Config) error {
 	if cfg.AgentName == "" {
 		cfg.AgentName = "Echo Agent"
@@ -47,6 +49,7 @@ func ServeEcho(ctx context.Context, cfg Config) error {
 
 type echoExecutor struct{}
 
+// NewEchoExecutor returns an AgentExecutor that echoes messages back to the caller.
 func NewEchoExecutor() a2asrv.AgentExecutor {
 	return &echoExecutor{}
 }

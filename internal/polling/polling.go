@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package polling emulates a streaming event feed by repeatedly polling a task's
+// state at a fixed interval until it reaches a terminal state.
 package polling
 
 import (
@@ -25,6 +27,8 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2aevent"
 )
 
+// Stream sends the original message and then polls the resulting task at the
+// given interval, yielding task events until it reaches a terminal state.
 func Stream(ctx context.Context, client *a2aclient.Client, original *a2a.SendMessageRequest, interval time.Duration) iter.Seq2[a2a.Event, error] {
 	return func(yield func(a2a.Event, error) bool) {
 		req := *original

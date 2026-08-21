@@ -21,6 +21,8 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2a"
 )
 
+// Transports parses transport aliases (rest, jsonrpc, grpc) into their
+// corresponding a2a.TransportProtocol values, preserving order.
 func Transports(ss []string) ([]a2a.TransportProtocol, error) {
 	if len(ss) == 0 {
 		return nil, nil
@@ -36,6 +38,8 @@ func Transports(ss []string) ([]a2a.TransportProtocol, error) {
 	return protos, nil
 }
 
+// SingleTransport parses exactly one transport alias, returning an error when
+// the input does not resolve to a single transport.
 func SingleTransport(ss []string) (a2a.TransportProtocol, error) {
 	protos, err := Transports(ss)
 	if err != nil {

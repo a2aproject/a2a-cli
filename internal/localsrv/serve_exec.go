@@ -30,6 +30,8 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 )
 
+// ServeExec runs a local server whose agent executes the given shell command
+// for each request, streaming its output back split on the provided chunk delimiter.
 func ServeExec(ctx context.Context, cfg Config, command, chunk string) error {
 	if cfg.AgentName == "" {
 		cfg.AgentName = "Exec Agent"

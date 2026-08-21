@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package output renders agent cards, tasks, messages and streaming events as
+// either indented JSON or human-readable text.
 package output
 
 import (
@@ -24,9 +26,13 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2a"
 )
 
+// Mode selects how a Printer renders values.
 type Mode string
 
+// ModeJson renders values as indented JSON.
 const ModeJson Mode = "json"
+
+// ModeText renders values as human-readable text.
 const ModeText Mode = "text"
 
 var taskStateNames = map[a2a.TaskState]string{
@@ -40,21 +46,25 @@ var taskStateNames = map[a2a.TaskState]string{
 	a2a.TaskStateAuthRequired:  "auth-required",
 }
 
+// Printer writes A2A values to an output writer in the configured Mode.
 type Printer struct {
 	Out  io.Writer
 	Mode Mode
 }
 
+// NewPrinter returns a Printer that writes to out using the given Mode.
 func NewPrinter(out io.Writer, mode Mode) *Printer {
 	return &Printer{Out: out, Mode: mode}
 }
 
+// PrintJSON writes v as indented JSON.
 func (p *Printer) PrintJSON(v any) error {
 	enc := json.NewEncoder(p.Out)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
 }
 
+// PrintCard writes an agent card in the configured Mode.
 func (p *Printer) PrintCard(card *a2a.AgentCard) error {
 	if p.Mode == ModeJson {
 		return p.PrintJSON(card)
@@ -63,6 +73,7 @@ func (p *Printer) PrintCard(card *a2a.AgentCard) error {
 	return err
 }
 
+// PrintTask writes a task in the configured Mode.
 func (p *Printer) PrintTask(task *a2a.Task) error {
 	if p.Mode == ModeJson {
 		return p.PrintJSON(task)
@@ -71,6 +82,7 @@ func (p *Printer) PrintTask(task *a2a.Task) error {
 	return err
 }
 
+// PrintEvent writes a streaming event in the configured Mode.
 func (p *Printer) PrintEvent(event a2a.Event) error {
 	if p.Mode == ModeJson {
 		return p.PrintJSON(a2a.StreamResponse{Event: event})
@@ -102,6 +114,7 @@ func (p *Printer) PrintEvent(event a2a.Event) error {
 	return err
 }
 
+// PrintSendResult writes the result of a send-message call in the configured Mode.
 func (p *Printer) PrintSendResult(result a2a.SendMessageResult) error {
 	if p.Mode == ModeJson {
 		return p.PrintJSON(result)
@@ -117,6 +130,7 @@ func (p *Printer) PrintSendResult(result a2a.SendMessageResult) error {
 	return nil
 }
 
+// PrintTaskList writes a list of tasks in the configured Mode.
 func (p *Printer) PrintTaskList(resp *a2a.ListTasksResponse) error {
 	if p.Mode == ModeJson {
 		return p.PrintJSON(resp)
@@ -214,6 +228,7 @@ func formatTaskList(resp *a2a.ListTasksResponse) string {
 	return sb.String()
 }
 
+// MessageText returns the concatenated textual representation of a message's parts.
 func MessageText(msg *a2a.Message) string {
 	return partsText(msg.Parts)
 }

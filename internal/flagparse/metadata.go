@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package flagparse converts raw command-line flag values into the strongly
+// typed inputs used by the a2a CLI (parts, metadata, transports, task states).
 package flagparse
 
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 
 	"github.com/spf13/pflag"
 
@@ -43,13 +46,13 @@ func (m *Metadata) Set(s string) error {
 	if m.data == nil {
 		m.data = map[string]any{}
 	}
-	for k, v := range obj {
-		m.data[k] = v
-	}
+	maps.Copy(m.data, obj)
 	return nil
 }
 
-func (m *Metadata) Type() string   { return "json" }
+// Type reports the pflag value type name.
+func (m *Metadata) Type() string { return "json" }
+
 func (m *Metadata) String() string { return "" }
 
 // Map returns the accumulated metadata. The result may be nil when none was

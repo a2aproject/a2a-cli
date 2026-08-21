@@ -28,12 +28,16 @@ import (
 
 var _ a2asrv.RequestHandler = (*proxyHandler)(nil)
 
-func ServeProxy(ctx context.Context, sc Config, svcParams *flagparse.ServiceParams, client *a2aclient.Client, tenant string) error {
-	var clientOpts []a2aclient.FactoryOption
-	if !sc.Quiet {
-		clientOpts = append(clientOpts, a2aclient.WithCallInterceptors(&proxyLogInterceptor{}))
-	}
+// ProxyLogInterceptorOption returns a client factory option that logs proxied
+// calls to stderr. Callers should apply it when building the upstream client so
+// that proxied requests are traced unless running in quiet mode.
+func ProxyLogInterceptorOption() a2aclient.FactoryOption {
+	return a2aclient.WithCallInterceptors(&proxyLogInterceptor{})
+}
 
+// ServeProxy runs a local A2A server that forwards every request to the given
+// upstream client, exposing the resolved (or supplied) agent card.
+func ServeProxy(ctx context.Context, sc Config, svcParams *flagparse.ServiceParams, client *a2aclient.Client, tenant string) error {
 	var card *a2a.AgentCard
 	if sc.CardPath != "" {
 		localCard, err := createAgentCard(sc.CardParams)

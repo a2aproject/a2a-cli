@@ -26,6 +26,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/localsrv"
 	"github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/a2aproject/a2a-go/v2/a2aclient"
 )
 
 func newServeCmd(cfg *globalConfig) *cobra.Command {
@@ -107,7 +108,11 @@ func newServeCmd(cfg *globalConfig) *cobra.Command {
 			case echo:
 				return localsrv.ServeEcho(ctx, sc)
 			case proxy:
-				client, err := newAgentClient(ctx, cfg)
+				var proxyOpts []a2aclient.FactoryOption
+				if !quiet {
+					proxyOpts = append(proxyOpts, localsrv.ProxyLogInterceptorOption())
+				}
+				client, err := newAgentClient(ctx, cfg, proxyOpts...)
 				if err != nil {
 					return fmt.Errorf("creating upstream client: %w", err)
 				}

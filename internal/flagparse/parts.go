@@ -59,30 +59,32 @@ func (p *Parts) Attach(f *pflag.FlagSet) {
 	f.Var(&mediaTypeValue{p}, "media-type", "Media type for the immediately preceding part flag")
 }
 
-func (b *Parts) Parse() ([]*a2a.Part, error) {
-	if len(b.specs) == 0 {
+// Parse converts the accumulated part specs into A2A parts, preserving the
+// order in which their flags appeared on the command line.
+func (p *Parts) Parse() ([]*a2a.Part, error) {
+	if len(p.specs) == 0 {
 		return nil, nil
 	}
-	out := make([]*a2a.Part, 0, len(b.specs))
-	for _, s := range b.specs {
-		p, err := s.toPart()
+	out := make([]*a2a.Part, 0, len(p.specs))
+	for _, s := range p.specs {
+		part, err := s.toPart()
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, p)
+		out = append(out, part)
 	}
 	return out, nil
 }
 
-func (b *Parts) add(kind partKind, value string) {
-	b.specs = append(b.specs, partSpec{kind: kind, value: value})
+func (p *Parts) add(kind partKind, value string) {
+	p.specs = append(p.specs, partSpec{kind: kind, value: value})
 }
 
-func (b *Parts) setMediaType(mediaType string) error {
-	if len(b.specs) == 0 {
+func (p *Parts) setMediaType(mediaType string) error {
+	if len(p.specs) == 0 {
 		return fmt.Errorf("--media-type must follow a --text-part, --file-part, or --data-part flag")
 	}
-	b.specs[len(b.specs)-1].mediaType = mediaType
+	p.specs[len(p.specs)-1].mediaType = mediaType
 	return nil
 }
 
