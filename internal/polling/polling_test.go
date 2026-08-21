@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cli
+package polling
 
 import (
 	"context"
@@ -165,7 +165,7 @@ func TestHandlePolling(t *testing.T) {
 			client := newPollingClient(t, transport)
 			req := &a2a.SendMessageRequest{Message: a2a.NewMessage(a2a.MessageRoleUser, a2a.NewTextPart("go"))}
 
-			gotEvents, err := drainAll(handlePolling(t.Context(), client, req, 0))
+			gotEvents, err := drainAll(Stream(t.Context(), client, req, 0))
 
 			if tt.wantErr == "" && err != nil {
 				t.Fatalf("handlePolling() error = %v, want nil", err)
@@ -197,7 +197,7 @@ func TestHandlePolling_SetsReturnImmediately(t *testing.T) {
 			Config:  config,
 		}
 
-		if _, err := drainAll(handlePolling(t.Context(), client, req, 0)); err != nil {
+		if _, err := drainAll(Stream(t.Context(), client, req, 0)); err != nil {
 			t.Fatalf("handlePolling() error = %v, want nil", err)
 		}
 

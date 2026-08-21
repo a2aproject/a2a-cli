@@ -12,39 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cli
+package localsrv
 
 import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/a2aproject/a2a-cli/internal/testutil"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 )
-
-func TestServe_ModeValidation(t *testing.T) {
-	t.Parallel()
-	for _, tt := range []struct {
-		name string
-		args []string
-	}{
-		{"no mode", []string{"serve"}},
-		{"multiple modes", []string{"serve", "--echo", "--exec", "cat"}},
-	} {
-		t.Run(tt.name+" fails", func(t *testing.T) {
-			t.Parallel()
-			if _, err := runCMD(t, tt.args...); err == nil {
-				t.Fatal("expected error")
-			}
-		})
-	}
-}
 
 // TestLoadOrBuildCard_RequiredListFieldsNotNull guards against regressing to a
 // synthesized Agent Card that emits JSON null for the proto-REQUIRED
@@ -54,7 +36,12 @@ func TestServe_ModeValidation(t *testing.T) {
 func TestLoadOrBuildCard_RequiredListFieldsNotNull(t *testing.T) {
 	t.Parallel()
 
-	card, err := loadOrBuildCard("", "researcher", "Gathers facts", "127.0.0.1:9199", a2a.TransportProtocolHTTPJSON)
+	card, err := createAgentCard(CardParams{
+		AgentName:        "researcher",
+		AgentDesc:        "Gathers facts",
+		AdvertiseAddress: "127.0.0.1:9199",
+		Transport:        a2a.TransportProtocolHTTPJSON,
+	})
 	if err != nil {
 		t.Fatalf("loadOrBuildCard() error = %v", err)
 	}
@@ -101,7 +88,7 @@ func TestExecExecutor_PipesStdinToCommand(t *testing.T) {
 	if task.Status.State != a2a.TaskStateCompleted {
 		t.Fatalf("task.Status.State = %v, want %v", task.Status.State, a2a.TaskStateCompleted)
 	}
-	got := allArtifactText(task)
+	got := testutil.AllArtifactText(task)
 	if diff := cmp.Diff("echo back", got); diff != "" {
 		t.Fatalf("artifact text wrong result (-want +got) diff = %s", diff)
 	}
@@ -116,7 +103,7 @@ func TestExecExecutor_CommandOutput(t *testing.T) {
 	if task.Status.State != a2a.TaskStateCompleted {
 		t.Fatalf("task.Status.State = %v, want %v", task.Status.State, a2a.TaskStateCompleted)
 	}
-	got := allArtifactText(task)
+	got := testutil.AllArtifactText(task)
 	if diff := cmp.Diff("hello\n", got); diff != "" {
 		t.Fatalf("artifact text wrong result (-want +got) diff = %s", diff)
 	}
@@ -145,7 +132,7 @@ func TestExecExecutor_ChunkedAssemblesArtifact(t *testing.T) {
 	if len(task.Artifacts) == 0 {
 		t.Fatal("task has no artifacts")
 	}
-	got := allArtifactText(task)
+	got := testutil.AllArtifactText(task)
 	if got != "abc" {
 		t.Fatalf("artifact text = %q, want %q", got, "abc")
 	}
@@ -260,14 +247,4 @@ func execSendText(t *testing.T, client *a2aclient.Client, text string) *a2a.Task
 		t.Fatalf("client.SendMessage() result type = %T, want *a2a.Task", result)
 	}
 	return task
-}
-
-func allArtifactText(task *a2a.Task) string {
-	var sb strings.Builder
-	for _, art := range task.Artifacts {
-		for _, p := range art.Parts {
-			sb.WriteString(p.Text())
-		}
-	}
-	return sb.String()
 }

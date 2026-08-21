@@ -38,6 +38,26 @@ type versionInfo struct {
 	Platform  string `json:"platform"`
 }
 
+func newVersionCmd(cfg *globalConfig) *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print version information",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			info := buildVersionInfo()
+			if cfg.output == "json" {
+				return cfg.PrintJSON(info)
+			}
+			_, err := fmt.Fprintf(
+				cfg.Out,
+				"a2a %s\ncommit:  %s\nbuilt:   %s\ngo:      %s\nos/arch: %s\n",
+				info.Version, info.Commit, date, runtime.Version(), info.Platform,
+			)
+			return err
+		},
+	}
+}
+
 func buildVersionInfo() versionInfo {
 	v := version
 	if v == "dev" { // go install produces binaries without ldflags
@@ -51,23 +71,5 @@ func buildVersionInfo() versionInfo {
 		Date:      date,
 		GoVersion: runtime.Version(),
 		Platform:  runtime.GOOS + "/" + runtime.GOARCH,
-	}
-}
-
-func newVersionCmd(cfg *globalConfig) *cobra.Command {
-	return &cobra.Command{
-		Use:   "version",
-		Short: "Print version information",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			info := buildVersionInfo()
-			if cfg.output == "json" {
-				return printJSON(cfg.out, info)
-			}
-			_, err := fmt.Fprintf(cfg.out,
-				"a2a %s\ncommit:  %s\nbuilt:   %s\ngo:      %s\nos/arch: %s\n",
-				info.Version, info.Commit, info.Date, info.GoVersion, info.Platform)
-			return err
-		},
 	}
 }

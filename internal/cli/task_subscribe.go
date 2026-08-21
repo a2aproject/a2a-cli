@@ -23,17 +23,17 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2a"
 )
 
-func newCancelCmd(cfg *globalConfig) *cobra.Command {
+func newTaskSubscribeCmd(cfg *globalConfig) *cobra.Command {
 	return &cobra.Command{
-		Use:   "cancel <url> <task-id>",
-		Short: "Cancel a task",
-		Args:  cobra.ExactArgs(2),
+		Use:   "subscribe <task-id>",
+		Short: "Subscribe to task events",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithTimeout(cmd.Context(), cfg.timeout)
 			defer cancel()
 			ctx = withServiceParams(ctx, cfg)
 
-			client, err := newClient(ctx, cfg, args[0])
+			client, err := newAgentClient(ctx, cfg)
 			if err != nil {
 				return fmt.Errorf("failed to create a client: %w", err)
 			}
@@ -43,16 +43,18 @@ func newCancelCmd(cfg *globalConfig) *cobra.Command {
 				}
 			}()
 
-			task, err := client.CancelTask(ctx, &a2a.CancelTaskRequest{
-				ID:     a2a.TaskID(args[1]),
-				Tenant: cfg.tenant,
-			})
-			if err != nil {
-				return fmt.Errorf("failed to cancel task %s: %w", args[1], err)
-			}
+			cfg.logf("subscribing to task %s", args[0])
 
-			if err := cfg.printTask(task); err != nil {
-				return fmt.Errorf("failed to print task: %w", err)
+			for event, err := range client.SubscribeToTask(ctx, &a2a.SubscribeToTaskRequest{
+				ID:     a2a.TaskID(args[0]),
+				Tenant: cfg.tenant,
+			}) {
+				if err != nil {
+					return fmt.Errorf("subscription error: %w", err)
+				}
+				if err := cfg.PrintEvent(event); err != nil {
+					return fmt.Errorf("failed to print event: %w", err)
+				}
 			}
 			return nil
 		},
