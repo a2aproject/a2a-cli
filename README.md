@@ -35,8 +35,8 @@ The specification is a standalone document that defines the CLI behavior, comman
 
 The specification organizes CLI capabilities into three cumulative tiers. We will build and ship them in order:
 
-* **Tier 1 (Core Requirements):** Essential foundation — agent card discovery (`discover`), basic messaging (`send`), task inspection (`get task`), cancellation (`cancel`), polling, exit codes, and standard text/JSON output contracts.
-* **Tier 2 (Standard Features):** Expanded capabilities — task listing (`list tasks`), real-time event streaming (`subscribe`), transport auto-negotiation (REST, JSON-RPC, gRPC), push-configuration, and auth management.
+* **Tier 1 (Core Requirements):** Essential foundation — agent card discovery (`card get`), basic messaging (`send`), task inspection (`task get`), cancellation (`task cancel`), polling, exit codes, and standard text/JSON output contracts.
+* **Tier 2 (Standard Features):** Expanded capabilities — task listing (`task list`), real-time event streaming (`task subscribe`), transport auto-negotiation (REST, JSON-RPC, gRPC), push-configuration, and auth management.
 * **Tier 3 (Advanced & Ergonomics):** Advanced tooling — interactive terminal chat, push-notification webhook receivers, extended card verification, and mTLS / OpenID Connect authentication.
 
 

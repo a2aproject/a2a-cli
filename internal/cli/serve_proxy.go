@@ -35,7 +35,7 @@ func serveProxy(ctx context.Context, cfg *globalConfig, sc serveConfig, listener
 	if !quiet {
 		clientOpts = append(clientOpts, a2aclient.WithCallInterceptors(&proxyLogInterceptor{}))
 	}
-	client, err := newClient(ctx, cfg, upstreamURL, clientOpts...)
+	client, err := dialCard(ctx, cfg, upstreamURL, clientOpts...)
 	if err != nil {
 		return fmt.Errorf("creating upstream client: %w", err)
 	}
@@ -61,16 +61,12 @@ func serveProxy(ctx context.Context, cfg *globalConfig, sc serveConfig, listener
 	}
 
 	handler := &proxyHandler{client: client, svcParams: svcParams}
-	transport := cfg.transport
-	if transport == "" {
-		transport = "rest"
-	}
 
 	if !quiet {
 		fmt.Fprintf(os.Stderr, "Proxying to %s\n", upstreamURL)
 	}
-	cfg.logf("proxy mode, transport=%s protocol=%s", transport, sc.protocol)
-	return startTransportServer(ctx, listener, handler, card, transport, sc, quiet)
+	cfg.logf("proxy mode, transport=%s protocol=%s", sc.transport, sc.protocol)
+	return startTransportServer(ctx, listener, handler, card, sc.transport, sc, quiet)
 }
 
 func deriveProxyCard(upstream *a2a.AgentCard, addr string, proto a2a.TransportProtocol) *a2a.AgentCard {

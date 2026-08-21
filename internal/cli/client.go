@@ -39,32 +39,68 @@ var compatCardResolver = func() *agentcard.Resolver {
 	return resolver
 }()
 
-func newClient(ctx context.Context, cfg *globalConfig, agentURL string, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
-	factoryOpts := append(clientFactoryOpts(cfg), extraOpts...)
+// newAgentClient builds a client for the agent selected by the connection flags:
+// --url for a direct connection to an interface (bypassing card resolution,
+// requiring exactly one --transport), or --agent-card to resolve a card and
+// negotiate a transport (with --transport as an ordered preference).
+func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
+	switch {
+	case cfg.url != "" && cfg.agentCard != "":
+		return nil, fmt.Errorf("--url and --agent-card are mutually exclusive")
+	case cfg.url != "":
+		return dialDirect(ctx, cfg, cfg.url, extraOpts...)
+	case cfg.agentCard != "":
+		return dialCard(ctx, cfg, cfg.agentCard, extraOpts...)
+	default:
+		return nil, fmt.Errorf("specify the agent with --agent-card <ref> or --url <ref>")
+	}
+}
 
-	if cfg.transport != "" {
-		proto, err := parseTransport(cfg.transport)
-		if err != nil {
-			return nil, err
-		}
-		endpointURL := agentURL
-		if proto == a2a.TransportProtocolGRPC {
-			endpointURL = stripHTTPScheme(agentURL)
-		}
-		cfg.logf("connecting directly to %s via %s (skipping card resolution)", endpointURL, cfg.transport)
-		endpoint := a2a.NewAgentInterface(endpointURL, proto)
-		client, err := a2aclient.NewFromEndpoints(ctx, []*a2a.AgentInterface{endpoint}, factoryOpts...)
-		return client, hintInsecure(err)
+// dialDirect connects straight to an agent interface URL without resolving an
+// Agent Card. Per the spec, --url requires exactly one --transport to name the
+// protocol binding.
+func dialDirect(ctx context.Context, cfg *globalConfig, ref string, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
+	protos, err := parseTransports(cfg.transports)
+	if err != nil {
+		return nil, err
+	}
+	if len(protos) != 1 {
+		return nil, fmt.Errorf("--url requires exactly one --transport (rest, jsonrpc, or grpc)")
+	}
+	proto := protos[0]
+
+	endpointURL := ref
+	if proto == a2a.TransportProtocolGRPC {
+		endpointURL = stripHTTPScheme(ref)
+	}
+	cfg.logf("connecting directly to %s via %s (skipping card resolution)", endpointURL, proto)
+	endpoint := a2a.NewAgentInterface(endpointURL, proto)
+	client, err := a2aclient.NewFromEndpoints(ctx, []*a2a.AgentInterface{endpoint}, append(clientFactoryOpts(cfg), extraOpts...)...)
+	return client, hintInsecure(err)
+}
+
+// dialCard resolves the Agent Card at ref and builds a client for it, honoring
+// --transport as an ordered client preference over the card's declared
+// interfaces.
+func dialCard(ctx context.Context, cfg *globalConfig, ref string, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
+	protos, err := parseTransports(cfg.transports)
+	if err != nil {
+		return nil, err
 	}
 
-	cfg.logf("resolving agent card from %s", agentURL)
+	cfg.logf("resolving agent card from %s", ref)
 	var resolveOpts []agentcard.ResolveOption
 	if cfg.auth != "" {
 		resolveOpts = append(resolveOpts, agentcard.WithRequestHeader("Authorization", cfg.auth))
 	}
-	card, err := compatCardResolver.Resolve(ctx, agentURL, resolveOpts...)
+	card, err := compatCardResolver.Resolve(ctx, ref, resolveOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("resolving agent card: %w", err)
+	}
+
+	factoryOpts := append(clientFactoryOpts(cfg), extraOpts...)
+	if len(protos) > 0 {
+		factoryOpts = append(factoryOpts, a2aclient.WithConfig(a2aclient.Config{PreferredTransports: protos}))
 	}
 	cfg.logf("creating client for %s", card.Name)
 	client, err := a2aclient.NewFromCard(ctx, card, factoryOpts...)
@@ -133,4 +169,21 @@ func parseTransport(s string) (a2a.TransportProtocol, error) {
 	default:
 		return "", fmt.Errorf("unknown transport %q (use rest, jsonrpc, or grpc)", s)
 	}
+}
+
+// parseTransports converts the repeatable --transport values into an ordered
+// list of protocols, preserving the caller's preference order.
+func parseTransports(ss []string) ([]a2a.TransportProtocol, error) {
+	if len(ss) == 0 {
+		return nil, nil
+	}
+	protos := make([]a2a.TransportProtocol, 0, len(ss))
+	for _, s := range ss {
+		proto, err := parseTransport(s)
+		if err != nil {
+			return nil, err
+		}
+		protos = append(protos, proto)
+	}
+	return protos, nil
 }

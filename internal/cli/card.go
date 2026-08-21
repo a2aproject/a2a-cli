@@ -24,15 +24,28 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
 )
 
-func newDiscoverCmd(cfg *globalConfig) *cobra.Command {
+func newCardCmd(cfg *globalConfig) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "card",
+		Short: "Work with agent cards",
+	}
+	cmd.AddCommand(newCardGetCmd(cfg))
+	return cmd
+}
+
+func newCardGetCmd(cfg *globalConfig) *cobra.Command {
 	var extended bool
 
 	cmd := &cobra.Command{
-		Use:   "discover <url>",
+		Use:   "get [url]",
 		Short: "Fetch and display an agent card",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDiscover(cmd.Context(), cfg, args[0], extended)
+			ref := cfg.agentCard
+			if len(args) == 1 {
+				ref = args[0]
+			}
+			return runCardGet(cmd.Context(), cfg, ref, extended)
 		},
 	}
 
@@ -40,7 +53,11 @@ func newDiscoverCmd(cfg *globalConfig) *cobra.Command {
 	return cmd
 }
 
-func runDiscover(ctx context.Context, cfg *globalConfig, agentURL string, extended bool) error {
+func runCardGet(ctx context.Context, cfg *globalConfig, ref string, extended bool) error {
+	if ref == "" {
+		return fmt.Errorf("specify the agent card URL as an argument or with --agent-card")
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, cfg.timeout)
 	defer cancel()
 
@@ -48,7 +65,7 @@ func runDiscover(ctx context.Context, cfg *globalConfig, agentURL string, extend
 
 	if extended {
 		ctx = withServiceParams(ctx, cfg)
-		client, err := newClient(ctx, cfg, agentURL)
+		client, err := dialCard(ctx, cfg, ref)
 		if err != nil {
 			return fmt.Errorf("failed to create a client: %w", err)
 		}
@@ -69,10 +86,10 @@ func runDiscover(ctx context.Context, cfg *globalConfig, agentURL string, extend
 		if cfg.auth != "" {
 			resolveOpts = append(resolveOpts, agentcard.WithRequestHeader("Authorization", cfg.auth))
 		}
-		cfg.logf("fetching agent card from %s", agentURL)
+		cfg.logf("fetching agent card from %s", ref)
 
 		var err error
-		card, err = compatCardResolver.Resolve(ctx, agentURL, resolveOpts...)
+		card, err = compatCardResolver.Resolve(ctx, ref, resolveOpts...)
 		if err != nil {
 			return fmt.Errorf("failed to resolve agent card: %w", err)
 		}

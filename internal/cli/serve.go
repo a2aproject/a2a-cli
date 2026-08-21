@@ -44,6 +44,7 @@ func newServeCmd(cfg *globalConfig) *cobra.Command {
 		cardFile   string
 		cardCompat bool
 		protocol   string
+		transport  string
 		quiet      bool
 		echo       bool
 		proxyURL   string
@@ -85,13 +86,9 @@ func newServeCmd(cfg *globalConfig) *cobra.Command {
 			}
 
 			addr := listener.Addr().String()
-			serveTransport := cfg.transport
-			if serveTransport == "" {
-				serveTransport = "rest"
-			}
 
 			proto := a2a.TransportProtocolHTTPJSON
-			switch serveTransport {
+			switch transport {
 			case "jsonrpc":
 				proto = a2a.TransportProtocolJSONRPC
 			case "grpc":
@@ -101,6 +98,7 @@ func newServeCmd(cfg *globalConfig) *cobra.Command {
 			sc := serveConfig{
 				protocol:   protocol,
 				cardCompat: cardCompat,
+				transport:  transport,
 			}
 
 			switch {
@@ -122,6 +120,7 @@ func newServeCmd(cfg *globalConfig) *cobra.Command {
 	f.StringVar(&cardFile, "card", "", "Serve a custom agent card JSON file")
 	f.BoolVar(&cardCompat, "card-compat", false, "Serve the agent card in a dual v0.3/v1.0 format")
 	f.StringVar(&protocol, "protocol", "latest", `Protocol version: "latest" or "0.3"`)
+	f.StringVar(&transport, "transport", "rest", "Transport to serve: rest, jsonrpc, grpc")
 	f.BoolVar(&quiet, "quiet", false, "Suppress traffic logging to stderr")
 	f.BoolVar(&echo, "echo", false, "Echo mode: return the user's message as a response")
 	f.StringVar(&proxyURL, "proxy", "", "Proxy mode: forward requests to an upstream agent URL")
@@ -134,6 +133,7 @@ func newServeCmd(cfg *globalConfig) *cobra.Command {
 type serveConfig struct {
 	protocol   string
 	cardCompat bool
+	transport  string
 }
 
 func loadOrBuildCard(cardFile, name, desc, addr string, proto a2a.TransportProtocol) (*a2a.AgentCard, error) {
@@ -285,13 +285,9 @@ func serveEcho(ctx context.Context, cfg *globalConfig, sc serveConfig, listener 
 	}
 
 	handler := a2asrv.NewHandler(&echoExecutor{})
-	transport := cfg.transport
-	if transport == "" {
-		transport = "rest"
-	}
 
-	cfg.logf("echo mode, transport=%s protocol=%s", transport, sc.protocol)
-	return startTransportServer(ctx, listener, handler, card, transport, sc, quiet)
+	cfg.logf("echo mode, transport=%s protocol=%s", sc.transport, sc.protocol)
+	return startTransportServer(ctx, listener, handler, card, sc.transport, sc, quiet)
 }
 
 type echoExecutor struct{}

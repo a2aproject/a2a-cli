@@ -27,7 +27,9 @@ import (
 type globalConfig struct {
 	out          io.Writer
 	output       string
-	transport    string
+	agentCard    string
+	url          string
+	transports   []string
 	svcParams    []string
 	auth         string
 	tenant       string
@@ -66,7 +68,9 @@ func newRootCmd(cfg *globalConfig, out io.Writer, poller pollerFunc) *cobra.Comm
 
 	pf := cmd.PersistentFlags()
 	pf.StringVarP(&cfg.output, "output", "o", "text", "Output format: text, json")
-	pf.StringVar(&cfg.transport, "transport", "", "Force transport: rest, jsonrpc, grpc")
+	pf.StringVarP(&cfg.agentCard, "agent-card", "a", "", "Agent Card reference: host/origin, full card URL, or local file path")
+	pf.StringVarP(&cfg.url, "url", "u", "", "Agent interface URL for a direct connection; skips card resolution and requires a single --transport")
+	pf.StringArrayVar(&cfg.transports, "transport", nil, "Transport preference: rest, jsonrpc, grpc (repeatable, highest preference first)")
 	pf.StringArrayVar(&cfg.svcParams, "svc-param", nil, "Service parameter k=v (repeatable)")
 	pf.StringVar(&cfg.auth, "auth", "", "Shorthand for --svc-param Authorization=<creds>")
 	pf.StringVar(&cfg.tenant, "tenant", "", "Tenant identifier")
@@ -75,12 +79,9 @@ func newRootCmd(cfg *globalConfig, out io.Writer, poller pollerFunc) *cobra.Comm
 	pf.BoolVar(&cfg.insecureGRPC, "insecure", false, "Use insecure (plaintext) gRPC transport credentials")
 
 	cmd.AddCommand(
-		newDiscoverCmd(cfg),
+		newCardCmd(cfg),
 		newSendCmd(cfg, poller),
-		newGetCmd(cfg),
-		newListCmd(cfg),
-		newCancelCmd(cfg),
-		newSubscribeCmd(cfg),
+		newTaskCmd(cfg),
 		newServeCmd(cfg),
 		newVersionCmd(cfg),
 	)

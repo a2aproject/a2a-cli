@@ -27,12 +27,14 @@ Verify the download against the `checksums.txt` published with the release.
 
 ## Global Flags
 
-These apply to every client-mode command.
+These apply to every client-mode command. Each command selects the agent it talks to with either `--agent-card` (resolve a card) or `--url` (connect to an interface directly).
 
 | Flag | Short | Description |
 |---|---|---|
+| `--agent-card <ref>` | `-a` | Agent Card reference: a host/origin (the well-known path is appended), a full card URL, or a local file path. The card is resolved and a transport negotiated. |
+| `--url <ref>` | `-u` | Agent interface URL for a direct connection, skipping card resolution. Must be paired with exactly one `--transport`. Mutually exclusive with `--agent-card`. |
+| `--transport <name>` | | Transport preference: `rest`, `jsonrpc`, `grpc`. Repeatable and ordered (highest preference first). With `--agent-card` it overrides the card's preference order; with `--url` exactly one is required. |
 | `--output <fmt>` | `-o` | Output format: `text` (default), `json`. |
-| `--transport <name>` | | Force transport: `rest`, `jsonrpc`, `grpc`. Default: auto-detect from card. |
 | `--svc-param <k=v>` | | Service parameter (repeatable). The chosen transport defines how it's passed. Split on the first `=`. |
 | `--auth <creds>` | | Shorthand for `--svc-param "Authorization=<creds>"`. |
 | `--tenant <id>` | | Tenant identifier. Passed on every request. |
@@ -43,82 +45,90 @@ These apply to every client-mode command.
 
 ## Client Commands
 
-### `discover` - Agent Card Discovery
+### `card get` - Agent Card Discovery
 
 Fetch and display an agent card from its base URL or complete agent card URL.
 
 ```bash
-a2a discover <url>
-a2a discover <url> -o json
+a2a card get <url>
+a2a card get <url> -o json
 ```
 To fetch the extended card (if supported):
 
 ```bash
-a2a discover <url> --extended --auth "Bearer <token>"
+a2a card get <url> --extended --auth "Bearer <token>"
 ```
-`discover` is a convenience alias for `get card <url>`.
+
+The card reference may also be supplied via the global `-a, --agent-card` flag instead of the positional argument.
 
 ### `send` - Send a Message
 
-Send a message to an agent and print the response.
+Send a message to an agent and print the response. Message content is built from
+one or more **part flags** (`--text`, `--file`, `--data`), which are repeatable
+and preserve the order they appear on the command line. A trailing positional
+argument is shorthand for a single `--text` part.
 
 ```bash
 # Simple text message
-a2a send <url> "Hello, what can you do?"
+a2a send -a <url> "Hello, what can you do?"
+
+# Connect directly to an interface, skipping card resolution
+a2a send -u <url> --transport rest "Hello, what can you do?"
+
+# Multiple ordered parts: text, an inlined local file, and a referenced URL
+a2a send -a <url> --text "Review this" --file report.pdf --media-type application/pdf --file https://example.com/spec.pdf
+
+# A structured data part from a JSON file (or '-' to read stdin)
+a2a send -a <url> --data payload.json
 
 # Streaming response - events printed as they arrive
-a2a send <url> --stream "Summarize this document"
+a2a send -a <url> --stream "Summarize this document"
 
 # Fire-and-forget - get the task ID back immediately
-a2a send <url> --immediate "Start a long analysis"
+a2a send -a <url> --async "Start a long analysis"
 
 # Full structured message as JSON (the Message object)
-a2a send <url> --json '{"role":"ROLE_USER","parts":[{"text":"analyze this"},{"fileUrl":"s3://..."}]}'
-
-# Just the parts array
-a2a send <url> --parts '[{"text":"analyze this"},{"fileUrl":"s3://..."}]'
-
-# From file
-a2a send <url> -f message.json
+a2a send -a <url> --json '{"role":"ROLE_USER","parts":[{"text":"analyze this"}]}'
 
 # Continue a conversation (same task)
-a2a send <url> --task <task-id> "Follow-up question"
+a2a send -a <url> --task-id <task-id> "Follow-up question"
 
 # Group under a context (new task, shared context)
-a2a send <url> --context <context-id> "Related question"
+a2a send -a <url> --context-id <context-id> "Related question"
 ```
 
 | Flag | Description |
 |---|---|
-| `--stream` | Use `SendStreamingMessage`. Events are printed incrementally. |
-| `--immediate` | Set `ReturnImmediately` in `SendMessageConfig`. |
-| `--json <body>` | Raw JSON `Message` object. |
-| `--parts <json>` | Raw JSON `parts` array. A `Message` is constructed with `ROLE_USER` and the given parts. |
-| `-f <file>` | Read message from a JSON file. |
-| `--task <id>` | Set `TaskID` on the message to continue an existing task. |
-| `--context <id>` | Set `ContextID` on the message. |
+| `--text <string>` | Add a text part. Repeatable, order-preserving. |
+| `--file <path\|url>` | Add a file part. A local path is inlined as bytes; a URL is carried by reference (never fetched by the CLI). Repeatable. |
+| `--data <path\|->` | Add a structured JSON data part, read from a file or stdin (`-`). Repeatable. |
+| `--media-type <type>` | Media type for the part flag immediately preceding it. Usage error if it follows no part flag. |
+| `--json <body>` | Raw JSON `Message` object. Mutually exclusive with the part flags and positional text. |
+| `--stream` | Use `SendStreamingMessage`. Events are printed incrementally. Falls back to polling if the server does not support streaming. |
+| `--async` | Return immediately (fire-and-forget) instead of waiting for completion. |
+| `--task-id <id>` | Continue an existing task. |
+| `--context-id <id>` | Group this turn under an existing context (new task). |
 | `--history <n>` | Request `n` history messages in the response. |
 
-### `get task` - Get Task Details
+### `task get` - Get Task Details
 
 ```bash
-a2a get task <url> <id>
-a2a get task <url> <id> --history 10
-a2a get task <url> <id> --with-artifacts -o json
+a2a task get -a <url> <id>
+a2a task get -a <url> <id> --history 10
+a2a task get -a <url> <id> -o json
 ```
 
 | Flag | Description |
 |---|---|
 | `--history <n>` | Include up to `n` history messages. |
-| `--with-artifacts` | Include artifacts in the response. |
 
-### `list tasks` - List Tasks
+### `task list` - List Tasks
 
 ```bash
-a2a list tasks <url>
-a2a list tasks <url> --context <ctx-id>
-a2a list tasks <url> --status working
-a2a list tasks <url> --limit 50
+a2a task list -a <url>
+a2a task list -a <url> --context <ctx-id>
+a2a task list -a <url> --status working
+a2a task list -a <url> --limit 50
 ```
 
 | Flag | Description |
@@ -131,18 +141,18 @@ a2a list tasks <url> --limit 50
 | `--since <time>` | Only tasks with status updates after this timestamp (RFC 3339). |
 | `--with-artifacts` | Include artifacts in the response. |
 
-### `cancel` - Cancel a Task
+### `task cancel` - Cancel a Task
 
 ```bash
-a2a cancel <url> <task-id>
+a2a task cancel -a <url> <task-id>
 ```
 
 Prints the updated task status.
 
-### `subscribe` - Subscribe to Task Events
+### `task subscribe` - Subscribe to Task Events
 
 ```bash
-a2a subscribe <url> <task-id>
+a2a task subscribe -a <url> <task-id>
 ```
 Streams events to stdout until the task reaches a terminal state. Output format matches `send --stream`.
 

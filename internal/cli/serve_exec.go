@@ -47,13 +47,8 @@ func serveExec(ctx context.Context, cfg *globalConfig, sc serveConfig, listener 
 	executor := newExecExecutor(command, chunk)
 	handler := a2asrv.NewHandler(executor, a2asrv.WithCapabilityChecks(caps))
 
-	transport := cfg.transport
-	if transport == "" {
-		transport = "rest"
-	}
-
-	cfg.logf("exec mode, command=%q chunk=%q transport=%s protocol=%s", command, chunk, transport, sc.protocol)
-	return startTransportServer(ctx, listener, handler, card, transport, sc, quiet)
+	cfg.logf("exec mode, command=%q chunk=%q transport=%s protocol=%s", command, chunk, sc.transport, sc.protocol)
+	return startTransportServer(ctx, listener, handler, card, sc.transport, sc, quiet)
 }
 
 type execExecutor struct {

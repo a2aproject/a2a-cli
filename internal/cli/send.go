@@ -19,8 +19,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"iter"
+	"mime"
+	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -35,26 +39,25 @@ type pollerFunc func(ctx context.Context, client *a2aclient.Client, req *a2a.Sen
 func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 	var (
 		stream          bool
-		immediate       bool
+		async           bool
 		jsonBody        string
-		partsJSON       string
-		file            string
 		taskID          string
 		contextID       string
 		history         int
 		pollingInterval time.Duration
+		parts           partsBuilder
 	)
 
 	cmd := &cobra.Command{
-		Use:   "send <url> [message]",
+		Use:   "send [message]",
 		Short: "Send a message to an agent",
-		Args:  cobra.MinimumNArgs(1),
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if stream && immediate {
-				return fmt.Errorf("--stream is incomaptible with --immediate")
+			if stream && async {
+				return fmt.Errorf("--stream is incompatible with --async")
 			}
 
-			msg, err := buildMessage(args[1:], jsonBody, partsJSON, file)
+			msg, err := buildMessage(args, jsonBody, &parts)
 			if err != nil {
 				return err
 			}
@@ -69,7 +72,7 @@ func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 			defer cancel()
 			ctx = withServiceParams(ctx, cfg)
 
-			client, err := newClient(ctx, cfg, args[0])
+			client, err := newAgentClient(ctx, cfg)
 			if err != nil {
 				return fmt.Errorf("failed to create a client: %w", err)
 			}
@@ -80,9 +83,9 @@ func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 			}()
 
 			req := &a2a.SendMessageRequest{Message: msg, Tenant: cfg.tenant}
-			if immediate || cmd.Flags().Changed("history") {
+			if async || cmd.Flags().Changed("history") {
 				req.Config = &a2a.SendMessageConfig{}
-				if immediate {
+				if async {
 					req.Config.ReturnImmediately = true
 				}
 				if cmd.Flags().Changed("history") {
@@ -118,12 +121,14 @@ func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 
 	f := cmd.Flags()
 	f.BoolVar(&stream, "stream", false, "Use streaming response. Falls back to polling and synthetic events if a server does not support streaming.")
-	f.BoolVar(&immediate, "immediate", false, "Return immediately (fire-and-forget)")
-	f.StringVar(&jsonBody, "json", "", "Raw JSON Message object")
-	f.StringVar(&partsJSON, "parts", "", "Raw JSON parts array")
-	f.StringVarP(&file, "file", "f", "", "Read message from a JSON file")
-	f.StringVar(&taskID, "task", "", "Task ID to continue an existing task")
-	f.StringVar(&contextID, "context", "", "Context ID")
+	f.BoolVar(&async, "async", false, "Return immediately (fire-and-forget) instead of waiting for completion")
+	f.Var(&textPartValue{&parts}, "text", "Add a text part (repeatable, order-preserving)")
+	f.Var(&filePartValue{&parts}, "file", "Add a file part from a local path (inlined) or URL (by reference); repeatable")
+	f.Var(&dataPartValue{&parts}, "data", "Add a JSON data part from a file, or '-' to read stdin (repeatable)")
+	f.Var(&mediaTypeValue{&parts}, "media-type", "Media type for the immediately preceding part flag")
+	f.StringVar(&jsonBody, "json", "", "Raw JSON Message object (mutually exclusive with part flags)")
+	f.StringVar(&taskID, "task-id", "", "Task ID to continue an existing task")
+	f.StringVar(&contextID, "context-id", "", "Context ID to group this turn under")
 	f.IntVar(&history, "history", 0, "Request n history messages in the response")
 	f.DurationVar(&pollingInterval, "polling-interval", 5*time.Second, "Duration between GetTask requests in polling fallback mode.")
 
@@ -152,9 +157,14 @@ func handleStreamEntry(cfg *globalConfig, event a2a.Event, err error) error {
 	return nil
 }
 
-func buildMessage(positional []string, jsonBody, partsJSON, file string) (*a2a.Message, error) {
-	switch {
-	case jsonBody != "":
+// buildMessage assembles a user message from the ordered part flags, an optional
+// trailing positional text, or a raw --json Message object. --json is mutually
+// exclusive with the part flags and positional text.
+func buildMessage(positional []string, jsonBody string, parts *partsBuilder) (*a2a.Message, error) {
+	if jsonBody != "" {
+		if len(parts.specs) > 0 || len(positional) > 0 {
+			return nil, fmt.Errorf("--json cannot be combined with --text/--file/--data or a positional message")
+		}
 		msg := new(a2a.Message)
 		if err := json.Unmarshal([]byte(jsonBody), msg); err != nil {
 			return nil, fmt.Errorf("parsing --json: %w", err)
@@ -163,33 +173,177 @@ func buildMessage(positional []string, jsonBody, partsJSON, file string) (*a2a.M
 			msg.ID = a2a.NewMessageID()
 		}
 		return msg, nil
+	}
 
-	case partsJSON != "":
-		var parts a2a.ContentParts
-		if err := json.Unmarshal([]byte(partsJSON), &parts); err != nil {
-			return nil, fmt.Errorf("parsing --parts: %w", err)
-		}
-		return a2a.NewMessage(a2a.MessageRoleUser, parts...), nil
+	built, err := parts.build()
+	if err != nil {
+		return nil, err
+	}
+	if len(positional) > 0 {
+		built = append(built, a2a.NewTextPart(strings.Join(positional, " ")))
+	}
+	if len(built) == 0 {
+		return nil, fmt.Errorf("provide a message as text, or via --text, --file, --data, or --json")
+	}
+	return a2a.NewMessage(a2a.MessageRoleUser, built...), nil
+}
 
-	case file != "":
-		data, err := os.ReadFile(file)
+// partKind identifies which content flag produced a part spec.
+type partKind int
+
+const (
+	kindText partKind = iota
+	kindFile
+	kindData
+)
+
+// partSpec is a single deferred part, captured in command-line order.
+type partSpec struct {
+	kind      partKind
+	value     string
+	mediaType string
+}
+
+// partsBuilder accumulates part specs in the order their flags appear on the
+// command line. pflag calls Set on each flag Value in order, so interleaved
+// --text/--file/--data flags preserve their sequence, and --media-type binds to
+// the part flag immediately preceding it.
+type partsBuilder struct {
+	specs []partSpec
+}
+
+func (b *partsBuilder) add(kind partKind, value string) {
+	b.specs = append(b.specs, partSpec{kind: kind, value: value})
+}
+
+func (b *partsBuilder) setMediaType(mediaType string) error {
+	if len(b.specs) == 0 {
+		return fmt.Errorf("--media-type must follow a --text, --file, or --data flag")
+	}
+	b.specs[len(b.specs)-1].mediaType = mediaType
+	return nil
+}
+
+func (b *partsBuilder) build() ([]*a2a.Part, error) {
+	if len(b.specs) == 0 {
+		return nil, nil
+	}
+	out := make([]*a2a.Part, 0, len(b.specs))
+	for _, s := range b.specs {
+		p, err := s.toPart()
 		if err != nil {
-			return nil, fmt.Errorf("reading message file: %w", err)
+			return nil, err
 		}
-		msg := new(a2a.Message)
-		if err := json.Unmarshal(data, msg); err != nil {
-			return nil, fmt.Errorf("parsing message file: %w", err)
-		}
-		if msg.ID == "" {
-			msg.ID = a2a.NewMessageID()
-		}
-		return msg, nil
+		out = append(out, p)
+	}
+	return out, nil
+}
 
-	case len(positional) > 0:
-		text := strings.Join(positional, " ")
-		return a2a.NewMessage(a2a.MessageRoleUser, a2a.NewTextPart(text)), nil
-
+func (s partSpec) toPart() (*a2a.Part, error) {
+	switch s.kind {
+	case kindText:
+		p := a2a.NewTextPart(s.value)
+		if s.mediaType != "" {
+			p.MediaType = s.mediaType
+		}
+		return p, nil
+	case kindFile:
+		return buildFilePart(s.value, s.mediaType)
+	case kindData:
+		return buildDataPart(s.value, s.mediaType)
 	default:
-		return nil, fmt.Errorf("provide a message as text, --json, --parts, or -f")
+		return nil, fmt.Errorf("unknown part kind %d", s.kind)
 	}
 }
+
+// buildFilePart turns a --file value into a Part: a local filesystem path is
+// inlined as raw bytes (file-with-bytes), while a URL is carried by reference
+// (file-with-uri) and never fetched by the CLI.
+func buildFilePart(ref, mediaType string) (*a2a.Part, error) {
+	if looksLikeURL(ref) {
+		return a2a.NewFileURLPart(a2a.URL(ref), mediaType), nil
+	}
+
+	path := strings.TrimPrefix(ref, "file://")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading --file %q: %w", ref, err)
+	}
+	p := a2a.NewRawPart(data)
+	p.Filename = filepath.Base(path)
+	if mediaType == "" {
+		mediaType = mime.TypeByExtension(filepath.Ext(path))
+	}
+	if mediaType != "" {
+		p.MediaType = mediaType
+	}
+	return p, nil
+}
+
+// buildDataPart turns a --data value into a structured DataPart, reading JSON
+// from a file path or from stdin when the value is "-".
+func buildDataPart(ref, mediaType string) (*a2a.Part, error) {
+	var (
+		raw []byte
+		err error
+	)
+	if ref == "-" {
+		raw, err = io.ReadAll(os.Stdin)
+	} else {
+		raw, err = os.ReadFile(ref)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading --data %q: %w", ref, err)
+	}
+
+	var data any
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return nil, fmt.Errorf("parsing --data %q as JSON: %w", ref, err)
+	}
+	p := a2a.NewDataPart(data)
+	if mediaType != "" {
+		p.MediaType = mediaType
+	}
+	return p, nil
+}
+
+// looksLikeURL reports whether ref should be treated as a remote reference
+// (file-with-uri) rather than a local filesystem path.
+func looksLikeURL(ref string) bool {
+	u, err := url.Parse(ref)
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https", "s3", "gs", "ftp", "ftps":
+		return true
+	}
+	return false
+}
+
+// pflag.Value adapters. Each appends to the shared partsBuilder as pflag
+// encounters the flag, preserving command-line order across the part flags.
+
+type textPartValue struct{ b *partsBuilder }
+
+func (v *textPartValue) String() string     { return "" }
+func (v *textPartValue) Set(s string) error { v.b.add(kindText, s); return nil }
+func (v *textPartValue) Type() string       { return "string" }
+
+type filePartValue struct{ b *partsBuilder }
+
+func (v *filePartValue) String() string     { return "" }
+func (v *filePartValue) Set(s string) error { v.b.add(kindFile, s); return nil }
+func (v *filePartValue) Type() string       { return "path|url" }
+
+type dataPartValue struct{ b *partsBuilder }
+
+func (v *dataPartValue) String() string     { return "" }
+func (v *dataPartValue) Set(s string) error { v.b.add(kindData, s); return nil }
+func (v *dataPartValue) Type() string       { return "path|-" }
+
+type mediaTypeValue struct{ b *partsBuilder }
+
+func (v *mediaTypeValue) String() string     { return "" }
+func (v *mediaTypeValue) Set(s string) error { return v.b.setMediaType(s) }
+func (v *mediaTypeValue) Type() string       { return "string" }

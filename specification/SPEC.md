@@ -157,9 +157,10 @@ Task-status **polling** is not a separate command: it is `task get --wait` — r
 | --- | --- |
 | `--a2a-version <version>` | Protocol version to signal to the server on every request (§13). |
 | `-a, --agent-card <ref>` | The agent to talk to, given as an Agent Card reference: a bare host or origin (the well-known path is appended), a full card URL (used as-is), or a local file path (`file://…` or a plain path). |
+| `-u, --url <ref>` | The agent interface URL to connect to, skips agent card resolution. This flag MUST be used together with a single --transport to specify the protocol binding. |
 | `--async` | Do not wait; return the task identifiers immediately for later polling (default is to wait, §6.5 / §9.3). `--return-immediately` and `--no-wait` are OPTIONAL aliases. |
 | `--bearer <token>` / `--api-key <key>` | Pass a bearer token or an API key as the request credential (§12.1). |
-| `--config <path>` | Load configuration from an explicit `.env` file in place of the local `.env` in the working directory (§8.3). Environment variables still take precedence over it (§6.5). |
+| `--env-file <path>` | Load configuration from an explicit `.env` file in place of the local `.env` in the working directory (§8.3). Environment variables still take precedence over it (§6.5). |
 | `--context-id <id>` | Group this turn with an existing interaction: the message starts a new task under the given server-assigned context, alongside the tasks already in it (§8.1). |
 | `--debug` | **Developer diagnostics:** verbose logging to stderr for troubleshooting the tool's own behavior — request/response timing, retries, transport and version negotiation; at Tier 2 this includes the raw protocol messages exchanged on the wire. For *how the tool is performing the action*, not for reading the data itself (`--verbose`). |
 | `-h, --help` | Show usage for the tool or the given command, and exit. |
@@ -167,7 +168,7 @@ Task-status **polling** is not a separate command: it is `task get --wait` — r
 | `--metadata <json-string>` | Attach caller-supplied metadata to the message/request as an inline JSON object string (e.g. `'{"k":"v"}'`); values may be any JSON. Sent in the request **payload** (A2A §3.2.5); distinct from `--svc-param`, which sets transport-level parameters (A2A §3.2.6). |
 | `-o, --output <text\|json>` | Output **format** only: `text` (default, §6.5, §11.2) or `json`, the protocol's own types (Appendix B). Whether `json` is one document or JSONL is set by `--stream`, not this flag (§11.3). |
 | `--poll-interval <duration>` / `--timeout <duration>` | How often to re-check task status while waiting, and how long to wait before giving up (§9.3). |
-| `--stream` | Follow the agent's live event stream instead of blocking, on `send` and `task subscribe`. Sets output **delivery** (peer of `-o`); with `-o json`, emits JSONL (§11.3). Explicit-only. |
+| `--stream` | Follow the agent's live event stream instead of blocking, on `send` and `task subscribe`. Sets output **delivery** (peer of `-o`); with `-o json`, emits JSONL (§11.3). Explicit-only. Falls back to polling if the server does not support streaming. |
 | `--svc-param <k:v>` | Add an A2A **service parameter** (A2A §3.2.6): a transport-level key-value pair the binding carries in its own mechanism — an HTTP header or gRPC metadata — repeatable; general-purpose, not authentication-specific (§12.1). Keys and values are strings. Distinct from `--metadata`, which travels in the request payload (A2A §3.2.5). |
 | `--task-id <id>` | Continue a specific existing task — for example, to reply to one waiting in `INPUT_REQUIRED`. `--context-id` is optional (the server resolves the task's context) but MUST correspond when given; a rejected identifier fails rather than starting a new task (§8.1). |
 | `--transport <binding>` | Client transport preference, **repeatable and ordered** (highest first). Overrides the card's preference order (§13.1); a binding absent from the card is skipped. |
