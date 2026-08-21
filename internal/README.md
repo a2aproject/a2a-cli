@@ -64,9 +64,9 @@ The card reference may also be supplied via the global `-a, --agent-card` flag i
 ### `send` - Send a Message
 
 Send a message to an agent and print the response. Message content is built from
-one or more **part flags** (`--text`, `--file`, `--data`), which are repeatable
-and preserve the order they appear on the command line. A trailing positional
-argument is shorthand for a single `--text` part.
+one or more **part flags** (`--text-part`, `--file-part`, `--data-part`), which
+are repeatable and preserve the order they appear on the command line. A trailing
+positional argument is shorthand for a single `--text-part` part.
 
 ```bash
 # Simple text message
@@ -76,10 +76,11 @@ a2a send -a <url> "Hello, what can you do?"
 a2a send -u <url> --transport rest "Hello, what can you do?"
 
 # Multiple ordered parts: text, an inlined local file, and a referenced URL
-a2a send -a <url> --text "Review this" --file report.pdf --media-type application/pdf --file https://example.com/spec.pdf
+a2a send -a <url> --text-part "Review this" --file-part report.pdf --media-type application/pdf --file-part https://example.com/spec.pdf
 
-# A structured data part from a JSON file (or '-' to read stdin)
-a2a send -a <url> --data payload.json
+# A structured data part from a JSON file, or an inline JSON string
+a2a send -a <url> --data-part payload.json
+a2a send -a <url> --data-part '{"priority":"high"}'
 
 # Streaming response - events printed as they arrive
 a2a send -a <url> --stream "Summarize this document"
@@ -87,8 +88,9 @@ a2a send -a <url> --stream "Summarize this document"
 # Fire-and-forget - get the task ID back immediately
 a2a send -a <url> --async "Start a long analysis"
 
-# Full structured message as JSON (the Message object)
-a2a send -a <url> --json '{"role":"ROLE_USER","parts":[{"text":"analyze this"}]}'
+# Full SendMessageRequest as JSON (inline string or a file path)
+a2a send -a <url> --request-payload '{"message":{"role":"ROLE_USER","parts":[{"text":"analyze this"}]}}'
+a2a send -a <url> --request-payload request.json
 
 # Continue a conversation (same task)
 a2a send -a <url> --task-id <task-id> "Follow-up question"
@@ -99,11 +101,11 @@ a2a send -a <url> --context-id <context-id> "Related question"
 
 | Flag | Description |
 |---|---|
-| `--text <string>` | Add a text part. Repeatable, order-preserving. |
-| `--file <path\|url>` | Add a file part. A local path is inlined as bytes; a URL is carried by reference (never fetched by the CLI). Repeatable. |
-| `--data <path\|->` | Add a structured JSON data part, read from a file or stdin (`-`). Repeatable. |
+| `--text-part <string>` | Add a text part. Repeatable, order-preserving. |
+| `--file-part <path\|url>` | Add a file part. A local path is inlined as bytes; a URL is carried by reference (never fetched by the CLI). Repeatable. |
+| `--data-part <path\|json>` | Add a structured JSON data part, read from a file path or parsed from an inline JSON string. Repeatable. |
 | `--media-type <type>` | Media type for the part flag immediately preceding it. Usage error if it follows no part flag. |
-| `--json <body>` | Raw JSON `Message` object. Mutually exclusive with the part flags and positional text. |
+| `--request-payload <path\|json>` | Full `SendMessageRequest` as a JSON file path or inline JSON string. Mutually exclusive with the message-building flags (part flags, positional text, `--task-id`, `--context-id`, `--metadata`, `--history`, `--async`). |
 | `--stream` | Use `SendStreamingMessage`. Events are printed incrementally. Falls back to polling if the server does not support streaming. |
 | `--async` | Return immediately (fire-and-forget) instead of waiting for completion. |
 | `--task-id <id>` | Continue an existing task. |

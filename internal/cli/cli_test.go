@@ -28,6 +28,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/pflag"
+
+	"github.com/a2aproject/a2a-cli/internal/flagparse"
+	"github.com/a2aproject/a2a-cli/internal/localsrv"
+	"github.com/a2aproject/a2a-cli/internal/output"
+	"github.com/a2aproject/a2a-cli/internal/polling"
+	"github.com/a2aproject/a2a-cli/internal/testutil"
 	a2acorev0 "github.com/a2aproject/a2a-go/a2a"
 	a2asrvv0 "github.com/a2aproject/a2a-go/a2asrv"
 	"github.com/a2aproject/a2a-go/a2asrv/eventqueue"
@@ -133,7 +140,7 @@ func TestSend(t *testing.T) {
 	legacyURL := startLegacyTestServer(t)
 
 	msgText := "hello hello!"
-	msgJSON := fmt.Sprintf(`{"role":"ROLE_USER","parts":[{"text":"%s"}]}`, msgText)
+	reqJSON := fmt.Sprintf(`{"message":{"role":"ROLE_USER","parts":[{"text":"%s"}]}}`, msgText)
 
 	sendTests := []struct {
 		name     string
@@ -151,14 +158,14 @@ func TestSend(t *testing.T) {
 		{
 			name: "text parts preserve order",
 			args: func(url string) []string {
-				return []string{"send", "-a", url, "-o", "json", "--text", "part one", "--text", "part two"}
+				return []string{"send", "-a", url, "-o", "json", "--text-part", "part one", "--text-part", "part two"}
 			},
 			wantText: "part one part two",
 		},
 		{
-			name: "message json",
+			name: "request payload json",
 			args: func(url string) []string {
-				return []string{"send", "-a", url, "-o", "json", "--json", msgJSON}
+				return []string{"send", "-a", url, "-o", "json", "--request-payload", reqJSON}
 			},
 			wantText: msgText,
 		},
@@ -177,9 +184,16 @@ func TestSend(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "fails on bad --json",
+			name: "fails on bad --request-payload",
 			args: func(url string) []string {
-				return []string{"send", "-a", url, "--json", "{bad"}
+				return []string{"send", "-a", url, "--request-payload", "{bad"}
+			},
+			wantErr: true,
+		},
+		{
+			name: "fails when --request-payload combined with a part flag",
+			args: func(url string) []string {
+				return []string{"send", "-a", url, "--request-payload", reqJSON, "--text-part", "extra"}
 			},
 			wantErr: true,
 		},
@@ -205,7 +219,7 @@ func TestSend(t *testing.T) {
 				if err := json.Unmarshal([]byte(out), &task); err != nil {
 					t.Fatalf("json.Unmarshal() error = %v", err)
 				}
-				if text := allArtifactText(&task); text != tt.wantText {
+				if text := testutil.AllArtifactText(&task); text != tt.wantText {
 					t.Fatalf("allArtifactText() = %q, want %q", text, tt.wantText)
 				}
 			})
@@ -222,120 +236,126 @@ func TestSendDataPart(t *testing.T) {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
-	out := mustRunCMD(t, "send", "-a", url, "-o", "json", "--data", path)
+	out := mustRunCMD(t, "send", "-a", url, "-o", "json", "--data-part", path)
 	var task a2a.Task
 	if err := json.Unmarshal([]byte(out), &task); err != nil {
-		t.Fatalf("json.Unmarshal(send --data output) error = %v", err)
+		t.Fatalf("json.Unmarshal(send --data-part output) error = %v", err)
 	}
-	if got := allArtifactText(&task); got != `{"hello":"world"}` {
+	if got := testutil.AllArtifactText(&task); got != `{"hello":"world"}` {
 		t.Fatalf("allArtifactText() = %q, want %q", got, `{"hello":"world"}`)
+	}
+}
+
+func TestSendRequestPayloadFile(t *testing.T) {
+	t.Parallel()
+	url := startTestServer(t)
+
+	path := filepath.Join(t.TempDir(), "request.json")
+	if err := os.WriteFile(path, []byte(`{"message":{"role":"ROLE_USER","parts":[{"text":"from file"}]}}`), 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	out := mustRunCMD(t, "send", "-a", url, "-o", "json", "--request-payload", path)
+	var task a2a.Task
+	if err := json.Unmarshal([]byte(out), &task); err != nil {
+		t.Fatalf("json.Unmarshal(send --request-payload output) error = %v", err)
+	}
+	if got := testutil.AllArtifactText(&task); got != "from file" {
+		t.Fatalf("allArtifactText() = %q, want %q", got, "from file")
 	}
 }
 
 func TestBuildMessage(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	binPath := filepath.Join(dir, "report.bin")
-	if err := os.WriteFile(binPath, []byte("rawbytes"), 0o644); err != nil {
-		t.Fatalf("os.WriteFile() error = %v", err)
-	}
-
-	t.Run("part flags preserve command-line order", func(t *testing.T) {
+	t.Run("positional text is prepended before part flags", func(t *testing.T) {
 		t.Parallel()
-		b := &partsBuilder{}
-		b.add(kindText, "first")
-		b.add(kindFile, "https://example.com/pic.png")
-		b.add(kindText, "third")
-
-		msg, err := buildMessage(nil, "", b)
-		if err != nil {
-			t.Fatalf("buildMessage() error = %v", err)
-		}
-		if len(msg.Parts) != 3 {
-			t.Fatalf("len(parts) = %d, want 3", len(msg.Parts))
-		}
-		if msg.Parts[0].Text() != "first" {
-			t.Errorf("parts[0].Text() = %q, want %q", msg.Parts[0].Text(), "first")
-		}
-		if msg.Parts[1].URL() != "https://example.com/pic.png" {
-			t.Errorf("parts[1].URL() = %q, want the image URL", msg.Parts[1].URL())
-		}
-		if msg.Parts[2].Text() != "third" {
-			t.Errorf("parts[2].Text() = %q, want %q", msg.Parts[2].Text(), "third")
-		}
-	})
-
-	t.Run("media-type binds to the preceding part and local file is inlined", func(t *testing.T) {
-		t.Parallel()
-		b := &partsBuilder{}
-		b.add(kindFile, binPath)
-		if err := b.setMediaType("application/pdf"); err != nil {
-			t.Fatalf("setMediaType() error = %v", err)
-		}
-
-		msg, err := buildMessage(nil, "", b)
-		if err != nil {
-			t.Fatalf("buildMessage() error = %v", err)
-		}
-		if len(msg.Parts) != 1 {
-			t.Fatalf("len(parts) = %d, want 1", len(msg.Parts))
-		}
-		p := msg.Parts[0]
-		if string(p.Raw()) != "rawbytes" {
-			t.Errorf("part raw bytes = %q, want %q", string(p.Raw()), "rawbytes")
-		}
-		if p.MediaType != "application/pdf" {
-			t.Errorf("part.MediaType = %q, want %q", p.MediaType, "application/pdf")
-		}
-		if p.Filename != "report.bin" {
-			t.Errorf("part.Filename = %q, want %q", p.Filename, "report.bin")
-		}
-	})
-
-	t.Run("media-type without a preceding part flag is an error", func(t *testing.T) {
-		t.Parallel()
-		b := &partsBuilder{}
-		if err := b.setMediaType("text/plain"); err == nil {
-			t.Fatal("setMediaType() with no preceding part should fail")
-		}
-	})
-
-	t.Run("positional text is appended after part flags", func(t *testing.T) {
-		t.Parallel()
-		b := &partsBuilder{}
-		b.add(kindText, "flagpart")
-
-		msg, err := buildMessage([]string{"positional", "tail"}, "", b)
+		msg, err := buildMessage([]string{"lead"}, partsFromArgs(t, "--text-part", "flagpart"))
 		if err != nil {
 			t.Fatalf("buildMessage() error = %v", err)
 		}
 		if len(msg.Parts) != 2 {
 			t.Fatalf("len(parts) = %d, want 2", len(msg.Parts))
 		}
-		if msg.Parts[0].Text() != "flagpart" {
-			t.Errorf("parts[0].Text() = %q, want %q", msg.Parts[0].Text(), "flagpart")
+		if msg.Parts[0].Text() != "lead" {
+			t.Errorf("parts[0].Text() = %q, want %q", msg.Parts[0].Text(), "lead")
 		}
-		if msg.Parts[1].Text() != "positional tail" {
-			t.Errorf("parts[1].Text() = %q, want %q", msg.Parts[1].Text(), "positional tail")
+		if msg.Parts[1].Text() != "flagpart" {
+			t.Errorf("parts[1].Text() = %q, want %q", msg.Parts[1].Text(), "flagpart")
 		}
 	})
 
-	t.Run("--json is mutually exclusive with part flags", func(t *testing.T) {
+	t.Run("more than one positional is an error", func(t *testing.T) {
 		t.Parallel()
-		b := &partsBuilder{}
-		b.add(kindText, "hi")
-		if _, err := buildMessage(nil, `{"role":"ROLE_USER"}`, b); err == nil {
-			t.Fatal("buildMessage() with --json and part flags should fail")
+		if _, err := buildMessage([]string{"one", "two"}, &flagparse.Parts{}); err == nil {
+			t.Fatal("buildMessage() with multiple positional args should fail")
 		}
 	})
 
 	t.Run("no content is an error", func(t *testing.T) {
 		t.Parallel()
-		if _, err := buildMessage(nil, "", &partsBuilder{}); err == nil {
+		if _, err := buildMessage(nil, &flagparse.Parts{}); err == nil {
 			t.Fatal("buildMessage() with no content should fail")
 		}
 	})
+}
+
+func TestParseRequestPayload(t *testing.T) {
+	t.Parallel()
+
+	t.Run("inline JSON request", func(t *testing.T) {
+		t.Parallel()
+		req, err := parseRequestPayload(`{"message":{"role":"ROLE_USER","parts":[{"text":"hi"}]}}`)
+		if err != nil {
+			t.Fatalf("parseRequestPayload() error = %v", err)
+		}
+		if len(req.Message.Parts) != 1 || req.Message.Parts[0].Text() != "hi" {
+			t.Fatalf("parseRequestPayload() parts = %+v, want a single text part %q", req.Message.Parts, "hi")
+		}
+		if req.Message.ID == "" {
+			t.Fatal("parseRequestPayload() did not assign a message ID")
+		}
+	})
+
+	t.Run("reads a file path", func(t *testing.T) {
+		t.Parallel()
+		path := filepath.Join(t.TempDir(), "req.json")
+		if err := os.WriteFile(path, []byte(`{"message":{"role":"ROLE_USER","parts":[{"text":"file"}]}}`), 0o644); err != nil {
+			t.Fatalf("os.WriteFile() error = %v", err)
+		}
+		req, err := parseRequestPayload(path)
+		if err != nil {
+			t.Fatalf("parseRequestPayload() error = %v", err)
+		}
+		if req.Message.Parts[0].Text() != "file" {
+			t.Errorf("parseRequestPayload() text = %q, want %q", req.Message.Parts[0].Text(), "file")
+		}
+	})
+
+	t.Run("missing message is an error", func(t *testing.T) {
+		t.Parallel()
+		if _, err := parseRequestPayload(`{"tenant":"acme"}`); err == nil {
+			t.Fatal("parseRequestPayload() without a message should fail")
+		}
+	})
+
+	t.Run("neither a file nor valid JSON is an error", func(t *testing.T) {
+		t.Parallel()
+		if _, err := parseRequestPayload("not json and not a file"); err == nil {
+			t.Fatal("parseRequestPayload() with invalid input should fail")
+		}
+	})
+}
+
+func partsFromArgs(t *testing.T, args ...string) *flagparse.Parts {
+	t.Helper()
+	var p flagparse.Parts
+	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	p.Attach(fs)
+	if err := fs.Parse(args); err != nil {
+		t.Fatalf("fs.Parse(%v) error = %v", args, err)
+	}
+	return &p
 }
 
 func TestSendStreaming(t *testing.T) {
@@ -360,7 +380,7 @@ func TestSendStreaming(t *testing.T) {
 		},
 		{
 			name:               "poller fallback with create from interface",
-			command:            []string{"send", "-u", nonStreamingServerURL, "--transport", "rest", "-o", "json", "--stream", "stream me"},
+			command:            []string{"send", "-e", nonStreamingServerURL, "--transport", "rest", "-o", "json", "--stream", "stream me"},
 			wantPollerFallback: true,
 		},
 	}
@@ -445,6 +465,24 @@ func TestGetTask(t *testing.T) {
 	})
 }
 
+func TestServe_ModeValidation(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name string
+		args []string
+	}{
+		{"no mode", []string{"serve"}},
+		{"multiple modes", []string{"serve", "--echo", "--exec", "cat"}},
+	} {
+		t.Run(tt.name+" fails", func(t *testing.T) {
+			t.Parallel()
+			if _, err := runCMD(t, tt.args...); err == nil {
+				t.Fatal("expected error")
+			}
+		})
+	}
+}
+
 func startTestServer(t *testing.T) string {
 	t.Helper()
 	return startTestServerWith(t, a2a.AgentCapabilities{Streaming: true})
@@ -453,7 +491,7 @@ func startTestServer(t *testing.T) string {
 func startTestServerWith(t *testing.T, capabilities a2a.AgentCapabilities) string {
 	t.Helper()
 
-	handler := a2asrv.NewHandler(&echoExecutor{}, a2asrv.WithCapabilityChecks(&capabilities))
+	handler := a2asrv.NewHandler(localsrv.NewEchoExecutor(), a2asrv.WithCapabilityChecks(&capabilities))
 
 	mux := http.NewServeMux()
 	mux.Handle("/", a2asrv.NewRESTHandler(handler))
@@ -528,14 +566,14 @@ func mustRunCMD(t *testing.T, args ...string) string {
 
 func runCMD(t *testing.T, args ...string) (string, error) {
 	t.Helper()
-	return runCMDWithPoller(t, handlePolling, args...)
+	return runCMDWithPoller(t, polling.Stream, args...)
 }
 
 func runCMDWithPoller(t *testing.T, poller pollerFunc, args ...string) (string, error) {
 	t.Helper()
 	var buf bytes.Buffer
-	cfg := &globalConfig{}
-	root := newRootCmd(cfg, &buf, poller)
+	cfg := &globalConfig{Printer: output.NewPrinter(&buf, output.ModeText), svcParams: &flagparse.ServiceParams{}}
+	root := newRootCmd(cfg, poller)
 	root.SetArgs(args)
 	err := root.Execute()
 	return buf.String(), err
@@ -551,7 +589,7 @@ func (e *legacyExecutor) Execute(ctx context.Context, reqCtx *a2asrvv0.RequestCo
 	if err != nil {
 		return err
 	}
-	echo := a2acorev0.TextPart{Text: messageText(msg)}
+	echo := a2acorev0.TextPart{Text: output.MessageText(msg)}
 	if err := queue.Write(ctx, a2acorev0.NewArtifactEvent(reqCtx, echo)); err != nil {
 		return err
 	}

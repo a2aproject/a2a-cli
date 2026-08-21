@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cli
+package localsrv
 
 import (
 	"bufio"
@@ -20,25 +20,25 @@ import (
 	"context"
 	"fmt"
 	"iter"
-	"net"
 	"os"
 	"os/exec"
 	"strings"
 	"sync"
 
+	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 )
 
-func serveExec(ctx context.Context, cfg *globalConfig, sc serveConfig, listener net.Listener, addr string, proto a2a.TransportProtocol, command, chunk, name, desc, cardFile string, quiet bool) error {
-	if name == "" {
-		name = "Exec Agent"
+func ServeExec(ctx context.Context, cfg Config, command, chunk string) error {
+	if cfg.AgentName == "" {
+		cfg.AgentName = "Exec Agent"
 	}
-	if desc == "" {
-		desc = fmt.Sprintf("Wraps command: %s", command)
+	if cfg.AgentDesc == "" {
+		cfg.AgentDesc = fmt.Sprintf("Wraps command: %s", command)
 	}
 
-	card, err := loadOrBuildCard(cardFile, name, desc, addr, proto)
+	card, err := createAgentCard(cfg.CardParams)
 	if err != nil {
 		return err
 	}
@@ -47,8 +47,11 @@ func serveExec(ctx context.Context, cfg *globalConfig, sc serveConfig, listener 
 	executor := newExecExecutor(command, chunk)
 	handler := a2asrv.NewHandler(executor, a2asrv.WithCapabilityChecks(caps))
 
-	cfg.logf("exec mode, command=%q chunk=%q transport=%s protocol=%s", command, chunk, sc.transport, sc.protocol)
-	return startTransportServer(ctx, listener, handler, card, sc.transport, sc, quiet)
+	if !cfg.Quiet {
+		cfg.Logger("exec mode, command=%q chunk=%q transport=%s protocol=%s", command, chunk, cfg.Transport, cfg.ProtocolVersion)
+	}
+
+	return serve(ctx, cfg, handler, card)
 }
 
 type execExecutor struct {
@@ -99,7 +102,7 @@ func (e *execExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorCont
 		if !yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateWorking, nil), nil) {
 			return
 		}
-		input := messageText(execCtx.Message)
+		input := output.MessageText(execCtx.Message)
 
 		if e.chunk == "" {
 			e.executeBuffered(ctx, execCtx, input, yield)

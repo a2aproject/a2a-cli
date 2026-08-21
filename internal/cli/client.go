@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
 	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
@@ -39,59 +40,50 @@ var compatCardResolver = func() *agentcard.Resolver {
 	return resolver
 }()
 
-// newAgentClient builds a client for the agent selected by the connection flags:
-// --url for a direct connection to an interface (bypassing card resolution,
-// requiring exactly one --transport), or --agent-card to resolve a card and
-// negotiate a transport (with --transport as an ordered preference).
 func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
 	switch {
 	case cfg.url != "" && cfg.agentCard != "":
-		return nil, fmt.Errorf("--url and --agent-card are mutually exclusive")
+		return nil, fmt.Errorf("--endpoint and --agent-card are mutually exclusive")
 	case cfg.url != "":
-		return dialDirect(ctx, cfg, cfg.url, extraOpts...)
+		return newClientFromEndpoint(ctx, cfg, cfg.url, extraOpts...)
 	case cfg.agentCard != "":
-		return dialCard(ctx, cfg, cfg.agentCard, extraOpts...)
+		return newClientFromCard(ctx, cfg, cfg.agentCard, extraOpts...)
 	default:
-		return nil, fmt.Errorf("specify the agent with --agent-card <ref> or --url <ref>")
+		return nil, fmt.Errorf("either '--agent-card <ref>' or '--endpoint <url> --transport <t>' must be provided")
 	}
 }
 
-// dialDirect connects straight to an agent interface URL without resolving an
-// Agent Card. Per the spec, --url requires exactly one --transport to name the
-// protocol binding.
-func dialDirect(ctx context.Context, cfg *globalConfig, ref string, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
-	protos, err := parseTransports(cfg.transports)
+// newClientFromEndpoint connects straight to an agent interface URL without resolving an
+// Agent Card. --endpoint requires exactly one --transport to name the protocol binding.
+func newClientFromEndpoint(ctx context.Context, cfg *globalConfig, ref string, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
+	protocol, err := flagparse.SingleTransport(cfg.transports)
 	if err != nil {
 		return nil, err
 	}
-	if len(protos) != 1 {
-		return nil, fmt.Errorf("--url requires exactly one --transport (rest, jsonrpc, or grpc)")
-	}
-	proto := protos[0]
-
 	endpointURL := ref
-	if proto == a2a.TransportProtocolGRPC {
+	if protocol == a2a.TransportProtocolGRPC {
 		endpointURL = stripHTTPScheme(ref)
 	}
-	cfg.logf("connecting directly to %s via %s (skipping card resolution)", endpointURL, proto)
-	endpoint := a2a.NewAgentInterface(endpointURL, proto)
+	cfg.logf("connecting directly to %s via %s (skipping card resolution)", endpointURL, protocol)
+
+	endpoint := a2a.NewAgentInterface(endpointURL, protocol)
 	client, err := a2aclient.NewFromEndpoints(ctx, []*a2a.AgentInterface{endpoint}, append(clientFactoryOpts(cfg), extraOpts...)...)
 	return client, hintInsecure(err)
 }
 
-// dialCard resolves the Agent Card at ref and builds a client for it, honoring
-// --transport as an ordered client preference over the card's declared
-// interfaces.
-func dialCard(ctx context.Context, cfg *globalConfig, ref string, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
-	protos, err := parseTransports(cfg.transports)
+// newClientFromCard resolves the Agent Card and builds a client for it, honoring
+// --transport as an ordered client preference over the card's declared interfaces.
+func newClientFromCard(ctx context.Context, cfg *globalConfig, ref string, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
+	protos, err := flagparse.Transports(cfg.transports)
 	if err != nil {
 		return nil, err
 	}
 
 	cfg.logf("resolving agent card from %s", ref)
+
 	var resolveOpts []agentcard.ResolveOption
-	if cfg.auth != "" {
-		resolveOpts = append(resolveOpts, agentcard.WithRequestHeader("Authorization", cfg.auth))
+	if auth := cfg.svcParams.Auth(); auth != "" {
+		resolveOpts = append(resolveOpts, agentcard.WithRequestHeader("Authorization", auth))
 	}
 	card, err := compatCardResolver.Resolve(ctx, ref, resolveOpts...)
 	if err != nil {
@@ -107,8 +99,7 @@ func dialCard(ctx context.Context, cfg *globalConfig, ref string, extraOpts ...a
 	return client, hintInsecure(err)
 }
 
-// hintInsecure wraps gRPC "no transport security set" errors with a
-// user-friendly suggestion to pass --insecure.
+// hintInsecure wraps gRPC "no transport security set" errors with a user-friendly suggestion to pass --insecure.
 func hintInsecure(err error) error {
 	if err != nil && strings.Contains(err.Error(), "no transport security set") {
 		return fmt.Errorf("%w\n\nhint: pass --insecure to allow plaintext gRPC connections", err)
@@ -132,24 +123,6 @@ func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
 	return factoryOpts
 }
 
-func withServiceParams(ctx context.Context, cfg *globalConfig) context.Context {
-	params := a2aclient.ServiceParams{}
-	for _, kv := range cfg.svcParams {
-		if k, v, ok := strings.Cut(kv, "="); ok {
-			params.Append(k, v)
-		}
-	}
-	if cfg.auth != "" {
-		params.Append("Authorization", cfg.auth)
-	}
-	if len(params) > 0 {
-		ctx = a2aclient.AttachServiceParams(ctx, params)
-	}
-	return ctx
-}
-
-// stripHTTPScheme converts an HTTP(S) URL to a bare host:port suitable for
-// grpc.NewClient, which expects a target address without an HTTP scheme.
 func stripHTTPScheme(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
@@ -158,32 +131,11 @@ func stripHTTPScheme(raw string) string {
 	return u.Host
 }
 
-func parseTransport(s string) (a2a.TransportProtocol, error) {
-	switch strings.ToLower(s) {
-	case "rest":
-		return a2a.TransportProtocolHTTPJSON, nil
-	case "jsonrpc":
-		return a2a.TransportProtocolJSONRPC, nil
-	case "grpc":
-		return a2a.TransportProtocolGRPC, nil
-	default:
-		return "", fmt.Errorf("unknown transport %q (use rest, jsonrpc, or grpc)", s)
+// withServiceParams attaches the --svc-param entries (including the --auth
+// shorthand) to ctx so they ride along with every request the client makes.
+func withServiceParams(ctx context.Context, cfg *globalConfig) context.Context {
+	if params := cfg.svcParams.Params(); len(params) > 0 {
+		ctx = a2aclient.AttachServiceParams(ctx, params)
 	}
-}
-
-// parseTransports converts the repeatable --transport values into an ordered
-// list of protocols, preserving the caller's preference order.
-func parseTransports(ss []string) ([]a2a.TransportProtocol, error) {
-	if len(ss) == 0 {
-		return nil, nil
-	}
-	protos := make([]a2a.TransportProtocol, 0, len(ss))
-	for _, s := range ss {
-		proto, err := parseTransport(s)
-		if err != nil {
-			return nil, err
-		}
-		protos = append(protos, proto)
-	}
-	return protos, nil
+	return ctx
 }

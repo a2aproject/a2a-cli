@@ -12,89 +12,70 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cli
+package localsrv
 
 import (
 	"context"
 	"fmt"
 	"iter"
-	"net"
 	"os"
-	"strings"
 
+	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
-	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 )
 
 var _ a2asrv.RequestHandler = (*proxyHandler)(nil)
 
-func serveProxy(ctx context.Context, cfg *globalConfig, sc serveConfig, listener net.Listener, addr string, proto a2a.TransportProtocol, upstreamURL, cardFile string, quiet bool) error {
+func ServeProxy(ctx context.Context, sc Config, svcParams *flagparse.ServiceParams, client *a2aclient.Client, tenant string) error {
 	var clientOpts []a2aclient.FactoryOption
-	if !quiet {
+	if !sc.Quiet {
 		clientOpts = append(clientOpts, a2aclient.WithCallInterceptors(&proxyLogInterceptor{}))
 	}
-	client, err := dialCard(ctx, cfg, upstreamURL, clientOpts...)
-	if err != nil {
-		return fmt.Errorf("creating upstream client: %w", err)
-	}
-
-	svcParams := buildServiceParams(cfg)
 
 	var card *a2a.AgentCard
-	if cardFile != "" {
-		card, err = loadOrBuildCard(cardFile, "", "", addr, proto)
+	if sc.CardPath != "" {
+		localCard, err := createAgentCard(sc.CardParams)
 		if err != nil {
 			return err
 		}
+		card = localCard
+	} else if clientCard := client.Card(); card != nil {
+		card = clientCard
 	} else {
-		var resolveOpts []agentcard.ResolveOption
-		if cfg.auth != "" {
-			resolveOpts = append(resolveOpts, agentcard.WithRequestHeader("Authorization", cfg.auth))
-		}
-		upstreamCard, err := agentcard.DefaultResolver.Resolve(ctx, upstreamURL, resolveOpts...)
+		extendedCard, err := client.GetExtendedAgentCard(ctx, &a2a.GetExtendedAgentCardRequest{Tenant: tenant})
 		if err != nil {
 			return fmt.Errorf("resolving upstream agent card: %w", err)
 		}
-		card = deriveProxyCard(upstreamCard, addr, proto)
+		card = deriveProxyCard(extendedCard, sc.AdvertiseAddress, sc.Transport)
 	}
 
 	handler := &proxyHandler{client: client, svcParams: svcParams}
 
-	if !quiet {
-		fmt.Fprintf(os.Stderr, "Proxying to %s\n", upstreamURL)
+	if !sc.Quiet {
+		fmt.Fprintf(os.Stderr, "Proxying to %q agent\n", card.Name)
 	}
-	cfg.logf("proxy mode, transport=%s protocol=%s", sc.transport, sc.protocol)
-	return startTransportServer(ctx, listener, handler, card, sc.transport, sc, quiet)
+
+	sc.Logger("proxy mode, transport=%s protocol=%s", sc.Transport, sc.ProtocolVersion)
+
+	return serve(ctx, sc, handler, card)
 }
 
 func deriveProxyCard(upstream *a2a.AgentCard, addr string, proto a2a.TransportProtocol) *a2a.AgentCard {
 	card := *upstream
-	card.SupportedInterfaces = []*a2a.AgentInterface{a2a.NewAgentInterface("http://"+addr, proto)}
+	card.SupportedInterfaces = []*a2a.AgentInterface{a2a.NewAgentInterface(addr, proto)}
 	return &card
-}
-
-func buildServiceParams(cfg *globalConfig) a2aclient.ServiceParams {
-	params := a2aclient.ServiceParams{}
-	for _, kv := range cfg.svcParams {
-		k, v, _ := strings.Cut(kv, "=")
-		params.Append(k, v)
-	}
-	if cfg.auth != "" {
-		params.Append("Authorization", cfg.auth)
-	}
-	return params
 }
 
 type proxyHandler struct {
 	client    *a2aclient.Client
-	svcParams a2aclient.ServiceParams
+	svcParams *flagparse.ServiceParams
 }
 
 func (p *proxyHandler) withParams(ctx context.Context) context.Context {
-	if len(p.svcParams) > 0 {
-		return a2aclient.AttachServiceParams(ctx, p.svcParams)
+	if params := p.svcParams.Params(); len(params) > 0 {
+		return a2aclient.AttachServiceParams(ctx, params)
 	}
 	return ctx
 }

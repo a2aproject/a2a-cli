@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cli
+package output
 
 import (
 	"encoding/json"
@@ -23,6 +23,11 @@ import (
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 )
+
+type Mode string
+
+const ModeJson Mode = "json"
+const ModeText Mode = "text"
 
 var taskStateNames = map[a2a.TaskState]string{
 	a2a.TaskStateSubmitted:     "submitted",
@@ -35,38 +40,47 @@ var taskStateNames = map[a2a.TaskState]string{
 	a2a.TaskStateAuthRequired:  "auth-required",
 }
 
-func printJSON(w io.Writer, v any) error {
-	enc := json.NewEncoder(w)
+type Printer struct {
+	Out  io.Writer
+	Mode Mode
+}
+
+func NewPrinter(out io.Writer, mode Mode) *Printer {
+	return &Printer{Out: out, Mode: mode}
+}
+
+func (p *Printer) PrintJSON(v any) error {
+	enc := json.NewEncoder(p.Out)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
 }
 
-func (g *globalConfig) printCard(card *a2a.AgentCard) error {
-	if g.output == "json" {
-		return printJSON(g.out, card)
+func (p *Printer) PrintCard(card *a2a.AgentCard) error {
+	if p.Mode == ModeJson {
+		return p.PrintJSON(card)
 	}
-	_, err := io.WriteString(g.out, formatCard(card))
+	_, err := io.WriteString(p.Out, formatCard(card))
 	return err
 }
 
-func (g *globalConfig) printTask(task *a2a.Task) error {
-	if g.output == "json" {
-		return printJSON(g.out, task)
+func (p *Printer) PrintTask(task *a2a.Task) error {
+	if p.Mode == ModeJson {
+		return p.PrintJSON(task)
 	}
-	_, err := io.WriteString(g.out, formatTask(task))
+	_, err := io.WriteString(p.Out, formatTask(task))
 	return err
 }
 
-func (g *globalConfig) printEvent(event a2a.Event) error {
-	if g.output == "json" {
-		return printJSON(g.out, a2a.StreamResponse{Event: event})
+func (p *Printer) PrintEvent(event a2a.Event) error {
+	if p.Mode == ModeJson {
+		return p.PrintJSON(a2a.StreamResponse{Event: event})
 	}
 	var s string
 	switch e := event.(type) {
 	case *a2a.TaskStatusUpdateEvent:
 		state := shortState(e.Status.State)
 		if e.Status.Message != nil {
-			s = fmt.Sprintf("[status] %s: %s\n", state, messageText(e.Status.Message))
+			s = fmt.Sprintf("[status] %s: %s\n", state, MessageText(e.Status.Message))
 		} else {
 			s = fmt.Sprintf("[status] %s\n", state)
 		}
@@ -84,30 +98,30 @@ func (g *globalConfig) printEvent(event a2a.Event) error {
 	default:
 		return nil
 	}
-	_, err := io.WriteString(g.out, s)
+	_, err := io.WriteString(p.Out, s)
 	return err
 }
 
-func (g *globalConfig) printSendResult(result a2a.SendMessageResult) error {
-	if g.output == "json" {
-		return printJSON(g.out, result)
+func (p *Printer) PrintSendResult(result a2a.SendMessageResult) error {
+	if p.Mode == ModeJson {
+		return p.PrintJSON(result)
 	}
 	switch r := result.(type) {
 	case *a2a.Task:
-		_, err := io.WriteString(g.out, formatTask(r))
+		_, err := io.WriteString(p.Out, formatTask(r))
 		return err
 	case *a2a.Message:
-		_, err := io.WriteString(g.out, formatMessage(r))
+		_, err := io.WriteString(p.Out, formatMessage(r))
 		return err
 	}
 	return nil
 }
 
-func (g *globalConfig) printTaskList(resp *a2a.ListTasksResponse) error {
-	if g.output == "json" {
-		return printJSON(g.out, resp)
+func (p *Printer) PrintTaskList(resp *a2a.ListTasksResponse) error {
+	if p.Mode == ModeJson {
+		return p.PrintJSON(resp)
 	}
-	_, err := io.WriteString(g.out, formatTaskList(resp))
+	_, err := io.WriteString(p.Out, formatTaskList(resp))
 	return err
 }
 
@@ -150,7 +164,7 @@ func formatTask(task *a2a.Task) string {
 	}
 	fmt.Fprintf(&sb, "\n")
 	if task.Status.Message != nil {
-		fmt.Fprintf(&sb, "  %s\n", messageText(task.Status.Message))
+		fmt.Fprintf(&sb, "  %s\n", MessageText(task.Status.Message))
 	}
 
 	if len(task.Artifacts) > 0 {
@@ -171,7 +185,7 @@ func formatTask(task *a2a.Task) string {
 			if msg.Role == a2a.MessageRoleAgent {
 				role = "agent"
 			}
-			fmt.Fprintf(&sb, "  [%s] %s\n", role, messageText(msg))
+			fmt.Fprintf(&sb, "  [%s] %s\n", role, MessageText(msg))
 		}
 	}
 
@@ -183,7 +197,7 @@ func formatMessage(msg *a2a.Message) string {
 	if msg.Role == a2a.MessageRoleAgent {
 		role = "agent"
 	}
-	return fmt.Sprintf("[%s] %s\n", role, messageText(msg))
+	return fmt.Sprintf("[%s] %s\n", role, MessageText(msg))
 }
 
 func formatTaskList(resp *a2a.ListTasksResponse) string {
@@ -200,7 +214,7 @@ func formatTaskList(resp *a2a.ListTasksResponse) string {
 	return sb.String()
 }
 
-func messageText(msg *a2a.Message) string {
+func MessageText(msg *a2a.Message) string {
 	return partsText(msg.Parts)
 }
 
@@ -242,14 +256,4 @@ func shortState(state a2a.TaskState) string {
 		return name
 	}
 	return string(state)
-}
-
-func parseTaskState(s string) (a2a.TaskState, error) {
-	lower := strings.ToLower(s)
-	for state, name := range taskStateNames {
-		if name == lower {
-			return state, nil
-		}
-	}
-	return "", fmt.Errorf("unknown task state %q", s)
 }

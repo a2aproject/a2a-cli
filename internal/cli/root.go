@@ -17,25 +17,28 @@ package cli
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/a2aproject/a2a-cli/internal/flagparse"
+	"github.com/a2aproject/a2a-cli/internal/output"
+	"github.com/a2aproject/a2a-cli/internal/polling"
 )
 
 type globalConfig struct {
-	out          io.Writer
 	output       string
 	agentCard    string
 	url          string
 	transports   []string
-	svcParams    []string
-	auth         string
+	svcParams    *flagparse.ServiceParams
 	tenant       string
 	timeout      time.Duration
 	verbose      bool
 	insecureGRPC bool
+
+	*output.Printer
 }
 
 func (g *globalConfig) logf(format string, args ...any) {
@@ -46,8 +49,8 @@ func (g *globalConfig) logf(format string, args ...any) {
 
 // Execute runs the CLI and returns the exit code.
 func Execute() int {
-	cfg := &globalConfig{}
-	root := newRootCmd(cfg, os.Stdout, handlePolling)
+	cfg := &globalConfig{Printer: &output.Printer{Out: os.Stdout}, svcParams: &flagparse.ServiceParams{}}
+	root := newRootCmd(cfg, polling.Stream)
 	if err := root.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1
@@ -55,24 +58,30 @@ func Execute() int {
 	return 0
 }
 
-func newRootCmd(cfg *globalConfig, out io.Writer, poller pollerFunc) *cobra.Command {
-	cfg.out = out
-
+func newRootCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "a2a",
 		Short:         "CLI for the Agent-to-Agent protocol",
 		Version:       buildVersionInfo().Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			switch output.Mode(cfg.output) {
+			case output.ModeText, output.ModeJson:
+				cfg.Mode = output.Mode(cfg.output)
+			default:
+				return fmt.Errorf("invalid --output %q (want text or json)", cfg.output)
+			}
+			return nil
+		},
 	}
 
 	pf := cmd.PersistentFlags()
 	pf.StringVarP(&cfg.output, "output", "o", "text", "Output format: text, json")
 	pf.StringVarP(&cfg.agentCard, "agent-card", "a", "", "Agent Card reference: host/origin, full card URL, or local file path")
-	pf.StringVarP(&cfg.url, "url", "u", "", "Agent interface URL for a direct connection; skips card resolution and requires a single --transport")
+	pf.StringVarP(&cfg.url, "endpoint", "e", "", "Agent interface URL for a direct connection; skips card resolution and requires a single --transport flag")
 	pf.StringArrayVar(&cfg.transports, "transport", nil, "Transport preference: rest, jsonrpc, grpc (repeatable, highest preference first)")
-	pf.StringArrayVar(&cfg.svcParams, "svc-param", nil, "Service parameter k=v (repeatable)")
-	pf.StringVar(&cfg.auth, "auth", "", "Shorthand for --svc-param Authorization=<creds>")
+	cfg.svcParams.Attach(pf)
 	pf.StringVar(&cfg.tenant, "tenant", "", "Tenant identifier")
 	pf.DurationVar(&cfg.timeout, "timeout", 30*time.Second, "Request timeout")
 	pf.BoolVarP(&cfg.verbose, "verbose", "v", false, "Verbose output to stderr")
@@ -86,5 +95,38 @@ func newRootCmd(cfg *globalConfig, out io.Writer, poller pollerFunc) *cobra.Comm
 		newVersionCmd(cfg),
 	)
 
+	cmd.SetUsageTemplate(rootUsageTemplate)
+
 	return cmd
 }
+
+// rootUsageTemplate is cobra's default usage template with one change: the root
+// command (the one with no parent) lists each command's immediate subcommands
+// indented beneath it, so the full command surface (e.g. `task get`, `card get`)
+// is visible from `a2a --help`. Subcommands render the normal flat list.
+const rootUsageTemplate = `Usage:{{if .Runnable}}
+  {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
+  {{.CommandPath}} [command]{{end}}{{if gt (len .Aliases) 0}}
+
+Aliases:
+  {{.NameAndAliases}}{{end}}{{if .HasExample}}
+
+Examples:
+{{.Example}}{{end}}{{if .HasAvailableSubCommands}}
+
+Available Commands:{{if .HasParent}}{{range .Commands}}{{if (or .IsAvailableCommand (eq .Name "help"))}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{else}}{{range .Commands}}{{if (or .IsAvailableCommand (eq .Name "help"))}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{if (and .IsAvailableCommand (ne .Name "completion"))}}{{range .Commands}}{{if .IsAvailableCommand}}
+    {{rpad .Name .NamePadding}} {{.Short}}{{end}}{{end}}{{end}}{{end}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
+
+Flags:
+{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}
+
+Global Flags:
+{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasHelpSubCommands}}
+
+Additional help topics:{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
+  {{rpad .CommandPath .CommandPathPadding}} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
+
+Use "{{.CommandPath}} [command] --help" for more information about a command.{{end}}
+`
