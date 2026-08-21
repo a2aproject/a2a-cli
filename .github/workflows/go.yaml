@@ -8,9 +8,21 @@ name: Go
 on:
   push:
     branches: [ "main", "release/**" ]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/go.yaml'
+      - '.github/actions/**'
 
   pull_request:
     branches: [ "main", "release/**" ]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/go.yaml'
+      - '.github/actions/**'
 
   workflow_dispatch:
 
