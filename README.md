@@ -15,6 +15,17 @@ The **A2A CLI** (`a2a`) is a standardized command-line client for discovering, i
 > We are formalizing and reviewing the **A2A CLI Specification**. Share feedback, questions, and contributions on the specification documents as we finalize v0.2 in **August 2026**.
 
 
+## Why the A2A CLI
+
+The `a2a` CLI is one consistent way to work with A2A agents — no throwaway scripts or raw-JSON parsing just to talk to an agent.
+
+* **AI coding agents** delegate work to A2A agents through one command surface, driven from a bundled skill descriptor — no custom plugins per harness.
+* **Developers** inspect and drive any deployed agent from the terminal — fetch a card, send a message, stream updates, list or cancel tasks, one readable command each.
+* **Automation and CI** call agents from a stable, scriptable surface: protocol-native JSON (`-o json`) and predictable exit codes, no client library required.
+
+The CLI handles the underlying complexity. It negotiates the transport (JSON-RPC, REST, or gRPC) from the agent's card, waits for a task to finish unless you tell it not to, and behaves the same across agents and languages.
+
+
 ## About the Project
 
 Several community-driven CLI tools exist across languages, but they vary in coverage and behavior. To prevent fragmentation, this project defines one **standardized, officially supported CLI specification and reference implementation** — built for long-term stability, cross-transport consistency, and community alignment.
