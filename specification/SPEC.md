@@ -160,7 +160,7 @@ Task-status **polling** is not a separate command: it is `task get --wait` — r
 | `-e, --endpoint <ref>` | The agent interface URL to connect to, skips agent card resolution. This flag MUST be used together with a single --transport to specify the protocol binding. |
 | `--async` | Do not wait; return the task identifiers immediately for later polling (default is to wait, §6.5 / §9.3). `--return-immediately` and `--no-wait` are OPTIONAL aliases. |
 | `--bearer <token>` / `--api-key <key>` | Pass a bearer token or an API key as the request credential (§12.1). |
-| `--env-file <path>` | Load configuration from an explicit `.env` file in place of the local `.env` in the working directory (§8.3). Environment variables still take precedence over it (§6.5). |
+| `--config <path>` | Load configuration from an explicit `.env` file in place of the local `.env` in the working directory (§8.3). Environment variables still take precedence over it (§6.5). |
 | `--context-id <id>` | Group this turn with an existing interaction: the message starts a new task under the given server-assigned context, alongside the tasks already in it (§8.1). |
 | `--debug` | **Developer diagnostics:** verbose logging to stderr for troubleshooting the tool's own behavior — request/response timing, retries, transport and version negotiation; at Tier 2 this includes the raw protocol messages exchanged on the wire. For *how the tool is performing the action*, not for reading the data itself (`--verbose`). |
 | `-h, --help` | Show usage for the tool or the given command, and exit. |
