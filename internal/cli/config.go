@@ -22,6 +22,7 @@ func newConfigCmd(cfg *globalConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "Inspect configuration",
+		RunE:  newConfigShowCmd(cfg).RunE,
 	}
 	cmd.AddCommand(newConfigShowCmd(cfg))
 	return cmd

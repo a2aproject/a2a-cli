@@ -489,9 +489,10 @@ func TestConfigApplied(t *testing.T) {
 	url := startTestServer(t)
 
 	testCases := []struct {
-		name    string
-		command []string
-		env     map[string]string
+		name           string
+		command        []string
+		env            map[string]string
+		wantErrContain string
 	}{
 		{
 			name:    "loaded from env",
@@ -499,9 +500,15 @@ func TestConfigApplied(t *testing.T) {
 			command: []string{"card", "get", "-o", "json"},
 		},
 		{
-			name:    "flag override",
+			name:    "global flag override",
 			env:     map[string]string{"A2ACLI_AGENT_CARD": "https://unreachable.invalid"},
 			command: []string{"card", "get", "-o", "json", "-a", url},
+		},
+		{
+			name:           "local flag override",
+			env:            map[string]string{"A2ACLI_EXTENDED": "true"},
+			command:        []string{"card", "get", "-o", "json", "-a", url},
+			wantErrContain: "extended card not configured",
 		},
 	}
 	for _, tc := range testCases {
@@ -515,8 +522,17 @@ func TestConfigApplied(t *testing.T) {
 				})
 			})
 			out, err := runCMDWithConfig(t, deps{cfgLoader: loader}, tc.command...)
-			if err != nil {
+			if err != nil && tc.wantErrContain == "" {
 				t.Fatalf("runCMDWithConfig(%v) error = %v", strings.Join(tc.command, " "), err)
+			}
+			if err == nil && tc.wantErrContain != "" {
+				t.Fatalf("runCMDWithConfig(%v) error = nil, want containing %q", strings.Join(tc.command, " "), tc.wantErrContain)
+			}
+			if err != nil && !strings.Contains(err.Error(), tc.wantErrContain) {
+				t.Fatalf("runCMDWithConfig(%v) error = %v, want containing %q", strings.Join(tc.command, " "), err, tc.wantErrContain)
+			}
+			if err != nil {
+				return
 			}
 			var card a2a.AgentCard
 			if err := json.Unmarshal([]byte(out), &card); err != nil {
