@@ -30,6 +30,7 @@ import (
 
 	"github.com/spf13/pflag"
 
+	"github.com/a2aproject/a2a-cli/internal/clicfg"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/localsrv"
 	"github.com/a2aproject/a2a-cli/internal/output"
@@ -396,7 +397,7 @@ func TestSendStreaming(t *testing.T) {
 				yield(a2a.NewStatusUpdateEvent(task, a2a.TaskStateCompleted, nil), nil)
 			}
 		})
-		out, err := runCMDWithPoller(t, poller, tc.command...)
+		out, err := runCMDWithPoller(t, deps{poller: poller}, tc.command...)
 		if err != nil {
 			t.Fatalf("runCMDWithPoller() error = %v", err)
 		}
@@ -478,6 +479,67 @@ func TestServe_ModeValidation(t *testing.T) {
 			t.Parallel()
 			if _, err := runCMD(t, tt.args...); err == nil {
 				t.Fatal("expected error")
+			}
+		})
+	}
+}
+
+func TestConfigApplied(t *testing.T) {
+	t.Parallel()
+	url := startTestServer(t)
+
+	testCases := []struct {
+		name           string
+		command        []string
+		env            map[string]string
+		wantErrContain string
+	}{
+		{
+			name:    "loaded from env",
+			env:     map[string]string{"A2ACLI_AGENT_CARD": url},
+			command: []string{"card", "get", "-o", "json"},
+		},
+		{
+			name:    "global flag override",
+			env:     map[string]string{"A2ACLI_AGENT_CARD": "https://unreachable.invalid"},
+			command: []string{"card", "get", "-o", "json", "-a", url},
+		},
+		{
+			name:           "local flag override",
+			env:            map[string]string{"A2ACLI_EXTENDED": "true"},
+			command:        []string{"card", "get", "-o", "json", "-a", url},
+			wantErrContain: "extended card not configured",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			loader := cfgLoaderFunc(func(clicfg.LoadOpts) (*clicfg.Store, error) {
+				return clicfg.Load(clicfg.LoadOpts{
+					LookupEnv: func(k string) (string, bool) {
+						v, ok := tc.env[k]
+						return v, ok
+					},
+				})
+			})
+			out, err := runCMDWithConfig(t, deps{cfgLoader: loader}, tc.command...)
+			if err != nil && tc.wantErrContain == "" {
+				t.Fatalf("runCMDWithConfig(%v) error = %v", strings.Join(tc.command, " "), err)
+			}
+			if err == nil && tc.wantErrContain != "" {
+				t.Fatalf("runCMDWithConfig(%v) error = nil, want containing %q", strings.Join(tc.command, " "), tc.wantErrContain)
+			}
+			if err != nil && !strings.Contains(err.Error(), tc.wantErrContain) {
+				t.Fatalf("runCMDWithConfig(%v) error = %v, want containing %q", strings.Join(tc.command, " "), err, tc.wantErrContain)
+			}
+			if err != nil {
+				return
+			}
+			var card a2a.AgentCard
+			if err := json.Unmarshal([]byte(out), &card); err != nil {
+				t.Fatalf("json.Unmarshal(card get output) error = %v", err)
+			}
+			if card.Name != "Test Echo" {
+				t.Fatalf("card.Name = %q, want %q", card.Name, "Test Echo")
 			}
 		})
 	}
@@ -566,14 +628,22 @@ func mustRunCMD(t *testing.T, args ...string) string {
 
 func runCMD(t *testing.T, args ...string) (string, error) {
 	t.Helper()
-	return runCMDWithPoller(t, polling.Stream, args...)
+	return runCMDWithPoller(t, deps{poller: polling.Stream, cfgLoader: clicfg.LoadEmpty}, args...)
 }
 
-func runCMDWithPoller(t *testing.T, poller pollerFunc, args ...string) (string, error) {
+func runCMDWithPoller(t *testing.T, deps deps, args ...string) (string, error) {
+	t.Helper()
+	return runCMDWithConfig(t, deps, args...)
+}
+
+func runCMDWithConfig(t *testing.T, deps deps, args ...string) (string, error) {
 	t.Helper()
 	var buf bytes.Buffer
-	cfg := &globalConfig{Printer: output.NewPrinter(&buf, output.ModeText), svcParams: &flagparse.ServiceParams{}}
-	root := newRootCmd(cfg, poller)
+	cfg := &globalConfig{
+		Printer:   output.NewPrinter(&buf, output.ModeText),
+		svcParams: &flagparse.ServiceParams{},
+	}
+	root := newRootCmd(cfg, deps)
 	root.SetArgs(args)
 	err := root.Execute()
 	return buf.String(), err

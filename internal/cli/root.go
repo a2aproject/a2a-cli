@@ -22,10 +22,27 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/a2aproject/a2a-cli/internal/clicfg"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-cli/internal/polling"
 )
+
+type cfgLoaderFunc func(clicfg.LoadOpts) (*clicfg.Store, error)
+
+type deps struct {
+	poller    pollerFunc
+	cfgLoader cfgLoaderFunc
+}
+
+func (d *deps) setDefaults() {
+	if d.poller == nil {
+		d.poller = polling.Stream
+	}
+	if d.cfgLoader == nil {
+		d.cfgLoader = clicfg.Load
+	}
+}
 
 type globalConfig struct {
 	output       string
@@ -37,6 +54,9 @@ type globalConfig struct {
 	timeout      time.Duration
 	verbose      bool
 	insecureGRPC bool
+	configPath   string
+
+	bindings []clicfg.FlagBinding
 
 	*output.Printer
 }
@@ -49,8 +69,11 @@ func (g *globalConfig) logf(format string, args ...any) {
 
 // Execute runs the CLI and returns the exit code.
 func Execute() int {
-	cfg := &globalConfig{Printer: &output.Printer{Out: os.Stdout}, svcParams: &flagparse.ServiceParams{}}
-	root := newRootCmd(cfg, polling.Stream)
+	cfg := &globalConfig{
+		Printer:   &output.Printer{Out: os.Stdout},
+		svcParams: &flagparse.ServiceParams{},
+	}
+	root := newRootCmd(cfg, deps{})
 	if err := root.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		return 1
@@ -58,7 +81,7 @@ func Execute() int {
 	return 0
 }
 
-func newRootCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
+func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "a2a",
 		Short:         "CLI for the Agent-to-Agent protocol",
@@ -66,6 +89,18 @@ func newRootCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			deps.setDefaults()
+
+			store, err := deps.cfgLoader(clicfg.LoadOpts{ConfigPath: cfg.configPath})
+			if err != nil {
+				return err
+			}
+			bindings, err := clicfg.Bind(cmd.Flags(), store)
+			if err != nil {
+				return err
+			}
+			cfg.bindings = bindings
+
 			switch output.Mode(cfg.output) {
 			case output.ModeText, output.ModeJson:
 				cfg.Mode = output.Mode(cfg.output)
@@ -86,11 +121,13 @@ func newRootCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 	pf.DurationVar(&cfg.timeout, "timeout", 30*time.Second, "Request timeout")
 	pf.BoolVarP(&cfg.verbose, "verbose", "v", false, "Verbose output to stderr")
 	pf.BoolVar(&cfg.insecureGRPC, "insecure", false, "Use insecure (plaintext) gRPC transport credentials")
+	pf.StringVar(&cfg.configPath, "config", "", "Load configuration from an explicit .env file in place of the local .env")
 
 	cmd.AddCommand(
 		newCardCmd(cfg),
-		newSendCmd(cfg, poller),
+		newSendCmd(cfg, deps.poller),
 		newTaskCmd(cfg),
+		newConfigCmd(cfg),
 		newServeCmd(cfg),
 		newVersionCmd(cfg),
 	)

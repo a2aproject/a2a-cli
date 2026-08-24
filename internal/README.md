@@ -40,6 +40,56 @@ These apply to every client-mode command. Each command selects the agent it talk
 | `--tenant <id>` | | Tenant identifier. Passed on every request. |
 | `--timeout <dur>` | | Request timeout. Default `30s`. |
 | `--verbose` | `-v` | Verbose output to stderr. |
+| `--config <path>` | | Load configuration from an explicit `.env` file in place of the local `.env`. |
+
+---
+
+## Configuration
+
+Every global default can be set from the environment or a `.env` file. This keeps repeated invocations short.
+
+**Naming.** The variable for a flag is `A2ACLI_` followed by the long flag name
+upper-snake-cased: `--agent-card` -> `A2ACLI_AGENT_CARD`, `--timeout` ->
+`A2ACLI_TIMEOUT`, `--transport` → `A2ACLI_TRANSPORT` (a comma-separated,
+ordered list).
+
+**Precedence** (highest wins):
+
+1. an explicit flag,
+2. an environment variable,
+3. a local `.env` (the file named by `--config`, or the nearest `.env` found by
+   walking up from the working directory),
+4. the global `.env` at `$XDG_CONFIG_HOME/a2a-cli/.env` (default
+   `~/.config/a2a-cli/.env`),
+5. the built-in default.
+
+`--stream`, `--help`, and `--version` are never read from the environment or a
+file and must be passed explicitly.
+
+`.env` files use `KEY=value`, one per line. Blank lines and `#` comments are
+ignored, a leading `export ` is tolerated, and one layer of surrounding quotes is
+stripped:
+
+```dotenv
+A2ACLI_AGENT_CARD=https://agent.example.com
+A2ACLI_TRANSPORT=rest,jsonrpc
+A2ACLI_TIMEOUT=60s
+# credentials
+A2ACLI_AUTH="Bearer <token>"
+```
+
+Store secrets only in files you keep private.
+
+### `config show` - Inspect configuration
+
+Read-only: print each effective setting and the source it resolved from.
+Credential values are redacted. Change settings by exporting the variable or editing a `.env` file.
+
+```bash
+a2a config show
+a2a config show -o json
+a2a --config ./prod.env config show
+```
 
 ---
 
