@@ -23,44 +23,19 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2a"
 )
 
-func newGetCmd(cfg *globalConfig) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "get",
-		Short: "Get a resource",
-	}
-	cmd.AddCommand(newGetTaskCmd(cfg), newGetCardCmd(cfg))
-	return cmd
-}
-
-func newGetCardCmd(cfg *globalConfig) *cobra.Command {
-	var extended bool
-
-	cmd := &cobra.Command{
-		Use:   "card <url>",
-		Short: "Fetch and display an agent card (alias for discover)",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDiscover(cmd.Context(), cfg, args[0], extended)
-		},
-	}
-
-	cmd.Flags().BoolVar(&extended, "extended", false, "Fetch the extended agent card")
-	return cmd
-}
-
-func newGetTaskCmd(cfg *globalConfig) *cobra.Command {
+func newTaskGetCmd(cfg *globalConfig) *cobra.Command {
 	var history int
 
 	cmd := &cobra.Command{
-		Use:   "task <url> <task-id>",
+		Use:   "get <task-id>",
 		Short: "Get task details",
-		Args:  cobra.ExactArgs(2),
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithTimeout(cmd.Context(), cfg.timeout)
 			defer cancel()
 			ctx = withServiceParams(ctx, cfg)
 
-			client, err := newClient(ctx, cfg, args[0])
+			client, err := newAgentClient(ctx, cfg)
 			if err != nil {
 				return fmt.Errorf("failed to create a client: %w", err)
 			}
@@ -71,7 +46,7 @@ func newGetTaskCmd(cfg *globalConfig) *cobra.Command {
 			}()
 
 			req := &a2a.GetTaskRequest{
-				ID:     a2a.TaskID(args[1]),
+				ID:     a2a.TaskID(args[0]),
 				Tenant: cfg.tenant,
 			}
 			if cmd.Flags().Changed("history") {
@@ -80,10 +55,10 @@ func newGetTaskCmd(cfg *globalConfig) *cobra.Command {
 
 			task, err := client.GetTask(ctx, req)
 			if err != nil {
-				return fmt.Errorf("failed to get task %s: %w", args[1], err)
+				return fmt.Errorf("failed to get task %s: %w", args[0], err)
 			}
 
-			if err := cfg.printTask(task); err != nil {
+			if err := cfg.PrintTask(task); err != nil {
 				return fmt.Errorf("failed to print task: %w", err)
 			}
 			return nil

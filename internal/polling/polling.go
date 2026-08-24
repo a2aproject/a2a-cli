@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cli
+// Package polling emulates a streaming event feed by repeatedly polling a task's
+// state at a fixed interval until it reaches a terminal state.
+package polling
 
 import (
 	"context"
@@ -25,7 +27,9 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2aevent"
 )
 
-func handlePolling(ctx context.Context, client *a2aclient.Client, original *a2a.SendMessageRequest, interval time.Duration) iter.Seq2[a2a.Event, error] {
+// Stream sends the original message and then polls the resulting task at the
+// given interval, yielding task events until it reaches a terminal state.
+func Stream(ctx context.Context, client *a2aclient.Client, original *a2a.SendMessageRequest, interval time.Duration) iter.Seq2[a2a.Event, error] {
 	return func(yield func(a2a.Event, error) bool) {
 		req := *original
 		if req.Config == nil {
@@ -58,7 +62,7 @@ func handlePolling(ctx context.Context, client *a2aclient.Client, original *a2a.
 		for !prevState.Status.State.Terminal() && prevState.Status.State != a2a.TaskStateInputRequired {
 			time.Sleep(interval)
 
-			task, err := client.GetTask(ctx, &a2a.GetTaskRequest{ID: tid})
+			task, err := client.GetTask(ctx, &a2a.GetTaskRequest{ID: tid, Tenant: req.Tenant})
 			if err != nil {
 				successiveFailures++
 				if successiveFailures == 3 {

@@ -20,12 +20,11 @@ import (
 	"errors"
 	"fmt"
 	"iter"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
 )
@@ -35,41 +34,67 @@ type pollerFunc func(ctx context.Context, client *a2aclient.Client, req *a2a.Sen
 func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 	var (
 		stream          bool
-		immediate       bool
-		jsonBody        string
-		partsJSON       string
-		file            string
+		async           bool
+		payload         string
 		taskID          string
 		contextID       string
 		history         int
 		pollingInterval time.Duration
+		parts           flagparse.Parts
+		meta            flagparse.Metadata
 	)
 
 	cmd := &cobra.Command{
-		Use:   "send <url> [message]",
+		Use:   "send [message]",
 		Short: "Send a message to an agent",
-		Args:  cobra.MinimumNArgs(1),
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if stream && immediate {
-				return fmt.Errorf("--stream is incomaptible with --immediate")
+			if stream && async {
+				return fmt.Errorf("--stream is incompatible with --async")
 			}
 
-			msg, err := buildMessage(args[1:], jsonBody, partsJSON, file)
-			if err != nil {
-				return err
+			var req *a2a.SendMessageRequest
+			if payload != "" {
+				if err := ensureNoPayloadOverrides(cmd, args); err != nil {
+					return err
+				}
+				parsed, err := parseRequestPayload(payload)
+				if err != nil {
+					return err
+				}
+				req = parsed
+			} else {
+				msg, err := buildMessage(args, &parts)
+				if err != nil {
+					return err
+				}
+				if taskID != "" {
+					msg.TaskID = a2a.TaskID(taskID)
+				}
+				if contextID != "" {
+					msg.ContextID = contextID
+				}
+				req = &a2a.SendMessageRequest{Message: msg}
+				meta.ApplyTo(req)
+				if async || cmd.Flags().Changed("history") {
+					req.Config = &a2a.SendMessageConfig{}
+					if async {
+						req.Config.ReturnImmediately = true
+					}
+					if cmd.Flags().Changed("history") {
+						req.Config.HistoryLength = &history
+					}
+				}
 			}
-			if taskID != "" {
-				msg.TaskID = a2a.TaskID(taskID)
-			}
-			if contextID != "" {
-				msg.ContextID = contextID
+			if req.Tenant == "" {
+				req.Tenant = cfg.tenant
 			}
 
 			ctx, cancel := context.WithTimeout(cmd.Context(), cfg.timeout)
 			defer cancel()
 			ctx = withServiceParams(ctx, cfg)
 
-			client, err := newClient(ctx, cfg, args[0])
+			client, err := newAgentClient(ctx, cfg)
 			if err != nil {
 				return fmt.Errorf("failed to create a client: %w", err)
 			}
@@ -78,17 +103,6 @@ func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 					cfg.logf("failed to destroy client: %v", err)
 				}
 			}()
-
-			req := &a2a.SendMessageRequest{Message: msg, Tenant: cfg.tenant}
-			if immediate || cmd.Flags().Changed("history") {
-				req.Config = &a2a.SendMessageConfig{}
-				if immediate {
-					req.Config.ReturnImmediately = true
-				}
-				if cmd.Flags().Changed("history") {
-					req.Config.HistoryLength = &history
-				}
-			}
 
 			if stream {
 				if err := handleStreaming(ctx, cfg, client, req); err != nil {
@@ -109,7 +123,7 @@ func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("failed to send message: %w", err)
 			}
-			if err := cfg.printSendResult(result); err != nil {
+			if err := cfg.PrintSendResult(result); err != nil {
 				return fmt.Errorf("failed to print result: %w", err)
 			}
 			return nil
@@ -118,14 +132,14 @@ func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 
 	f := cmd.Flags()
 	f.BoolVar(&stream, "stream", false, "Use streaming response. Falls back to polling and synthetic events if a server does not support streaming.")
-	f.BoolVar(&immediate, "immediate", false, "Return immediately (fire-and-forget)")
-	f.StringVar(&jsonBody, "json", "", "Raw JSON Message object")
-	f.StringVar(&partsJSON, "parts", "", "Raw JSON parts array")
-	f.StringVarP(&file, "file", "f", "", "Read message from a JSON file")
-	f.StringVar(&taskID, "task", "", "Task ID to continue an existing task")
-	f.StringVar(&contextID, "context", "", "Context ID")
+	f.BoolVar(&async, "async", false, "Return immediately (fire-and-forget) instead of waiting for completion")
+	f.StringVar(&payload, "request-payload", "", "Full SendMessageRequest as a JSON file path or inline JSON string (mutually exclusive with the message-building flags)")
+	f.StringVar(&taskID, "task-id", "", "Task ID to continue an existing task")
+	f.StringVar(&contextID, "context-id", "", "Context ID to group this turn under")
 	f.IntVar(&history, "history", 0, "Request n history messages in the response")
 	f.DurationVar(&pollingInterval, "polling-interval", 5*time.Second, "Duration between GetTask requests in polling fallback mode.")
+	parts.Attach(f)
+	meta.Attach(f, "metadata", "Attach request metadata as a JSON object (repeatable)")
 
 	return cmd
 }
@@ -146,50 +160,56 @@ func handleStreamEntry(cfg *globalConfig, event a2a.Event, err error) error {
 	if err != nil {
 		return fmt.Errorf("streaming error: %w", err)
 	}
-	if err := cfg.printEvent(event); err != nil {
+	if err := cfg.PrintEvent(event); err != nil {
 		return fmt.Errorf("failed to print event: %w", err)
 	}
 	return nil
 }
 
-func buildMessage(positional []string, jsonBody, partsJSON, file string) (*a2a.Message, error) {
-	switch {
-	case jsonBody != "":
-		msg := new(a2a.Message)
-		if err := json.Unmarshal([]byte(jsonBody), msg); err != nil {
-			return nil, fmt.Errorf("parsing --json: %w", err)
-		}
-		if msg.ID == "" {
-			msg.ID = a2a.NewMessageID()
-		}
-		return msg, nil
-
-	case partsJSON != "":
-		var parts a2a.ContentParts
-		if err := json.Unmarshal([]byte(partsJSON), &parts); err != nil {
-			return nil, fmt.Errorf("parsing --parts: %w", err)
-		}
-		return a2a.NewMessage(a2a.MessageRoleUser, parts...), nil
-
-	case file != "":
-		data, err := os.ReadFile(file)
-		if err != nil {
-			return nil, fmt.Errorf("reading message file: %w", err)
-		}
-		msg := new(a2a.Message)
-		if err := json.Unmarshal(data, msg); err != nil {
-			return nil, fmt.Errorf("parsing message file: %w", err)
-		}
-		if msg.ID == "" {
-			msg.ID = a2a.NewMessageID()
-		}
-		return msg, nil
-
-	case len(positional) > 0:
-		text := strings.Join(positional, " ")
-		return a2a.NewMessage(a2a.MessageRoleUser, a2a.NewTextPart(text)), nil
-
-	default:
-		return nil, fmt.Errorf("provide a message as text, --json, --parts, or -f")
+func buildMessage(positional []string, partParser *flagparse.Parts) (*a2a.Message, error) {
+	parts, err := partParser.Parse()
+	if err != nil {
+		return nil, err
 	}
+
+	if len(positional) > 1 {
+		return nil, fmt.Errorf("at most one positional argument is allowed, use --text-part for multi-part messages")
+	}
+	if len(positional) == 1 { // a2a send "check it out" --file-part <url> -> [TextPart("check it out"), FilePart("<url>")]
+		parts = append([]*a2a.Part{a2a.NewTextPart(positional[0])}, parts...)
+	}
+	if len(parts) == 0 {
+		return nil, fmt.Errorf("provide a message as text, or via --text-part, --file-part, --data-part, or --request-payload")
+	}
+	return a2a.NewMessage(a2a.MessageRoleUser, parts...), nil
+}
+
+// parseRequestPayload reads a full SendMessageRequest from ref, which is either
+// a path to a JSON file or an inline JSON string, mirroring --data-part.
+func parseRequestPayload(ref string) (*a2a.SendMessageRequest, error) {
+	req := new(a2a.SendMessageRequest)
+	if err := json.Unmarshal(flagparse.RawOrInline(ref), req); err != nil {
+		return nil, fmt.Errorf("--request-payload %q is not a readable file or valid JSON: %w", ref, err)
+	}
+	if req.Message == nil {
+		return nil, fmt.Errorf("--request-payload must include a message")
+	}
+	if req.Message.ID == "" {
+		req.Message.ID = a2a.NewMessageID()
+	}
+	return req, nil
+}
+
+// ensureNoPayloadOverrides rejects flags and positional arguments that would
+// conflict with a --request-payload, which already carries the whole request.
+func ensureNoPayloadOverrides(cmd *cobra.Command, positional []string) error {
+	if len(positional) > 0 {
+		return fmt.Errorf("--request-payload cannot be combined with a positional message")
+	}
+	for _, name := range []string{"text-part", "file-part", "data-part", "task-id", "context-id", "metadata", "history", "async"} {
+		if cmd.Flags().Changed(name) {
+			return fmt.Errorf("--request-payload cannot be combined with --%s", name)
+		}
+	}
+	return nil
 }

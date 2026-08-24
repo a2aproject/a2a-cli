@@ -21,19 +21,11 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 )
 
-func newListCmd(cfg *globalConfig) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List resources",
-	}
-	cmd.AddCommand(newListTasksCmd(cfg))
-	return cmd
-}
-
-func newListTasksCmd(cfg *globalConfig) *cobra.Command {
+func newTaskListCmd(cfg *globalConfig) *cobra.Command {
 	var (
 		contextID     string
 		status        string
@@ -45,15 +37,15 @@ func newListTasksCmd(cfg *globalConfig) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "tasks <url>",
+		Use:   "list",
 		Short: "List tasks",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithTimeout(cmd.Context(), cfg.timeout)
 			defer cancel()
 			ctx = withServiceParams(ctx, cfg)
 
-			client, err := newClient(ctx, cfg, args[0])
+			client, err := newAgentClient(ctx, cfg)
 			if err != nil {
 				return fmt.Errorf("failed to create a client: %w", err)
 			}
@@ -71,7 +63,7 @@ func newListTasksCmd(cfg *globalConfig) *cobra.Command {
 				IncludeArtifacts: withArtifacts,
 			}
 			if status != "" {
-				s, err := parseTaskState(status)
+				s, err := flagparse.TaskState(status)
 				if err != nil {
 					return err
 				}
@@ -93,7 +85,7 @@ func newListTasksCmd(cfg *globalConfig) *cobra.Command {
 				return fmt.Errorf("failed to list tasks: %w", err)
 			}
 
-			if err := cfg.printTaskList(resp); err != nil {
+			if err := cfg.PrintTaskList(resp); err != nil {
 				return fmt.Errorf("failed to print task list: %w", err)
 			}
 			return nil
