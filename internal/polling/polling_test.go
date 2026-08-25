@@ -21,6 +21,7 @@ import (
 	"iter"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 
@@ -183,6 +184,33 @@ func TestHandlePolling(t *testing.T) {
 				t.Fatalf("handlePolling() events wrong result (-want +got) diff = %s", diff)
 			}
 		})
+	}
+}
+
+func TestStream_SleepCancelledWithContext(t *testing.T) {
+	t.Parallel()
+
+	sleepTime := time.Hour // before the firtst Get
+	transport := &fakePollingTransport{
+		sendResult: &a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateSubmitted}},
+	}
+	client := newPollingClient(t, transport)
+	req := &a2a.SendMessageRequest{Message: a2a.NewMessage(a2a.MessageRoleUser, a2a.NewTextPart("go"))}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	var gotErr error
+	for _, err := range Stream(ctx, client, req, sleepTime) {
+		if err != nil {
+			gotErr = err
+			break
+		}
+		cancel()
+	}
+
+	if !errors.Is(gotErr, context.Canceled) {
+		t.Fatalf("Stream() error = %v, want context.Canceled", gotErr)
 	}
 }
 

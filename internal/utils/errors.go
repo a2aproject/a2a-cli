@@ -12,6 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package clicfg resolves a2a-cli configuration from environment variables
-// and .env (dotenv) files.
-package clicfg
+package utils
+
+import (
+	"context"
+	"errors"
+)
+
+// UnpackCause returns context.Cause if err is context.Canceled, or err otherwise.
+func UnpackCause(ctx context.Context, err error) error {
+	if errors.Is(err, context.Canceled) {
+		return context.Cause(ctx)
+	}
+	return err
+}

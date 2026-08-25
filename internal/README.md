@@ -27,13 +27,13 @@ Verify the download against the `checksums.txt` published with the release.
 
 ## Global Flags
 
-These apply to every client-mode command. Each command selects the agent it talks to with either `--agent-card` (resolve a card) or `--url` (connect to an interface directly).
+These apply to every client-mode command. Each command selects the agent it talks to with either `--agent-card` (resolve a card) or `--endpoint` (connect to an interface directly).
 
 | Flag | Short | Description |
 |---|---|---|
 | `--agent-card <ref>` | `-a` | Agent Card reference: a host/origin (the well-known path is appended), a full card URL, or a local file path. The card is resolved and a transport negotiated. |
-| `--url <ref>` | `-u` | Agent interface URL for a direct connection, skipping card resolution. Must be paired with exactly one `--transport`. Mutually exclusive with `--agent-card`. |
-| `--transport <name>` | | Transport preference: `rest`, `jsonrpc`, `grpc`. Repeatable and ordered (highest preference first). With `--agent-card` it overrides the card's preference order; with `--url` exactly one is required. |
+| `--endpoint <ref>` | `-e` | Agent interface URL for a direct connection, skipping card resolution. Must be paired with exactly one `--transport`. Mutually exclusive with `--agent-card`. |
+| `--transport <name>` | | Transport preference: `rest`, `jsonrpc`, `grpc`. Repeatable and ordered (highest preference first). With `--agent-card` it overrides the card's preference order; with `--endpoint` exactly one is required. |
 | `--output <fmt>` | `-o` | Output format: `text` (default), `json`. |
 | `--svc-param <k=v>` | | Service parameter (repeatable). The chosen transport defines how it's passed. Split on the first `=`. |
 | `--auth <creds>` | | Shorthand for `--svc-param "Authorization=<creds>"`. |
@@ -123,7 +123,7 @@ positional argument is shorthand for a single `--text-part` part.
 a2a send -a <url> "Hello, what can you do?"
 
 # Connect directly to an interface, skipping card resolution
-a2a send -u <url> --transport rest "Hello, what can you do?"
+a2a send -e <url> --transport rest "Hello, what can you do?"
 
 # Multiple ordered parts: text, an inlined local file, and a referenced URL
 a2a send -a <url> --text-part "Review this" --file-part report.pdf --media-type application/pdf --file-part https://example.com/spec.pdf
@@ -212,7 +212,7 @@ Streams events to stdout until the task reaches a terminal state. Output format 
 
 ## Server Mode
 
-`a2a serve` starts an A2A-compliant server backed by one of three modes.
+`a2a server` starts an A2A-compliant server backed by one of three modes.
 
 ### Common Server Flags
 
@@ -222,7 +222,9 @@ Streams events to stdout until the task reaches a terminal state. Output format 
 | `--host <addr>` | Bind address. Default `127.0.0.1`. |
 | `--name <name>` | Agent name for the auto-generated card. |
 | `--description <desc>` | Agent description. |
-| `--transport <proto>` | Transport to serve: `rest` (default), `jsonrpc`, `grpc`. |
+| `--serve-transport <proto>` | Transport to serve: `rest` (default), `jsonrpc`, `grpc`. |
+| `--advertise-address <addr>` | Endpoint advertised in the served agent card. Defaults to the listener address. |
+| `--insecure` | Use insecure (plaintext) gRPC transport credentials (proxy upstream). |
 | `--protocol <ver>` | Protocol version: `latest` (default), `0.3`. When set to `0.3`, the server uses the compat transport layer (`a2agrpc/v0` for gRPC, `a2acompat/a2av0` for REST/JSON-RPC) to accept v0.3 clients. |
 | `--card <file>` | Serve a custom agent card JSON instead of auto-generating. |
 | `--card-compat` | Serve the agent card in a dual v0.3/v1.0 format so both old and new clients can discover the agent. |
@@ -231,24 +233,24 @@ Streams events to stdout until the task reaches a terminal state. Output format 
 ### `--echo` - Echo Mode
 
 ```bash
-a2a serve --echo
-a2a serve --echo --port 9090 --name "Echo Agent"
+a2a server --echo
+a2a server --echo --port 9090 --name "Echo Agent"
 ```
 Returns the user's message text as the agent response. A "ping" for agents — useful for connectivity testing and client development.
 
 ### `--proxy` - Proxy Mode
 
-Forward all requests to an upstream A2A agent. Logs traffic to stderr. Useful for debugging agent interactions, injecting service parameters, or acting as an authenticated gateway.
+Forward all requests to an upstream A2A agent. Logs traffic to stderr. Useful for debugging agent interactions, injecting service parameters, or acting as an authenticated gateway. `--proxy` is a boolean flag; the upstream agent is selected with the global `-a, --agent-card` or `-e, --endpoint` flags.
 
 ```bash
 # Basic proxy with traffic logging
-a2a serve --proxy https://upstream-agent.com
+a2a server --proxy -a https://upstream-agent.com
 
 # Inject auth for an upstream that requires it
-a2a serve --proxy https://upstream-agent.com --auth "<token>"
+a2a server --proxy -a https://upstream-agent.com --auth "<token>"
 
 # Add tracing headers
-a2a serve --proxy https://upstream-agent.com \
+a2a server --proxy -a https://upstream-agent.com \
   --svc-param "X-Request-Source=a2a-proxy" \
   --svc-param "X-Trace-ID=debug-session-1"
 ```
@@ -259,8 +261,8 @@ The proxy creates an `a2aclient.Client` for the upstream agent and forwards each
 
 Run any command as an A2A agent. Message text goes to stdin, stdout becomes the response artifact. The subprocess does not need to know anything about A2A.
 ```bash
-a2a serve --exec "python -u a2a_unaware_agent.py"
-a2a serve --exec "./content-generator.sh"
+a2a server --exec "python -u a2a_unaware_agent.py"
+a2a server --exec "./content-generator.sh"
 ```
 
 #### Subprocess Interface
@@ -284,13 +286,13 @@ Status: working → [process runs] → Artifact (full output) → Status: comple
 
 ```bash
 # Emit 3 chunks with 500ms delay - useful for verifying client streaming
-a2a serve --exec "for i in 1 2 3; do echo \$i; sleep 0.5; done" --chunk=$'\n'
+a2a server --exec "for i in 1 2 3; do echo \$i; sleep 0.5; done" --chunk=$'\n'
 
 # Space-delimited chunks
-a2a serve --exec "echo 'alpha beta gamma'" --chunk=' '
+a2a server --exec "echo 'alpha beta gamma'" --chunk=' '
 
 # Paragraph-level chunks
-a2a serve --exec "cat essay.txt" --chunk=$'\n\n'
+a2a server --exec "cat essay.txt" --chunk=$'\n\n'
 ```
 
 The event sequence with `--chunk`:

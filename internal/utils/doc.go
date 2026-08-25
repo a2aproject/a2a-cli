@@ -12,6 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package clicfg resolves a2a-cli configuration from environment variables
-// and .env (dotenv) files.
-package clicfg
+// Package utils provides domain-agnostic helper functionality which
+// can be shared by different packages.
+package utils

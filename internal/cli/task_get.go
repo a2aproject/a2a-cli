@@ -39,11 +39,7 @@ func newTaskGetCmd(cfg *globalConfig) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("failed to create a client: %w", err)
 			}
-			defer func() {
-				if err := client.Destroy(); err != nil {
-					cfg.logf("failed to destroy client: %v", err)
-				}
-			}()
+			defer destroyClient(cfg, client)
 
 			req := &a2a.GetTaskRequest{
 				ID:     a2a.TaskID(args[0]),

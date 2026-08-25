@@ -60,7 +60,12 @@ func Stream(ctx context.Context, client *a2aclient.Client, original *a2a.SendMes
 
 		successiveFailures := 0
 		for !prevState.Status.State.Terminal() && prevState.Status.State != a2a.TaskStateInputRequired {
-			time.Sleep(interval)
+			select {
+			case <-ctx.Done():
+				yield(nil, ctx.Err())
+				return
+			case <-time.After(interval):
+			}
 
 			task, err := client.GetTask(ctx, &a2a.GetTaskRequest{ID: tid, Tenant: req.Tenant})
 			if err != nil {
