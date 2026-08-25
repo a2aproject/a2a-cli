@@ -257,16 +257,7 @@ func TestResolveProxyCard(t *testing.T) {
 	t.Parallel()
 
 	client := startTestServer(t, "Upstream Agent", NewEchoExecutor(), a2a.AgentCapabilities{})
-
-	path := filepath.Join(t.TempDir(), "card.json")
-	card, err := createAgentCard(CardParams{AgentName: "Custom"})
-	if err != nil {
-		t.Fatalf("createAgentCard() error = %v", err)
-	}
-	cardBytes, err := json.Marshal(card)
-	if err := os.WriteFile(path, cardBytes, 0o644); err != nil {
-		t.Fatalf("os.WriteFile() error = %v", err)
-	}
+	cardPath := mustWriteTmpCardFile(t, CardParams{AgentName: "Custom"})
 
 	testCases := []struct {
 		name          string
@@ -282,7 +273,7 @@ func TestResolveProxyCard(t *testing.T) {
 		},
 		{
 			name:          "serves a custom card",
-			params:        CardParams{CardPath: path, Transport: a2a.TransportProtocolHTTPJSON},
+			params:        CardParams{CardPath: cardPath, Transport: a2a.TransportProtocolHTTPJSON},
 			wantAddress:   "http://127.0.0.1",
 			wantAgentName: "Custom",
 		},
@@ -357,4 +348,21 @@ func execSendText(t *testing.T, client *a2aclient.Client, text string) *a2a.Task
 		t.Fatalf("client.SendMessage() result type = %T, want *a2a.Task", result)
 	}
 	return task
+}
+
+func mustWriteTmpCardFile(t *testing.T, params CardParams) string {
+	t.Helper()
+	card, err := createAgentCard(params)
+	if err != nil {
+		t.Fatalf("createAgentCard(%v) error = %v", params, err)
+	}
+	cardBytes, err := json.Marshal(card)
+	if err != nil {
+		t.Fatalf("json.Marshal(card) error = %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "card.json")
+	if err := os.WriteFile(path, cardBytes, os.ModePerm); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	return path
 }

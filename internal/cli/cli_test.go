@@ -106,6 +106,17 @@ func TestCardGet(t *testing.T) {
 			t.Fatal("a2a card get (no url) should fail")
 		}
 	})
+
+	t.Run("extended with positional url", func(t *testing.T) {
+		t.Parallel()
+		_, err := runCMD(t, "card", "get", url, "--extended")
+		if err == nil {
+			t.Fatal("card get <url> --extended against a server without an extended card should fail")
+		}
+		if strings.Contains(err.Error(), "must be provided") {
+			t.Fatalf("card get <url> --extended ignored the positional url: %v", err)
+		}
+	})
 }
 
 func TestVersion(t *testing.T) {
@@ -288,14 +299,14 @@ func TestBuildMessage(t *testing.T) {
 
 	t.Run("more than one positional is an error", func(t *testing.T) {
 		t.Parallel()
-		if _, err := buildMessage([]string{"one", "two"}, &flagparse.Parts{}); err == nil {
+		if _, err := buildMessage([]string{"one", "two"}, &sendFlags{}); err == nil {
 			t.Fatal("buildMessage() with multiple positional args should fail")
 		}
 	})
 
 	t.Run("no content is an error", func(t *testing.T) {
 		t.Parallel()
-		if _, err := buildMessage(nil, &flagparse.Parts{}); err == nil {
+		if _, err := buildMessage(nil, &sendFlags{}); err == nil {
 			t.Fatal("buildMessage() with no content should fail")
 		}
 	})
@@ -348,7 +359,7 @@ func TestParseRequestPayload(t *testing.T) {
 	})
 }
 
-func partsFromArgs(t *testing.T, args ...string) *flagparse.Parts {
+func partsFromArgs(t *testing.T, args ...string) *sendFlags {
 	t.Helper()
 	var p flagparse.Parts
 	fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
@@ -356,7 +367,7 @@ func partsFromArgs(t *testing.T, args ...string) *flagparse.Parts {
 	if err := fs.Parse(args); err != nil {
 		t.Fatalf("fs.Parse(%v) error = %v", args, err)
 	}
-	return &p
+	return &sendFlags{parts: p}
 }
 
 func TestSendStreaming(t *testing.T) {
@@ -422,6 +433,30 @@ func TestSendStreaming(t *testing.T) {
 	}
 }
 
+func TestSendStreamingFallbackUsesDefaultPoller(t *testing.T) {
+	t.Parallel()
+	nonStreamingURL := startTestServerWith(t, a2a.AgentCapabilities{Streaming: false})
+
+	out, err := runCMDWithConfig(t, deps{cfgLoader: clicfg.LoadEmpty},
+		"send", "-a", nonStreamingURL, "-o", "json", "--stream", "stream me", "--polling-interval", "5ms")
+	if err != nil {
+		t.Fatalf("runCMDWithConfig() error = %v", err)
+	}
+
+	dec := json.NewDecoder(strings.NewReader(out))
+	events := 0
+	for dec.More() {
+		var sr a2a.StreamResponse
+		if err := dec.Decode(&sr); err != nil {
+			t.Fatalf("json.Decode(event %d) error = %v", events, err)
+		}
+		events++
+	}
+	if events == 0 {
+		t.Fatalf("send --stream via default poller produced %d events, want > 0", events)
+	}
+}
+
 func TestGetTask(t *testing.T) {
 	t.Parallel()
 	url := startTestServer(t)
@@ -469,16 +504,21 @@ func TestGetTask(t *testing.T) {
 func TestServe_ModeValidation(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
-		name string
-		args []string
+		name           string
+		args           []string
+		wantErrContain string
 	}{
-		{"no mode", []string{"serve"}},
-		{"multiple modes", []string{"serve", "--echo", "--exec", "cat"}},
+		{"no mode", []string{"server"}, "specify --echo, --proxy <url>, or --exec"},
+		{"multiple modes", []string{"server", "--echo", "--exec", "cat"}, "mutually exclusive"},
 	} {
 		t.Run(tt.name+" fails", func(t *testing.T) {
 			t.Parallel()
-			if _, err := runCMD(t, tt.args...); err == nil {
-				t.Fatal("expected error")
+			_, err := runCMD(t, tt.args...)
+			if err == nil {
+				t.Fatalf("runCMD(%v) error = nil, want error containing %q", tt.args, tt.wantErrContain)
+			}
+			if !strings.Contains(err.Error(), tt.wantErrContain) {
+				t.Fatalf("runCMD(%v) error = %v, want error containing %q", tt.args, err, tt.wantErrContain)
 			}
 		})
 	}
