@@ -15,11 +15,11 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
 
+	"github.com/a2aproject/a2a-cli/internal/utils"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 )
 
@@ -29,19 +29,14 @@ func newTaskSubscribeCmd(cfg *globalConfig) *cobra.Command {
 		Short: "Subscribe to task events",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, cancel := context.WithTimeout(cmd.Context(), cfg.timeout)
-			defer cancel()
-			ctx = withServiceParams(ctx, cfg)
+			ctx := withServiceParams(cmd.Context(), cfg)
+			ctx, debounceTimeout := utils.WithInactivityTimeout(ctx, cfg.timeout)
 
 			client, err := newAgentClient(ctx, cfg)
 			if err != nil {
 				return fmt.Errorf("failed to create a client: %w", err)
 			}
-			defer func() {
-				if err := client.Destroy(); err != nil {
-					cfg.logf("failed to destroy client: %v", err)
-				}
-			}()
+			defer destroyClient(cfg, client)
 
 			cfg.logf("subscribing to task %s", args[0])
 
@@ -49,8 +44,9 @@ func newTaskSubscribeCmd(cfg *globalConfig) *cobra.Command {
 				ID:     a2a.TaskID(args[0]),
 				Tenant: cfg.tenant,
 			}) {
+				debounceTimeout()
 				if err != nil {
-					return fmt.Errorf("subscription error: %w", err)
+					return utils.UnpackCause(ctx, err)
 				}
 				if err := cfg.PrintEvent(event); err != nil {
 					return fmt.Errorf("failed to print event: %w", err)

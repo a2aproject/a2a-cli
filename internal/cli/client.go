@@ -139,3 +139,9 @@ func withServiceParams(ctx context.Context, cfg *globalConfig) context.Context {
 	}
 	return ctx
 }
+
+func destroyClient(cfg *globalConfig, client *a2aclient.Client) {
+	if err := client.Destroy(); err != nil {
+		cfg.logf("failed to destroy client: %v", err)
+	}
+}
