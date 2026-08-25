@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 )
@@ -49,23 +50,27 @@ func createAgentCard(cfg CardParams) (*a2a.AgentCard, error) {
 	if cfg.AgentName != "" {
 		name = cfg.AgentName
 	}
-	var url string
-	if cfg.AdvertiseAddress != "" {
-		url = cfg.AdvertiseAddress
-	} else if cfg.Transport == a2a.TransportProtocolGRPC {
-		url = "127.0.0.1"
-	} else {
-		url = "http://127.0.0.1"
-	}
+
 	return &a2a.AgentCard{
 		Name:                name,
 		Description:         cfg.AgentDesc,
 		Version:             "1.0.0",
 		Capabilities:        a2a.AgentCapabilities{Streaming: true},
-		SupportedInterfaces: []*a2a.AgentInterface{a2a.NewAgentInterface(url, cfg.Transport)},
+		SupportedInterfaces: []*a2a.AgentInterface{getAgentInterface(cfg)},
 		// defaultInputModes, defaultOutputModes and skills are REQUIRED in the proto.
 		DefaultInputModes:  []string{"text"},
 		DefaultOutputModes: []string{"text"},
 		Skills:             []a2a.AgentSkill{},
 	}, nil
+}
+
+func getAgentInterface(cfg CardParams) *a2a.AgentInterface {
+	addr := cfg.AdvertiseAddress
+	if addr == "" {
+		addr = "127.0.0.1"
+	}
+	if cfg.Transport != a2a.TransportProtocolGRPC && !strings.Contains(addr, "://") {
+		addr = "http://" + addr
+	}
+	return a2a.NewAgentInterface(addr, cfg.Transport)
 }

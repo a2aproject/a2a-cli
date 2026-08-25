@@ -37,39 +37,40 @@ func ProxyLogInterceptorOption() a2aclient.FactoryOption {
 
 // ServeProxy runs a local A2A server that forwards every request to the given
 // upstream client, exposing the resolved (or supplied) agent card.
-func ServeProxy(ctx context.Context, sc Config, svcParams *flagparse.ServiceParams, client *a2aclient.Client, tenant string) error {
-	var card *a2a.AgentCard
-	if sc.CardPath != "" {
-		localCard, err := createAgentCard(sc.CardParams)
-		if err != nil {
-			return err
-		}
-		card = localCard
-	} else if clientCard := client.Card(); card != nil {
-		card = clientCard
-	} else {
-		extendedCard, err := client.GetExtendedAgentCard(ctx, &a2a.GetExtendedAgentCardRequest{Tenant: tenant})
-		if err != nil {
-			return fmt.Errorf("resolving upstream agent card: %w", err)
-		}
-		card = deriveProxyCard(extendedCard, sc.AdvertiseAddress, sc.Transport)
+func ServeProxy(ctx context.Context, cfg Config, svcParams *flagparse.ServiceParams, client *a2aclient.Client, tenant string) error {
+	card, err := resolveProxyCard(ctx, cfg, client, tenant)
+	if err != nil {
+		return err
 	}
 
 	handler := &proxyHandler{client: client, svcParams: svcParams}
 
-	if !sc.Quiet {
+	if !cfg.Quiet {
 		fmt.Fprintf(os.Stderr, "Proxying to %q agent\n", card.Name)
 	}
 
-	sc.Logger("proxy mode, transport=%s protocol=%s", sc.Transport, sc.ProtocolVersion)
+	cfg.Logger("proxy mode, transport=%s protocol=%s", cfg.Transport, cfg.ProtocolVersion)
 
-	return serve(ctx, sc, handler, card)
+	return serve(ctx, cfg, handler, card)
 }
 
-func deriveProxyCard(upstream *a2a.AgentCard, addr string, proto a2a.TransportProtocol) *a2a.AgentCard {
-	card := *upstream
-	card.SupportedInterfaces = []*a2a.AgentInterface{a2a.NewAgentInterface(addr, proto)}
-	return &card
+func resolveProxyCard(ctx context.Context, cfg Config, client *a2aclient.Client, tenant string) (*a2a.AgentCard, error) {
+	if cfg.CardPath != "" {
+		return createAgentCard(cfg.CardParams)
+	}
+
+	upstream := client.Card()
+	if upstream == nil {
+		fetched, err := client.GetExtendedAgentCard(ctx, &a2a.GetExtendedAgentCardRequest{Tenant: tenant})
+		if err != nil {
+			return nil, fmt.Errorf("resolving upstream agent card: %w", err)
+		}
+		upstream = fetched
+	}
+
+	cardCopy := *upstream
+	cardCopy.SupportedInterfaces = []*a2a.AgentInterface{getAgentInterface(cfg.CardParams)}
+	return &cardCopy, nil
 }
 
 type proxyHandler struct {

@@ -18,6 +18,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -76,6 +78,53 @@ func TestLoadOrBuildCard_RequiredListFieldsNotNull(t *testing.T) {
 				t.Errorf("marshaled card key %q is %T; REQUIRED field must be a JSON array", key, val)
 			}
 		}
+	}
+}
+
+func TestCreateAgentCard_InterfaceURLScheme(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		params  CardParams
+		wantURL string
+	}{
+		{
+			name:    "rest defaults",
+			params:  CardParams{Transport: a2a.TransportProtocolHTTPJSON},
+			wantURL: "http://127.0.0.1",
+		},
+		{
+			name:    "rest without scheme",
+			params:  CardParams{Transport: a2a.TransportProtocolHTTPJSON, AdvertiseAddress: "127.0.0.1:9199"},
+			wantURL: "http://127.0.0.1:9199",
+		},
+		{
+			name:    "rest with scheme",
+			params:  CardParams{Transport: a2a.TransportProtocolHTTPJSON, AdvertiseAddress: "https://agents.com"},
+			wantURL: "https://agents.com",
+		},
+		{
+			name:    "grpc stays schemeless",
+			params:  CardParams{Transport: a2a.TransportProtocolGRPC, AdvertiseAddress: "127.0.0.1:9199"},
+			wantURL: "127.0.0.1:9199",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			card, err := createAgentCard(tc.params)
+			if err != nil {
+				t.Fatalf("createAgentCard() error = %v", err)
+			}
+			if len(card.SupportedInterfaces) != 1 {
+				t.Fatalf("createAgentCard() interfaces = %d, want 1", len(card.SupportedInterfaces))
+			}
+			if got := card.SupportedInterfaces[0].URL; got != tc.wantURL {
+				t.Fatalf("createAgentCard() interface URL = %q, want %q", got, tc.wantURL)
+			}
+		})
 	}
 }
 
@@ -204,12 +253,73 @@ func TestSplitByDelimiter(t *testing.T) {
 	}
 }
 
+func TestResolveProxyCard(t *testing.T) {
+	t.Parallel()
+
+	client := startTestServer(t, "Upstream Agent", NewEchoExecutor(), a2a.AgentCapabilities{})
+
+	path := filepath.Join(t.TempDir(), "card.json")
+	card, err := createAgentCard(CardParams{AgentName: "Custom"})
+	if err != nil {
+		t.Fatalf("createAgentCard() error = %v", err)
+	}
+	cardBytes, err := json.Marshal(card)
+	if err := os.WriteFile(path, cardBytes, 0o644); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	testCases := []struct {
+		name          string
+		params        CardParams
+		wantAddress   string
+		wantAgentName string
+	}{
+		{
+			name:          "reuses upstream card",
+			params:        CardParams{Transport: a2a.TransportProtocolHTTPJSON, AdvertiseAddress: "127.0.0.1:4242"},
+			wantAddress:   "http://127.0.0.1:4242",
+			wantAgentName: "Upstream Agent",
+		},
+		{
+			name:          "serves a custom card",
+			params:        CardParams{CardPath: path, Transport: a2a.TransportProtocolHTTPJSON},
+			wantAddress:   "http://127.0.0.1",
+			wantAgentName: "Custom",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			card, err := resolveProxyCard(t.Context(), Config{CardParams: tc.params}, client, "")
+			if err != nil {
+				t.Fatalf("resolveProxyCard() error = %v, want nil", err)
+			}
+			if card.Name != tc.wantAgentName {
+				t.Errorf("resolveProxyCard() card.Name = %q, want %q", card.Name, "Upstream Agent")
+			}
+			if len(card.SupportedInterfaces) != 1 {
+				t.Fatalf("resolveProxyCard() len(card.SupportedInterfaces) = %d, want 1", len(card.SupportedInterfaces))
+			}
+			gotAddress := card.SupportedInterfaces[0].URL
+			if card.SupportedInterfaces[0].URL != tc.wantAddress {
+				t.Errorf("resolveProxyCard() address = %q, want %q", gotAddress, tc.wantAddress)
+			}
+		})
+	}
+}
+
 func startExecTestServer(t *testing.T, command, chunk string) *a2aclient.Client {
+	t.Helper()
+	executor := newExecExecutor(command, chunk)
+	streaming := chunk != ""
+	return startTestServer(t, "Exec Test", executor, a2a.AgentCapabilities{Streaming: streaming})
+}
+
+func startTestServer(t *testing.T, name string, executor a2asrv.AgentExecutor, capabilities a2a.AgentCapabilities) *a2aclient.Client {
 	t.Helper()
 	ctx := t.Context()
 
-	executor := newExecExecutor(command, chunk)
-	streaming := chunk != ""
 	handler := a2asrv.NewHandler(executor)
 
 	mux := http.NewServeMux()
@@ -217,12 +327,12 @@ func startExecTestServer(t *testing.T, command, chunk string) *a2aclient.Client 
 	t.Cleanup(server.Close)
 
 	card := &a2a.AgentCard{
-		Name:    "Exec Test",
+		Name:    name,
 		Version: "1.0.0",
 		SupportedInterfaces: []*a2a.AgentInterface{
 			a2a.NewAgentInterface(server.URL, a2a.TransportProtocolHTTPJSON),
 		},
-		Capabilities: a2a.AgentCapabilities{Streaming: streaming},
+		Capabilities: capabilities,
 	}
 	mux.Handle(a2asrv.WellKnownAgentCardPath, a2asrv.NewStaticAgentCardHandler(card))
 	mux.Handle("/", a2asrv.NewRESTHandler(handler))
