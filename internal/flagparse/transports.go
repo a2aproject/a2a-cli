@@ -46,7 +46,7 @@ func SingleTransport(ss []string) (a2a.TransportProtocol, error) {
 		return "", err
 	}
 	if len(protos) != 1 {
-		return "", fmt.Errorf("--url requires exactly one --transport (rest, jsonrpc, or grpc)")
+		return "", fmt.Errorf("exactly one --transport is required (rest, jsonrpc, or grpc)")
 	}
 	return protos[0], nil
 }
