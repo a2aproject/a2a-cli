@@ -82,6 +82,8 @@ func Execute() int {
 }
 
 func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
+	deps.setDefaults()
+
 	cmd := &cobra.Command{
 		Use:           "a2a",
 		Short:         "CLI for the Agent-to-Agent protocol",
@@ -89,8 +91,6 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			deps.setDefaults()
-
 			store, err := deps.cfgLoader(clicfg.LoadOpts{ConfigPath: cfg.configPath})
 			if err != nil {
 				return err
