@@ -45,7 +45,7 @@ func WithInactivityTimeout(parent context.Context, d time.Duration) (context.Con
 				timer.Reset(d)
 
 			case <-timer.C:
-				cancel(fmt.Errorf("no activity for %v", d.sho))
+				cancel(fmt.Errorf("no activity for %v", d))
 				return
 			}
 		}

@@ -37,12 +37,16 @@ func newCardGetCmd(cfg *globalConfig) *cobra.Command {
 			ctx, cancel := context.WithTimeout(ctx, cfg.timeout)
 			defer cancel()
 
+			if len(args) == 1 {
+				cfg.agentCard = args[0]
+			}
+
 			var card *a2a.AgentCard
 			var err error
 			if extended {
 				card, err = getExtendedAgentCard(ctx, cfg)
 			} else {
-				card, err = getPublicAgentCard(ctx, cfg, args)
+				card, err = getPublicAgentCard(ctx, cfg)
 			}
 			if err != nil {
 				return err
@@ -65,11 +69,7 @@ func getExtendedAgentCard(ctx context.Context, cfg *globalConfig) (*a2a.AgentCar
 	if err != nil {
 		return nil, fmt.Errorf("failed to create a client: %w", err)
 	}
-	defer func() {
-		if err := client.Destroy(); err != nil {
-			cfg.logf("failed to destroy client: %v", err)
-		}
-	}()
+	defer destroyClient(cfg, client)
 
 	card, err := client.GetExtendedAgentCard(ctx, &a2a.GetExtendedAgentCardRequest{Tenant: cfg.tenant})
 	if err != nil {
@@ -78,11 +78,8 @@ func getExtendedAgentCard(ctx context.Context, cfg *globalConfig) (*a2a.AgentCar
 	return card, nil
 }
 
-func getPublicAgentCard(ctx context.Context, cfg *globalConfig, args []string) (*a2a.AgentCard, error) {
+func getPublicAgentCard(ctx context.Context, cfg *globalConfig) (*a2a.AgentCard, error) {
 	ref := cfg.agentCard
-	if len(args) == 1 {
-		ref = args[0]
-	}
 	if ref == "" {
 		return nil, fmt.Errorf("specify the agent card URL as an argument or with --agent-card")
 	}
