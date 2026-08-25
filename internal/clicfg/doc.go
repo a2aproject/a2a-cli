@@ -12,6 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package config resolves a2a-cli configuration from environment variables and
-// .env (dotenv) files.
+// Package clicfg resolves a2a-cli configuration from environment variables
+// and .env (dotenv) files.
 package clicfg
