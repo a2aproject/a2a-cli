@@ -32,9 +32,13 @@ jobs:
 
     - name: Build
       run: go build -mod=readonly -v ./...
+      env:
+        CGO_ENABLED: "1"
 
     - name: Test
       run: go test -race -mod=readonly -v -count=1 -shuffle=on ./...
+      env:
+        CGO_ENABLED: "1"
 
   lint:
     runs-on: ubuntu-latest

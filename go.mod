@@ -1,6 +1,6 @@
 module github.com/a2aproject/a2a-cli
 
-go 1.25.0
+go 1.25.2
 
 require (
 	github.com/a2aproject/a2a-go v0.3.15
@@ -13,6 +13,8 @@ require (
 )
 
 require (
+	github.com/agntcy/slim-a2a-go v0.3.0
+	github.com/agntcy/slim-bindings-go/v2 v2.1.1
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	golang.org/x/mod v0.35.0 // indirect
@@ -24,3 +26,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260427160629-7cedc36a6bc4 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
+
+replace github.com/agntcy/slim-a2a-go => /Users/sambetts/Work/src/github.com/agntcy/slim-a2a-go

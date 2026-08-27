@@ -46,7 +46,7 @@ func SingleTransport(ss []string) (a2a.TransportProtocol, error) {
 		return "", err
 	}
 	if len(protos) != 1 {
-		return "", fmt.Errorf("exactly one --transport is required (rest, jsonrpc, or grpc)")
+		return "", fmt.Errorf("exactly one --transport is required (rest, jsonrpc, grpc, or slimrpc)")
 	}
 	return protos[0], nil
 }
@@ -59,7 +59,9 @@ func parseTransport(s string) (a2a.TransportProtocol, error) {
 		return a2a.TransportProtocolJSONRPC, nil
 	case "grpc":
 		return a2a.TransportProtocolGRPC, nil
+	case "slimrpc":
+		return a2a.TransportProtocol("slimrpc"), nil
 	default:
-		return "", fmt.Errorf("unknown transport %q (use rest, jsonrpc, or grpc)", s)
+		return "", fmt.Errorf("unknown transport %q (use rest, jsonrpc, grpc, or slimrpc)", s)
 	}
 }

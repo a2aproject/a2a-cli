@@ -56,6 +56,14 @@ type globalConfig struct {
 	insecureGRPC bool
 	configPath   string
 
+	// SLIM RPC transport options (only used when --transport slimrpc)
+	slimEndpoint                        string
+	slimLocalName                       string
+	slimIdentityProviderType            string
+	slimIdentityProviderSharedSecret    string
+	slimIdentityVerifierType            string
+	slimIdentityVerifierSharedSecret    string
+
 	bindings []clicfg.FlagBinding
 
 	*output.Printer
@@ -122,6 +130,12 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 	pf.BoolVarP(&cfg.verbose, "verbose", "v", false, "Verbose output to stderr")
 	pf.BoolVar(&cfg.insecureGRPC, "insecure", false, "Use insecure (plaintext) gRPC transport credentials")
 	pf.StringVar(&cfg.configPath, "config", "", "Load configuration from an explicit .env file in place of the local .env")
+	pf.StringVar(&cfg.slimEndpoint, "slim-endpoint", "http://127.0.0.1:46357", "SLIM node endpoint (used with --transport slimrpc)")
+	pf.StringVar(&cfg.slimLocalName, "slim-local-name", "agntcy/a2a-cli/client", "Local SLIM identity name org/namespace/app (used with --transport slimrpc)")
+	pf.StringVar(&cfg.slimIdentityProviderType, "slim-identity-provider-type", "", "SLIM identity provider type: sharedSecret (required with --transport slimrpc)")
+	pf.StringVar(&cfg.slimIdentityProviderSharedSecret, "slim-identity-provider-shared-secret", "", "Shared secret for the SLIM identity provider (used when --slim-identity-provider-type=sharedSecret)")
+	pf.StringVar(&cfg.slimIdentityVerifierType, "slim-identity-verifier-type", "", "SLIM identity verifier type: sharedSecret (required with --transport slimrpc)")
+	pf.StringVar(&cfg.slimIdentityVerifierSharedSecret, "slim-identity-verifier-shared-secret", "", "Shared secret for the SLIM identity verifier (used when --slim-identity-verifier-type=sharedSecret)")
 
 	cmd.AddCommand(
 		newCardCmd(cfg),
