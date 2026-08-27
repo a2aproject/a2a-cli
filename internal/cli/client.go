@@ -66,8 +66,13 @@ func newClientFromEndpoint(ctx context.Context, cfg *globalConfig, ref string, e
 	}
 	cfg.logf("connecting directly to %s via %s (skipping card resolution)", endpointURL, protocol)
 
+	factoryOpts, err := clientFactoryOpts(cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	endpoint := a2a.NewAgentInterface(endpointURL, protocol)
-	client, err := a2aclient.NewFromEndpoints(ctx, []*a2a.AgentInterface{endpoint}, append(clientFactoryOpts(cfg), extraOpts...)...)
+	client, err := a2aclient.NewFromEndpoints(ctx, []*a2a.AgentInterface{endpoint}, append(factoryOpts, extraOpts...)...)
 	return client, hintInsecure(err)
 }
 
@@ -90,7 +95,11 @@ func newClientFromCard(ctx context.Context, cfg *globalConfig, ref string, extra
 		return nil, fmt.Errorf("resolving agent card: %w", err)
 	}
 
-	factoryOpts := append(clientFactoryOpts(cfg), extraOpts...)
+	factoryOpts, err := clientFactoryOpts(cfg)
+	if err != nil {
+		return nil, err
+	}
+	factoryOpts = append(factoryOpts, extraOpts...)
 	if len(protos) > 0 {
 		factoryOpts = append(factoryOpts, a2aclient.WithConfig(a2aclient.Config{PreferredTransports: protos}))
 	}
@@ -107,8 +116,8 @@ func hintInsecure(err error) error {
 	return err
 }
 
-func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
-	factoryOpts := []a2aclient.FactoryOption{
+func clientFactoryOpts(cfg *globalConfig) ([]a2aclient.FactoryOption, error) {
+	opts := []a2aclient.FactoryOption{
 		a2av0.WithRESTTransport(a2av0.RESTTransportConfig{}),
 		a2av0.WithJSONRPCTransport(a2av0.JSONRPCTransportConfig{}),
 	}
@@ -116,12 +125,23 @@ func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
 	if cfg.insecureGRPC {
 		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
-	factoryOpts = append(factoryOpts,
+	opts = append(opts,
 		a2agrpcv0.WithGRPCTransport(grpcOpts...),
 		a2agrpc.WithGRPCTransport(grpcOpts...),
 	)
-	return factoryOpts
+	for _, t := range cfg.transports {
+		if strings.EqualFold(t, "slimrpc") {
+			slimOpt, err := withSLIMRPCTransport(cfg)
+			if err != nil {
+				return nil, err
+			}
+			opts = append(opts, slimOpt)
+			break
+		}
+	}
+	return opts, nil
 }
+
 
 func stripHTTPScheme(raw string) string {
 	u, err := url.Parse(raw)
