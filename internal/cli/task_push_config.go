@@ -18,17 +18,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newTaskCmd(cfg *globalConfig) *cobra.Command {
+func newTaskPushConfigCmd(cfg *globalConfig) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "task",
-		Short: "Work with tasks",
+		Use:     "push-config",
+		Aliases: []string{"push"},
+		Short:   "Manage task push-notification configurations",
 	}
 	cmd.AddCommand(
-		newTaskGetCmd(cfg),
-		newTaskListCmd(cfg),
-		newTaskCancelCmd(cfg),
-		newTaskSubscribeCmd(cfg),
-		newTaskPushConfigCmd(cfg),
+		newPushConfigCreateCmd(cfg),
+		newPushConfigGetCmd(cfg),
+		newPushConfigListCmd(cfg),
+		newPushConfigDeleteCmd(cfg),
 	)
 	return cmd
 }
