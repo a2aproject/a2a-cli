@@ -438,7 +438,7 @@ func TestSendStreamingFallbackUsesDefaultPoller(t *testing.T) {
 	nonStreamingURL := startTestServerWith(t, a2a.AgentCapabilities{Streaming: false})
 
 	out, err := runCMDWithConfig(t, deps{cfgLoader: clicfg.LoadEmpty},
-		"send", "-a", nonStreamingURL, "-o", "json", "--stream", "stream me", "--polling-interval", "5ms")
+		"send", "-a", nonStreamingURL, "-o", "json", "--stream", "stream me", "--poll-interval", "5ms")
 	if err != nil {
 		t.Fatalf("runCMDWithConfig() error = %v", err)
 	}
@@ -454,6 +454,108 @@ func TestSendStreamingFallbackUsesDefaultPoller(t *testing.T) {
 	}
 	if events == 0 {
 		t.Fatalf("send --stream via default poller produced %d events, want > 0", events)
+	}
+}
+
+func TestSend_ResumeHintForInputRequiredTask(t *testing.T) {
+	t.Parallel()
+
+	var taskID a2a.TaskID
+	server := httptest.NewServer(a2asrv.NewRESTHandler(a2asrv.NewHandler(
+		a2asrv.AgentExecutorFunc(func(ctx context.Context, ec *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
+			return func(yield func(a2a.Event, error) bool) {
+				taskID = ec.TaskID
+				task := &a2a.Task{
+					ID:        ec.TaskID,
+					ContextID: ec.ContextID,
+					Status:    a2a.TaskStatus{State: a2a.TaskStateInputRequired},
+				}
+				yield(task, nil)
+			}
+		}),
+	)))
+	t.Cleanup(server.Close)
+
+	out := mustRunCMD(t, "send", "-e", server.URL, "--transport", "rest", "hello")
+	if !strings.Contains(out, "a2a send --task-id "+string(taskID)) {
+		t.Fatalf("send text output missing the resume hint:\n%s", out)
+	}
+}
+
+func TestSendWithVersionSelector(t *testing.T) {
+	t.Parallel()
+	url := startTestServer(t)
+	legacyURL := startLegacyTestServer(t)
+
+	testCases := []struct {
+		name    string
+		connect []string
+		version string
+		wantErr bool
+	}{
+		{
+			name:    "new server success",
+			connect: []string{"-a", url},
+			version: "1.0",
+		},
+		{
+			name:    "old server success",
+			connect: []string{"-a", legacyURL},
+			version: "0.3",
+		},
+		{
+			name:    "new server direct success",
+			connect: []string{"-e", url, "--transport", "rest"},
+			version: "1.0",
+		},
+		{
+			name:    "old server direct success",
+			connect: []string{"-e", legacyURL, "--transport", "jsonrpc"},
+			version: "0.3",
+		},
+		{
+			name:    "new server failure",
+			connect: []string{"-a", url},
+			version: "0.3",
+			wantErr: true,
+		},
+		{
+			name:    "new server direct failure",
+			connect: []string{"-e", url, "--transport", "rest"},
+			version: "0.3",
+			wantErr: true,
+		},
+		{
+			name:    "old server failure",
+			connect: []string{"-a", legacyURL},
+			version: "1.0",
+			wantErr: true,
+		},
+		{
+			name:    "old server direct failure",
+			connect: []string{"-e", legacyURL, "--transport", "jsonrpc"},
+			version: "1.0",
+			wantErr: true,
+		},
+		{
+			name:    "unknown version failure",
+			connect: []string{"-e", url},
+			version: "3.0",
+			wantErr: true,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			command := []string{"send", "--a2a-version", tc.version, "-o", "json", "hi"}
+			command = append(command, tc.connect...)
+			_, err := runCMD(t, command...)
+			if err != nil && !tc.wantErr {
+				t.Fatalf("send error = %v", err)
+			}
+			if err == nil && tc.wantErr {
+				t.Fatal("send error = nil, wanted a failure")
+			}
+		})
 	}
 }
 

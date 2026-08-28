@@ -78,7 +78,7 @@ func (p *Printer) PrintTask(task *a2a.Task) error {
 	if p.Mode == ModeJson {
 		return p.PrintJSON(task)
 	}
-	_, err := io.WriteString(p.Out, formatTask(task))
+	_, err := io.WriteString(p.Out, formatTask(task)+formatResumeHint(task))
 	return err
 }
 
@@ -121,7 +121,7 @@ func (p *Printer) PrintSendResult(result a2a.SendMessageResult) error {
 	}
 	switch r := result.(type) {
 	case *a2a.Task:
-		_, err := io.WriteString(p.Out, formatTask(r))
+		_, err := io.WriteString(p.Out, formatTask(r)+formatResumeHint(r))
 		return err
 	case *a2a.Message:
 		_, err := io.WriteString(p.Out, formatMessage(r))
@@ -204,6 +204,17 @@ func formatTask(task *a2a.Task) string {
 	}
 
 	return sb.String()
+}
+
+// formatResumeHint returns a copy-pasteable command to continue or reply to a task.
+func formatResumeHint(task *a2a.Task) string {
+	if task.ID == "" {
+		return ""
+	}
+	if task.Status.State != a2a.TaskStateInputRequired && task.Status.State != a2a.TaskStateAuthRequired {
+		return ""
+	}
+	return fmt.Sprintf("\n\nResume:     a2a send --task-id %s %q\n", task.ID, "<reply>")
 }
 
 func formatMessage(msg *a2a.Message) string {
