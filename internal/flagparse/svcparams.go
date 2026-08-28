@@ -16,7 +16,6 @@ package flagparse
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/spf13/pflag"
 
@@ -70,15 +69,30 @@ func (s *ServiceParams) Auth() string {
 type svcParamValue struct{ s *ServiceParams }
 
 func (v *svcParamValue) Set(kv string) error {
-	k, val, ok := strings.Cut(kv, "=")
+	k, val, ok := cutServiceParam(kv)
 	if !ok {
-		return fmt.Errorf("expected key=value, got %q", kv)
+		return fmt.Errorf("expected key=value or key:value, got %q", kv)
 	}
 	if k == "" {
 		return fmt.Errorf("empty key in %q", kv)
 	}
 	v.s.entries = append(v.s.entries, serviceParam{key: k, value: val})
 	return nil
+}
+
+// cutServiceParam splits a --svc-param argument on whichever of ':' or '=' comes first.
+func cutServiceParam(kv string) (key, value string, ok bool) {
+	sep := -1
+	for i := 0; i < len(kv); i++ {
+		if kv[i] == ':' || kv[i] == '=' {
+			sep = i
+			break
+		}
+	}
+	if sep < 0 {
+		return "", "", false
+	}
+	return kv[:sep], kv[sep+1:], true
 }
 
 func (v *svcParamValue) String() string { return "" }
