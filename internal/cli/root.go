@@ -55,6 +55,7 @@ type globalConfig struct {
 	timeout      time.Duration
 	verbose      bool
 	insecureGRPC bool
+	pretty       bool
 	configPath   string
 
 	bindings []clicfg.FlagBinding
@@ -108,6 +109,7 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 			default:
 				return fmt.Errorf("invalid --output %q (want text or json)", cfg.output)
 			}
+			cfg.Printer.PrettyJSONL = cfg.pretty
 			return nil
 		},
 	}
@@ -123,6 +125,7 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 	pf.DurationVar(&cfg.timeout, "timeout", 30*time.Second, "Request timeout")
 	pf.BoolVarP(&cfg.verbose, "verbose", "v", false, "Verbose output to stderr")
 	pf.BoolVar(&cfg.insecureGRPC, "insecure", false, "Use insecure (plaintext) gRPC transport credentials")
+	pf.BoolVar(&cfg.pretty, "pretty", false, "Pretty-print (indent) streamed JSONL records instead of emitting one compact object per line")
 	pf.StringVar(&cfg.configPath, "config", "", "Load configuration from an explicit .env file in place of the local .env")
 
 	cmd.AddCommand(

@@ -50,6 +50,8 @@ var taskStateNames = map[a2a.TaskState]string{
 type Printer struct {
 	Out  io.Writer
 	Mode Mode
+	// PrettyJSONL enable JSON indentation for jsonl printing.
+	PrettyJSONL bool
 }
 
 // NewPrinter returns a Printer that writes to out using the given Mode.
@@ -57,7 +59,7 @@ func NewPrinter(out io.Writer, mode Mode) *Printer {
 	return &Printer{Out: out, Mode: mode}
 }
 
-// PrintJSON writes v as indented JSON.
+// PrintJSON writes v as an indented, single JSON document.
 func (p *Printer) PrintJSON(v any) error {
 	enc := json.NewEncoder(p.Out)
 	enc.SetIndent("", "  ")
@@ -82,11 +84,18 @@ func (p *Printer) PrintTask(task *a2a.Task) error {
 	return err
 }
 
-// PrintEvent writes a streaming event in the configured Mode.
+// PrintEvent writes a streaming event in the configured Mode. In json mode each
+// event is emitted as one JSONL record.
 func (p *Printer) PrintEvent(event a2a.Event) error {
 	if p.Mode == ModeJson {
-		return p.PrintJSON(a2a.StreamResponse{Event: event})
+		enc := json.NewEncoder(p.Out)
+		enc.SetEscapeHTML(false)
+		if p.PrettyJSONL {
+			enc.SetIndent("", "  ")
+		}
+		return enc.Encode(a2a.StreamResponse{Event: event})
 	}
+
 	var s string
 	switch e := event.(type) {
 	case *a2a.TaskStatusUpdateEvent:
@@ -117,8 +126,9 @@ func (p *Printer) PrintEvent(event a2a.Event) error {
 // PrintSendResult writes the result of a send-message call in the configured Mode.
 func (p *Printer) PrintSendResult(result a2a.SendMessageResult) error {
 	if p.Mode == ModeJson {
-		return p.PrintJSON(result)
+		return p.PrintJSON(a2a.StreamResponse{Event: result})
 	}
+
 	switch r := result.(type) {
 	case *a2a.Task:
 		_, err := io.WriteString(p.Out, formatTask(r)+formatResumeHint(r))
@@ -127,7 +137,7 @@ func (p *Printer) PrintSendResult(result a2a.SendMessageResult) error {
 		_, err := io.WriteString(p.Out, formatMessage(r))
 		return err
 	}
-	return nil
+	return fmt.Errorf("unexpected send result type %T", result)
 }
 
 // PrintTaskList writes a list of tasks in the configured Mode.

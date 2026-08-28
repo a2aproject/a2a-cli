@@ -227,11 +227,8 @@ func TestSend(t *testing.T) {
 				if err != nil {
 					t.Fatalf("runCMD(%q) error = %v", strings.Join(tt.args(mode.url), " "), err)
 				}
-				var task a2a.Task
-				if err := json.Unmarshal([]byte(out), &task); err != nil {
-					t.Fatalf("json.Unmarshal() error = %v", err)
-				}
-				if text := testutil.AllArtifactText(&task); text != tt.wantText {
+				task := mustDecodeTask(t, out)
+				if text := testutil.AllArtifactText(task); text != tt.wantText {
 					t.Fatalf("allArtifactText() = %q, want %q", text, tt.wantText)
 				}
 			})
@@ -249,11 +246,8 @@ func TestSendDataPart(t *testing.T) {
 	}
 
 	out := mustRunCMD(t, "send", "-a", url, "-o", "json", "--data-part", path)
-	var task a2a.Task
-	if err := json.Unmarshal([]byte(out), &task); err != nil {
-		t.Fatalf("json.Unmarshal(send --data-part output) error = %v", err)
-	}
-	if got := testutil.AllArtifactText(&task); got != `{"hello":"world"}` {
+	task := mustDecodeTask(t, out)
+	if got := testutil.AllArtifactText(task); got != `{"hello":"world"}` {
 		t.Fatalf("allArtifactText() = %q, want %q", got, `{"hello":"world"}`)
 	}
 }
@@ -268,11 +262,8 @@ func TestSendRequestPayloadFile(t *testing.T) {
 	}
 
 	out := mustRunCMD(t, "send", "-a", url, "-o", "json", "--request-payload", path)
-	var task a2a.Task
-	if err := json.Unmarshal([]byte(out), &task); err != nil {
-		t.Fatalf("json.Unmarshal(send --request-payload output) error = %v", err)
-	}
-	if got := testutil.AllArtifactText(&task); got != "from file" {
+	task := mustDecodeTask(t, out)
+	if got := testutil.AllArtifactText(task); got != "from file" {
 		t.Fatalf("allArtifactText() = %q, want %q", got, "from file")
 	}
 }
@@ -431,6 +422,55 @@ func TestSendStreaming(t *testing.T) {
 			t.Fatalf("fallback to poller = %v, want the opposite", fallbackToPoller)
 		}
 	}
+}
+
+func TestSendStreamJSONL(t *testing.T) {
+	t.Parallel()
+	url := startTestServer(t)
+
+	testCases := []struct {
+		name              string
+		flags             []string
+		wantObjectPerLine bool
+	}{
+		{
+			name:              "compact one object per line",
+			flags:             []string{"-a", url, "-o", "json", "--stream"},
+			wantObjectPerLine: true,
+		},
+		{
+			name:              "indented objects when pretty",
+			flags:             []string{"-a", url, "-o", "json", "--stream", "--pretty"},
+			wantObjectPerLine: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			command := append([]string{"send", "stream me"}, tc.flags...)
+			out := mustRunCMD(t, command...)
+			lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+			if len(lines) == 0 {
+				t.Fatalf("send --stream produced no JSONL lines")
+			}
+			objectPerLine := true
+			for i, line := range lines {
+				var sr a2a.StreamResponse
+				if err := json.Unmarshal([]byte(line), &sr); err != nil {
+					if tc.wantObjectPerLine {
+						t.Fatalf("JSONL line %d is not an independently parseable object: %v\nline: %s", i, err, line)
+					}
+					objectPerLine = false
+					break
+				}
+			}
+			if objectPerLine && !tc.wantObjectPerLine {
+				t.Fatalf("all outputs lines contained a well-formed a2a.StreamResponse:\n%s", out)
+			}
+		})
+	}
+
 }
 
 func TestSendStreamingFallbackUsesDefaultPoller(t *testing.T) {
@@ -733,6 +773,19 @@ func startLegacyTestServer(t *testing.T) string {
 	}))
 
 	return server.URL
+}
+
+func mustDecodeTask(t *testing.T, out string) *a2a.Task {
+	t.Helper()
+	var resp a2a.StreamResponse
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v\noutput: %s", err, out)
+	}
+	task, ok := resp.Event.(*a2a.Task)
+	if !ok {
+		t.Fatalf("send output has no task wrapper: %s", out)
+	}
+	return task
 }
 
 func sendTestMessage(t *testing.T, url, text string) a2a.TaskID {
