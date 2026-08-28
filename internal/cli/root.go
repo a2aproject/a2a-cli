@@ -50,7 +50,6 @@ type globalConfig struct {
 	url          string
 	transports   []string
 	svcParams    *flagparse.ServiceParams
-	bearer       string
 	a2aVersion   string
 	tenant       string
 	timeout      time.Duration
