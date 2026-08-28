@@ -42,12 +42,12 @@ var compatCardResolver = func() *agentcard.Resolver {
 
 func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
 	switch {
-	case cfg.url != "" && cfg.agentCard != "":
+	case cfg.url != "" && cfg.agentCard.IsSet():
 		return nil, fmt.Errorf("--endpoint and --agent-card are mutually exclusive")
 	case cfg.url != "":
 		return newClientFromEndpoint(ctx, cfg, cfg.url, extraOpts...)
-	case cfg.agentCard != "":
-		return newClientFromCard(ctx, cfg, cfg.agentCard, extraOpts...)
+	case cfg.agentCard.IsSet():
+		return newClientFromCard(ctx, cfg, cfg.agentCard.URL(), extraOpts...)
 	default:
 		return nil, fmt.Errorf("either '--agent-card <ref>' or '--endpoint <url> --transport <t>' must be provided")
 	}

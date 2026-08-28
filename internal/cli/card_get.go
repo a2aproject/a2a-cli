@@ -38,7 +38,9 @@ func newCardGetCmd(cfg *globalConfig) *cobra.Command {
 			defer cancel()
 
 			if len(args) == 1 {
-				cfg.agentCard = args[0]
+				if err := cfg.agentCard.Set(args[0]); err != nil {
+					return err
+				}
 			}
 
 			var card *a2a.AgentCard
@@ -79,10 +81,10 @@ func getExtendedAgentCard(ctx context.Context, cfg *globalConfig) (*a2a.AgentCar
 }
 
 func getPublicAgentCard(ctx context.Context, cfg *globalConfig) (*a2a.AgentCard, error) {
-	ref := cfg.agentCard
-	if ref == "" {
+	if !cfg.agentCard.IsSet() {
 		return nil, fmt.Errorf("specify the agent card URL as an argument or with --agent-card")
 	}
+	ref := cfg.agentCard.URL()
 
 	var resolveOpts []agentcard.ResolveOption
 	if auth := cfg.svcParams.Auth(); auth != "" {
@@ -90,7 +92,6 @@ func getPublicAgentCard(ctx context.Context, cfg *globalConfig) (*a2a.AgentCard,
 	}
 	cfg.logf("fetching agent card from %s", ref)
 
-	var err error
 	card, err := compatCardResolver.Resolve(ctx, ref, resolveOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve agent card: %w", err)

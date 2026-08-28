@@ -18,8 +18,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -356,13 +354,5 @@ func mustWriteTmpCardFile(t *testing.T, params CardParams) string {
 	if err != nil {
 		t.Fatalf("createAgentCard(%v) error = %v", params, err)
 	}
-	cardBytes, err := json.Marshal(card)
-	if err != nil {
-		t.Fatalf("json.Marshal(card) error = %v", err)
-	}
-	path := filepath.Join(t.TempDir(), "card.json")
-	if err := os.WriteFile(path, cardBytes, os.ModePerm); err != nil {
-		t.Fatalf("os.WriteFile() error = %v", err)
-	}
-	return path
+	return testutil.MustWriteTmpCardFile(t, card)
 }
