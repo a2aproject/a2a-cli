@@ -282,11 +282,8 @@ func TestSend_AgentCardFromFile(t *testing.T) {
 			if err != nil {
 				t.Fatalf("runCMD(%q) error = %v", strings.Join(tt.args, " "), err)
 			}
-			var task a2a.Task
-			if err := json.Unmarshal([]byte(out), &task); err != nil {
-				t.Fatalf("json.Unmarshal() error = %v", err)
-			}
-			if text := testutil.AllArtifactText(&task); text != tt.wantText {
+			task := mustDecodeTask(t, out)
+			if text := testutil.AllArtifactText(task); text != tt.wantText {
 				t.Fatalf("allArtifactText() = %q, want %q", text, tt.wantText)
 			}
 		})
