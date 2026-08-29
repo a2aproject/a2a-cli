@@ -16,7 +16,11 @@
 package testutil
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
+	"testing"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 )
@@ -30,4 +34,19 @@ func AllArtifactText(task *a2a.Task) string {
 		}
 	}
 	return sb.String()
+}
+
+// MustWriteTmpCardFile creates a card.json file in a temporary directory on the local
+// file system and returns its path.
+func MustWriteTmpCardFile(t *testing.T, card *a2a.AgentCard) string {
+	t.Helper()
+	cardBytes, err := json.Marshal(card)
+	if err != nil {
+		t.Fatalf("json.Marshal(card) error = %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "card.json")
+	if err := os.WriteFile(path, cardBytes, os.ModePerm); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	return path
 }

@@ -46,7 +46,7 @@ func (d *deps) setDefaults() {
 
 type globalConfig struct {
 	output       string
-	agentCard    string
+	agentCard    flagparse.URLOrPath
 	url          string
 	transports   []string
 	svcParams    *flagparse.ServiceParams
@@ -116,7 +116,7 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 
 	pf := cmd.PersistentFlags()
 	pf.StringVarP(&cfg.output, "output", "o", "text", "Output format: text, json")
-	pf.StringVarP(&cfg.agentCard, "agent-card", "a", "", "Agent Card reference: host/origin, full card URL, or local file path")
+	pf.VarP(&cfg.agentCard, "agent-card", "a", "Agent Card reference: host/origin, full card URL, or local file path")
 	pf.StringVarP(&cfg.url, "endpoint", "e", "", "Agent interface URL for a direct connection; skips card resolution and requires a single --transport flag")
 	pf.StringArrayVar(&cfg.transports, "transport", nil, "Transport preference: rest, jsonrpc, grpc (repeatable, highest preference first)")
 	pf.StringVar(&cfg.a2aVersion, "a2a-version", "", "Controls which a2a-protocol version client will advertise to the server.")

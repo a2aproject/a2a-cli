@@ -149,6 +149,63 @@ func (p *Printer) PrintTaskList(resp *a2a.ListTasksResponse) error {
 	return err
 }
 
+// PrintPushConfig writes a single push-notification configuration in the
+// configured Mode. In text mode the auth credentials are redacted.
+func (p *Printer) PrintPushConfig(pc *a2a.PushConfig) error {
+	if p.Mode == ModeJson {
+		return p.PrintJSON(pc)
+	}
+	_, err := io.WriteString(p.Out, formatPushConfig(pc))
+	return err
+}
+
+// PrintPushConfigList writes a list of push-notification configurations in the
+// configured Mode.
+func (p *Printer) PrintPushConfigList(configs []*a2a.PushConfig) error {
+	if p.Mode == ModeJson {
+		return p.PrintJSON(configs)
+	}
+	tw := tabwriter.NewWriter(p.Out, 0, 4, 2, ' ', 0)
+	if _, err := io.WriteString(tw, "ID\tTASK\tURL\n"); err != nil {
+		return err
+	}
+	for _, pc := range configs {
+		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\n", pc.ID, pc.TaskID, pc.URL); err != nil {
+			return err
+		}
+	}
+	return tw.Flush()
+}
+
+// PrintPushConfigDeleted confirms deletion of a push-notification configuration.
+func (p *Printer) PrintPushConfigDeleted(taskID, configID string) error {
+	if p.Mode == ModeJson {
+		return p.PrintJSON(map[string]any{"deleted": true, "taskId": taskID, "id": configID})
+	}
+	_, err := fmt.Fprintf(p.Out, "Deleted:  %s (task %s)\n", configID, taskID)
+	return err
+}
+
+func formatPushConfig(pc *a2a.PushConfig) string {
+	var sb strings.Builder
+	if pc.ID != "" {
+		fmt.Fprintf(&sb, "Config:   %s\n", pc.ID)
+	}
+	fmt.Fprintf(&sb, "Task:     %s\n", pc.TaskID)
+	fmt.Fprintf(&sb, "URL:      %s\n", pc.URL)
+	if pc.Token != "" {
+		fmt.Fprintf(&sb, "Token:    %s\n", pc.Token)
+	}
+	if pc.Auth != nil {
+		fmt.Fprintf(&sb, "Auth:     %s", pc.Auth.Scheme)
+		if pc.Auth.Credentials != "" {
+			sb.WriteString(" <redacted>")
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}
+
 func formatCard(card *a2a.AgentCard) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "Name:         %s\n", card.Name)

@@ -117,6 +117,20 @@ func TestCardGet(t *testing.T) {
 			t.Fatalf("card get <url> --extended ignored the positional url: %v", err)
 		}
 	})
+
+	agentCardFilePath := testutil.MustWriteTmpCardFile(t, newAgentCard(url, a2a.AgentCapabilities{
+		Streaming: true,
+	}))
+	t.Run("with positional file path", func(t *testing.T) {
+		out := mustRunCMD(t, "card", "get", agentCardFilePath, "-o", "json")
+		var card a2a.AgentCard
+		if err := json.Unmarshal([]byte(out), &card); err != nil {
+			t.Fatalf("json.Unmarshal(card get output) error = %v", err)
+		}
+		if card.Name != "Test Echo" {
+			t.Fatalf("a2a card get -a card.Name = %q, want %q", card.Name, "Test Echo")
+		}
+	})
 }
 
 func TestVersion(t *testing.T) {
@@ -233,6 +247,49 @@ func TestSend(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestSend_AgentCardFromFile(t *testing.T) {
+	t.Parallel()
+	url := startTestServer(t)
+	agentCardFilePath := testutil.MustWriteTmpCardFile(t, newAgentCard(url, a2a.AgentCapabilities{
+		Streaming: true,
+	}))
+
+	msgText := "hello hello!"
+	sendTests := []struct {
+		name     string
+		args     []string
+		wantText string
+	}{
+		{
+			name:     "file path",
+			args:     []string{"send", "-a", agentCardFilePath, "-o", "json", msgText},
+			wantText: msgText,
+		},
+		{
+			name:     "file URL",
+			args:     []string{"send", "-a", "file://" + agentCardFilePath, "-o", "json", msgText},
+			wantText: msgText,
+		},
+	}
+
+	for _, tt := range sendTests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			out, err := runCMD(t, tt.args...)
+			if err != nil {
+				t.Fatalf("runCMD(%q) error = %v", strings.Join(tt.args, " "), err)
+			}
+			var task a2a.Task
+			if err := json.Unmarshal([]byte(out), &task); err != nil {
+				t.Fatalf("json.Unmarshal() error = %v", err)
+			}
+			if text := testutil.AllArtifactText(&task); text != tt.wantText {
+				t.Fatalf("allArtifactText() = %q, want %q", text, tt.wantText)
+			}
+		})
 	}
 }
 
@@ -743,14 +800,19 @@ func startTestServerWith(t *testing.T, capabilities a2a.AgentCapabilities) strin
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
-	mux.Handle(a2asrv.WellKnownAgentCardPath, a2asrv.NewStaticAgentCardHandler(&a2a.AgentCard{
-		Name:                "Test Echo",
-		Version:             "1.0.0",
-		Capabilities:        capabilities,
-		SupportedInterfaces: []*a2a.AgentInterface{a2a.NewAgentInterface(server.URL, a2a.TransportProtocolHTTPJSON)},
-	}))
+	agentCard := newAgentCard(server.URL, capabilities)
+	mux.Handle(a2asrv.WellKnownAgentCardPath, a2asrv.NewStaticAgentCardHandler(agentCard))
 
 	return server.URL
+}
+
+func newAgentCard(url string, cap a2a.AgentCapabilities) *a2a.AgentCard {
+	return &a2a.AgentCard{
+		Name:                "Test Echo",
+		Version:             "1.0.0",
+		Capabilities:        cap,
+		SupportedInterfaces: []*a2a.AgentInterface{a2a.NewAgentInterface(url, a2a.TransportProtocolHTTPJSON)},
+	}
 }
 
 func startLegacyTestServer(t *testing.T) string {
