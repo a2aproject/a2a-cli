@@ -36,13 +36,13 @@ type Handshake struct {
 	Success bool `json:"success"`
 	// Error describes why the plugin failed to start. Empty on success.
 	Error string `json:"error,omitempty"`
-	// Payload carries the connection details. Non-nil only on success.
-	Payload *HandshakeBody `json:"payload,omitempty"`
+	// Endpoint carries the connection details. Non-nil only on success.
+	Endpoint *Endpoint `json:"payload,omitempty"`
 }
 
-// HandshakeBody carries the details the host needs to connect to a plugin's
+// Endpoint carries the details the host needs to connect to a plugin's
 // loopback proxy server.
-type HandshakeBody struct {
+type Endpoint struct {
 	// Address is the loopback address of the proxy server.
 	Address string `json:"address"`
 	// Binding names the standard A2A transport binding the proxy speaks.

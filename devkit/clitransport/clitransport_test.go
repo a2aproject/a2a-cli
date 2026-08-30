@@ -142,8 +142,8 @@ func TestServeReportsStartupFailure(t *testing.T) {
 	if hs.Success {
 		t.Fatalf("handshake Success = true, want false (raw=%q)", out.String())
 	}
-	if hs.Payload != nil {
-		t.Fatalf("handshake Payload = %+v, want nil on failure", hs.Payload)
+	if hs.Endpoint != nil {
+		t.Fatalf("handshake Payload = %+v, want nil on failure", hs.Endpoint)
 	}
 	if !strings.Contains(hs.Error, "boom") {
 		t.Fatalf("handshake Error = %q, want it to mention the upstream failure", hs.Error)
@@ -197,7 +197,7 @@ func TestServeAdvertisesCertificate(t *testing.T) {
 
 // startPlugin runs a devkit plugin in serve mode in-process and returns its
 // handshake payload plus a stop function that requests shutdown.
-func startPlugin(t *testing.T, cfg Config, binding string) (HandshakeBody, func()) {
+func startPlugin(t *testing.T, cfg Config, binding string) (Endpoint, func()) {
 	t.Helper()
 
 	stdoutR, stdoutW := io.Pipe()
@@ -221,7 +221,7 @@ func startPlugin(t *testing.T, cfg Config, binding string) (HandshakeBody, func(
 		cancel()
 		t.Fatalf("json.Unmarshal(handshake) error = %v", err)
 	}
-	if !hs.Success || hs.Payload == nil {
+	if !hs.Success || hs.Endpoint == nil {
 		cancel()
 		t.Fatalf("plugin handshake unsuccessful: %+v", hs)
 	}
@@ -232,13 +232,13 @@ func startPlugin(t *testing.T, cfg Config, binding string) (HandshakeBody, func(
 		_ = stdoutR.Close()
 		<-done
 	}
-	return *hs.Payload, stop
+	return *hs.Endpoint, stop
 }
 
 // newTokenClient builds a client transport for the HTTP bindings that trusts the
 // per-launch certificate and stamps the per-launch token on every request,
 // mirroring what the host CLI does.
-func newTokenClient(t *testing.T, hs HandshakeBody) a2aclient.Transport {
+func newTokenClient(t *testing.T, hs Endpoint) a2aclient.Transport {
 	t.Helper()
 	httpClient := &http.Client{
 		Timeout:   5 * time.Second,

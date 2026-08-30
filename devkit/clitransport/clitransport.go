@@ -158,7 +158,7 @@ func serveProxy(ctx context.Context, cfg Config, endpoint string, binding a2a.Tr
 		return nil, fmt.Errorf("server could not start: %w", err)
 	}
 
-	if err := announce(proc.Out, Handshake{Success: true, Payload: srv.body}); err != nil {
+	if err := announce(proc.Out, Handshake{Success: true, Endpoint: srv.body}); err != nil {
 		srv.stop()
 		return nil, fmt.Errorf("writing handshake: %w", err)
 	}

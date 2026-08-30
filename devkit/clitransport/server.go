@@ -45,7 +45,7 @@ type serverCore struct {
 }
 
 type server struct {
-	body      *HandshakeBody
+	body      *Endpoint
 	core      *serverCore
 	cancel    context.CancelFunc
 	serveErr  error
@@ -84,7 +84,7 @@ func newServer(binding a2a.TransportProtocol, token string, handler a2asrv.Reque
 	return &server{
 		core:      srvCore,
 		serveDone: make(chan struct{}),
-		body: &HandshakeBody{
+		body: &Endpoint{
 			Address:  srvCore.address,
 			Binding:  binding,
 			Protocol: a2a.Version,
