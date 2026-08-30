@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc"
@@ -38,6 +39,8 @@ const (
 	healthRetryInterval = 25 * time.Millisecond
 )
 
+type cleanupFunc func()
+
 type serverCore struct {
 	address         string
 	serveFunc       func(ctx context.Context) error
@@ -45,14 +48,16 @@ type serverCore struct {
 }
 
 type server struct {
-	body      *Endpoint
-	core      *serverCore
-	cancel    context.CancelFunc
-	serveErr  error
-	serveDone chan struct{}
+	body        *Endpoint
+	core        *serverCore
+	cancel      context.CancelFunc
+	serveErr    error
+	serveDone   chan struct{}
+	cleanupFunc cleanupFunc
+	cleanupOnce sync.Once
 }
 
-func newServer(binding a2a.TransportProtocol, token string, handler a2asrv.RequestHandler) (*server, error) {
+func newServer(binding a2a.TransportProtocol, token string, handler a2asrv.RequestHandler, cleanup cleanupFunc) (*server, error) {
 	tlsSetup, err := genLoopbackTLSSetup()
 	if err != nil {
 		return nil, fmt.Errorf("generating loopback certificate: %w", err)
@@ -82,8 +87,9 @@ func newServer(binding a2a.TransportProtocol, token string, handler a2asrv.Reque
 	}
 
 	return &server{
-		core:      srvCore,
-		serveDone: make(chan struct{}),
+		core:        srvCore,
+		cleanupFunc: cleanup,
+		serveDone:   make(chan struct{}),
 		body: &Endpoint{
 			Address:  srvCore.address,
 			Binding:  binding,
@@ -194,12 +200,20 @@ func (s *server) start(ctx context.Context) error {
 
 func (s *server) await() error {
 	<-s.serveDone
+	s.cleanup()
 	return s.serveErr
 }
 
 func (s *server) stop() {
 	s.cancel()
 	<-s.serveDone
+	s.cleanup()
+}
+
+func (s *server) cleanup() {
+	if s.cleanupFunc != nil {
+		s.cleanupOnce.Do(s.cleanupFunc)
+	}
 }
 
 func (s *server) waitHealthy(ctx context.Context) error {

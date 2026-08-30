@@ -141,20 +141,22 @@ func serveProxy(ctx context.Context, cfg Config, endpoint string, binding a2a.Tr
 	if err != nil {
 		return nil, fmt.Errorf("creating upstream transport: %w", err)
 	}
-	defer func() {
+	destroy := func() {
 		if derr := transport.Destroy(); derr != nil {
 			_, _ = fmt.Fprintf(proc.Err, "closing upstream transport: %v\n", derr)
 		}
-	}()
+	}
 
 	token := a2a.NewContextID()
 	handler := newTransportHandler(transport, token)
-	srv, err := newServer(binding, token, handler)
+	srv, err := newServer(binding, token, handler, cleanupFunc(destroy))
 	if err != nil {
+		destroy()
 		return nil, err
 	}
 
 	if err := srv.start(ctx); err != nil {
+		srv.cleanup()
 		return nil, fmt.Errorf("server could not start: %w", err)
 	}
 

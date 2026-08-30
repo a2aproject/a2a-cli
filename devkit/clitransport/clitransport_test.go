@@ -21,11 +21,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"iter"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -115,6 +115,40 @@ func TestServeRoundTrip(t *testing.T) {
 				t.Fatalf("upstream transport saw authorization = %q, want %q", got, "Bearer secret")
 			}
 		})
+	}
+}
+
+func TestServeKeepsTransportAliveUntilShutdown(t *testing.T) {
+	t.Parallel()
+
+	rec := &recordingTransport{}
+	hs, stop := startPlugin(t, Config{
+		Name:    "demo",
+		Version: "1.0.0",
+		NewTransport: func(context.Context, string) (a2aclient.Transport, error) {
+			return rec, nil
+		},
+	}, string(a2a.TransportProtocolJSONRPC))
+	defer stop()
+
+	client := newTokenClient(t, hs)
+	defer func() { _ = client.Destroy() }()
+
+	msg := a2a.NewMessage(a2a.MessageRoleUser, a2a.NewTextPart("ping"))
+	if _, err := client.SendMessage(t.Context(), nil, &a2a.SendMessageRequest{Message: msg}); err != nil {
+		t.Fatalf("client.SendMessage() error = %v", err)
+	}
+	if rec.servedWhileDestroyed.Load() {
+		t.Fatal("upstream transport was destroyed before it served a request")
+	}
+	if got := rec.destroys.Load(); got != 0 {
+		t.Fatalf("upstream transport Destroy() = %d calls while serving, want 0", got)
+	}
+
+	stop()
+
+	if got := rec.destroys.Load(); got != 1 {
+		t.Fatalf("upstream transport Destroy() = %d calls after shutdown, want 1", got)
 	}
 }
 
@@ -296,8 +330,12 @@ func artifactText(task *a2a.Task) string {
 // recordingTransport is a fake upstream transport that echoes the message and
 // records the service params it observed.
 type recordingTransport struct {
-	mu       sync.Mutex
-	authSeen string
+	a2aclient.Transport
+	mu                   sync.Mutex
+	authSeen             string
+	destroyed            atomic.Bool
+	destroys             atomic.Int32
+	servedWhileDestroyed atomic.Bool
 }
 
 func newRecordingTransport(context.Context, string) (a2aclient.Transport, error) {
@@ -311,6 +349,10 @@ func (r *recordingTransport) lastAuth() string {
 }
 
 func (r *recordingTransport) SendMessage(_ context.Context, params a2aclient.ServiceParams, req *a2a.SendMessageRequest) (a2a.SendMessageResult, error) {
+	if r.destroyed.Load() {
+		r.servedWhileDestroyed.Store(true)
+	}
+
 	r.mu.Lock()
 	if auth := params.Get("authorization"); len(auth) > 0 {
 		r.authSeen = auth[0]
@@ -330,44 +372,8 @@ func (r *recordingTransport) SendMessage(_ context.Context, params a2aclient.Ser
 	}, nil
 }
 
-func (r *recordingTransport) SendStreamingMessage(context.Context, a2aclient.ServiceParams, *a2a.SendMessageRequest) iter.Seq2[a2a.Event, error] {
-	return func(yield func(a2a.Event, error) bool) {}
+func (r *recordingTransport) Destroy() error {
+	r.destroys.Add(1)
+	r.destroyed.Store(true)
+	return nil
 }
-
-func (r *recordingTransport) GetTask(context.Context, a2aclient.ServiceParams, *a2a.GetTaskRequest) (*a2a.Task, error) {
-	return nil, a2a.ErrTaskNotFound
-}
-
-func (r *recordingTransport) ListTasks(context.Context, a2aclient.ServiceParams, *a2a.ListTasksRequest) (*a2a.ListTasksResponse, error) {
-	return &a2a.ListTasksResponse{}, nil
-}
-
-func (r *recordingTransport) CancelTask(context.Context, a2aclient.ServiceParams, *a2a.CancelTaskRequest) (*a2a.Task, error) {
-	return nil, a2a.ErrTaskNotFound
-}
-
-func (r *recordingTransport) SubscribeToTask(context.Context, a2aclient.ServiceParams, *a2a.SubscribeToTaskRequest) iter.Seq2[a2a.Event, error] {
-	return func(yield func(a2a.Event, error) bool) {}
-}
-
-func (r *recordingTransport) GetTaskPushConfig(context.Context, a2aclient.ServiceParams, *a2a.GetTaskPushConfigRequest) (*a2a.PushConfig, error) {
-	return nil, a2a.ErrPushNotificationNotSupported
-}
-
-func (r *recordingTransport) ListTaskPushConfigs(context.Context, a2aclient.ServiceParams, *a2a.ListTaskPushConfigRequest) ([]*a2a.PushConfig, error) {
-	return nil, a2a.ErrPushNotificationNotSupported
-}
-
-func (r *recordingTransport) CreateTaskPushConfig(context.Context, a2aclient.ServiceParams, *a2a.PushConfig) (*a2a.PushConfig, error) {
-	return nil, a2a.ErrPushNotificationNotSupported
-}
-
-func (r *recordingTransport) DeleteTaskPushConfig(context.Context, a2aclient.ServiceParams, *a2a.DeleteTaskPushConfigRequest) error {
-	return a2a.ErrPushNotificationNotSupported
-}
-
-func (r *recordingTransport) GetExtendedAgentCard(context.Context, a2aclient.ServiceParams, *a2a.GetExtendedAgentCardRequest) (*a2a.AgentCard, error) {
-	return &a2a.AgentCard{Name: "recording"}, nil
-}
-
-func (r *recordingTransport) Destroy() error { return nil }
