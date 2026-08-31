@@ -133,61 +133,61 @@ type proxyTransport struct {
 	session *session
 }
 
-func (t *proxyTransport) GetTask(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.GetTaskRequest) (*a2a.Task, error) {
-	return t.base.GetTask(ctx, t.withToken(sp), req)
+func (pt *proxyTransport) GetTask(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.GetTaskRequest) (*a2a.Task, error) {
+	return pt.base.GetTask(ctx, pt.withToken(sp), req)
 }
 
-func (t *proxyTransport) ListTasks(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.ListTasksRequest) (*a2a.ListTasksResponse, error) {
-	return t.base.ListTasks(ctx, t.withToken(sp), req)
+func (pt *proxyTransport) ListTasks(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.ListTasksRequest) (*a2a.ListTasksResponse, error) {
+	return pt.base.ListTasks(ctx, pt.withToken(sp), req)
 }
 
-func (t *proxyTransport) CancelTask(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.CancelTaskRequest) (*a2a.Task, error) {
-	return t.base.CancelTask(ctx, t.withToken(sp), req)
+func (pt *proxyTransport) CancelTask(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.CancelTaskRequest) (*a2a.Task, error) {
+	return pt.base.CancelTask(ctx, pt.withToken(sp), req)
 }
 
-func (t *proxyTransport) SendMessage(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.SendMessageRequest) (a2a.SendMessageResult, error) {
-	return t.base.SendMessage(ctx, t.withToken(sp), req)
+func (pt *proxyTransport) SendMessage(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.SendMessageRequest) (a2a.SendMessageResult, error) {
+	return pt.base.SendMessage(ctx, pt.withToken(sp), req)
 }
 
-func (t *proxyTransport) SubscribeToTask(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.SubscribeToTaskRequest) iter.Seq2[a2a.Event, error] {
-	return t.base.SubscribeToTask(ctx, t.withToken(sp), req)
+func (pt *proxyTransport) SubscribeToTask(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.SubscribeToTaskRequest) iter.Seq2[a2a.Event, error] {
+	return pt.base.SubscribeToTask(ctx, pt.withToken(sp), req)
 }
 
-func (t *proxyTransport) SendStreamingMessage(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.SendMessageRequest) iter.Seq2[a2a.Event, error] {
-	return t.base.SendStreamingMessage(ctx, t.withToken(sp), req)
+func (pt *proxyTransport) SendStreamingMessage(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.SendMessageRequest) iter.Seq2[a2a.Event, error] {
+	return pt.base.SendStreamingMessage(ctx, pt.withToken(sp), req)
 }
 
-func (t *proxyTransport) GetTaskPushConfig(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.GetTaskPushConfigRequest) (*a2a.PushConfig, error) {
-	return t.base.GetTaskPushConfig(ctx, t.withToken(sp), req)
+func (pt *proxyTransport) GetTaskPushConfig(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.GetTaskPushConfigRequest) (*a2a.PushConfig, error) {
+	return pt.base.GetTaskPushConfig(ctx, pt.withToken(sp), req)
 }
 
-func (t *proxyTransport) ListTaskPushConfigs(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.ListTaskPushConfigRequest) ([]*a2a.PushConfig, error) {
-	return t.base.ListTaskPushConfigs(ctx, t.withToken(sp), req)
+func (pt *proxyTransport) ListTaskPushConfigs(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.ListTaskPushConfigRequest) ([]*a2a.PushConfig, error) {
+	return pt.base.ListTaskPushConfigs(ctx, pt.withToken(sp), req)
 }
 
-func (t *proxyTransport) CreateTaskPushConfig(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.PushConfig) (*a2a.PushConfig, error) {
-	return t.base.CreateTaskPushConfig(ctx, t.withToken(sp), req)
+func (pt *proxyTransport) CreateTaskPushConfig(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.PushConfig) (*a2a.PushConfig, error) {
+	return pt.base.CreateTaskPushConfig(ctx, pt.withToken(sp), req)
 }
 
-func (t *proxyTransport) DeleteTaskPushConfig(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.DeleteTaskPushConfigRequest) error {
-	return t.base.DeleteTaskPushConfig(ctx, t.withToken(sp), req)
+func (pt *proxyTransport) DeleteTaskPushConfig(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.DeleteTaskPushConfigRequest) error {
+	return pt.base.DeleteTaskPushConfig(ctx, pt.withToken(sp), req)
 }
 
-func (t *proxyTransport) GetExtendedAgentCard(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.GetExtendedAgentCardRequest) (*a2a.AgentCard, error) {
-	return t.base.GetExtendedAgentCard(ctx, t.withToken(sp), req)
+func (pt *proxyTransport) GetExtendedAgentCard(ctx context.Context, sp a2aclient.ServiceParams, req *a2a.GetExtendedAgentCardRequest) (*a2a.AgentCard, error) {
+	return pt.base.GetExtendedAgentCard(ctx, pt.withToken(sp), req)
 }
 
-func (p *proxyTransport) Destroy() error {
-	err := p.base.Destroy()
-	if cerr := p.session.close(); cerr != nil && err == nil {
+func (pt *proxyTransport) Destroy() error {
+	err := pt.base.Destroy()
+	if cerr := pt.session.close(); cerr != nil && err == nil {
 		err = cerr
 	}
 	return err
 }
 
-func (t *proxyTransport) withToken(sp a2aclient.ServiceParams) a2aclient.ServiceParams {
+func (pt *proxyTransport) withToken(sp a2aclient.ServiceParams) a2aclient.ServiceParams {
 	params := make(a2aclient.ServiceParams, len(sp)+1)
 	maps.Copy(params, sp)
-	params.Append(clitransport.TokenSvcParam, t.session.handshake.Token)
+	params.Append(clitransport.TokenSvcParam, pt.session.handshake.Token)
 	return params
 }

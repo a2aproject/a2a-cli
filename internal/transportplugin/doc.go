@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package plugin discovers and drives external A2A transport plugins.
+// Package transportplugin discovers and drives external A2A transport plugins.
 //
 // A transport plugin is a binary named "a2a-transport-<name>" on PATH. The host
 // launches it as a subprocess proxy that speaks a standard A2A binding and
