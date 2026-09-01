@@ -54,6 +54,14 @@ a2a send -a http://localhost:8080 "hello world from A2A"
 a2a send -a http://localhost:8080 --stream "one two three four"
 ```
 
+## Test
+
+`test.sh` checks both scripts on a plain pipe — no server needed. Because `--exec` only pipes the message to stdin and reads stdout, this exercises the same path the server runs.
+
+```bash
+bash test.sh
+```
+
 ## Learn more
 
 These scripts scratch the surface. The `a2a` CLI does much more: agent-card discovery, direct-endpoint connections, and multi-part messages with text, file, and data parts. It also handles async and streaming sends, task management, and echo and proxy server modes. Read the [a2a-cli specification](../../specification/SPEC.md) to explore everything the tool offers.
