@@ -12,6 +12,7 @@ on:
       - '**.go'
       - 'go.mod'
       - 'go.sum'
+      - '.golangci.yml'
       - '.github/workflows/go.yaml'
       - '.github/actions/**'
 
@@ -21,6 +22,7 @@ on:
       - '**.go'
       - 'go.mod'
       - 'go.sum'
+      - '.golangci.yml'
       - '.github/workflows/go.yaml'
       - '.github/actions/**'
 
