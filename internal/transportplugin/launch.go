@@ -61,6 +61,9 @@ func (execLauncher) launch(ctx context.Context, binary, endpoint string) (*sessi
 				cause := cmd.Wait()
 				var exitErr *exec.ExitError
 				if errors.As(cause, &exitErr) {
+					// the code is run on transport.Destroy() which is called after CLI command
+					// handler finished. the only thing we're interesting in reporting to client at
+					// this point is that a child process (plugin) wasn't terminated successfully
 					cause = nil
 				}
 				done <- cause
