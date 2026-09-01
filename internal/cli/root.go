@@ -115,7 +115,7 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 	pf.StringVarP(&cfg.output, "output", "o", "text", "Output format: text, json")
 	pf.VarP(&cfg.agentCard, "agent-card", "a", "Agent Card reference: host/origin, full card URL, or local file path")
 	pf.StringVarP(&cfg.url, "endpoint", "e", "", "Agent interface URL for a direct connection; skips card resolution and requires a single --transport flag")
-	pf.StringArrayVar(&cfg.transports, "transport", nil, "Transport preference: rest, jsonrpc, grpc (repeatable, highest preference first)")
+	pf.StringArrayVar(&cfg.transports, "transport", nil, "Transport preference: rest, jsonrpc, grpc, or an installed plugin name (repeatable, highest preference first)")
 	cfg.svcParams.Attach(pf)
 	pf.StringVar(&cfg.tenant, "tenant", "", "Tenant identifier")
 	pf.DurationVar(&cfg.timeout, "timeout", 30*time.Second, "Request timeout")
@@ -129,6 +129,7 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 		newTaskCmd(cfg),
 		newConfigCmd(cfg),
 		newServeCmd(cfg),
+		newTransportCmd(cfg),
 		newVersionCmd(cfg),
 	)
 

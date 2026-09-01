@@ -311,3 +311,21 @@ StatusUpdate:          completed
 
 All commands support `-o json` for machine-readable output, emitting raw protocol objects.
 Text mode is the default, meant for reading in a terminal.
+
+## Custom Transport Plugins
+
+The CLI speaks JSON-RPC, REST and gRPC out of the box. Additional transport
+bindings can be added **without recompiling** by dropping an `a2a-transport-<name>` 
+binary on your `PATH`. The CLI launches the plugin as a local proxy that speaks a 
+standard A2A binding and forwards to the custom protocol.
+
+```console
+$ a2a transport list
+$ a2a send --transport slimrpc --endpoint slim://agents.example/agent "hello"
+```
+
+Authoring a plugin in Go is a few lines with the
+[`devkit/clitransport`](./devkit/clitransport) package — you provide an
+`a2aclient.Transport`, it produces a CLI-compatible plugin. See the
+**[transport plugin guide](./docs/transport-plugins.md)** and the runnable
+**[echo plugin example](./examples/a2a-transport-echo)**.
