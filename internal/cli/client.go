@@ -41,7 +41,20 @@ var compatCardResolver = func() *agentcard.Resolver {
 	return resolver
 }()
 
+// insecureCredentialWarning is emitted once, unconditionally, when a credential
+// would be sent with TLS verification disabled. It never contains the credential.
+const insecureCredentialWarning = "warning: sending a credential with TLS verification disabled (--insecure); the token may be exposed."
+
+// warnInsecureCredential prints a single stderr warning when --insecure is set
+// and a credential is present. It is not silenceable by output mode or verbosity.
+func warnInsecureCredential(cfg *globalConfig) {
+	if cfg.insecureGRPC && cfg.svcParams.HasCredential() {
+		fmt.Fprintln(cfg.stderr(), insecureCredentialWarning)
+	}
+}
+
 func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
+	warnInsecureCredential(cfg)
 	switch {
 	case cfg.url != "" && cfg.agentCard.IsSet():
 		return nil, fmt.Errorf("--endpoint and --agent-card are mutually exclusive")
