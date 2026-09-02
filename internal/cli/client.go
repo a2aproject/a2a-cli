@@ -49,7 +49,7 @@ const insecureCredentialWarning = "warning: sending a credential with TLS verifi
 // and a credential is present. It is not silenceable by output mode or verbosity.
 func warnInsecureCredential(cfg *globalConfig) {
 	if cfg.insecureGRPC && cfg.svcParams.HasCredential() {
-		fmt.Fprintln(cfg.stderr(), insecureCredentialWarning)
+		_, _ = fmt.Fprintln(cfg.stderr(), insecureCredentialWarning)
 	}
 }
 
