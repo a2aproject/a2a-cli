@@ -1,0 +1,52 @@
+# Warns, then closes, issues and PRs that have gone quiet, so the tracker
+# reflects work that is actually live. Only issues explicitly waiting on the
+# author (see any-of-labels) are eligible; add the `override-stale` label to
+# any issue or PR that should never be auto-closed.
+#
+# Docs: https://github.com/actions/stale
+name: Mark stale issues and pull requests
+
+on:
+  schedule:
+    # 22:30 UTC daily (15:30 PDT / 14:30 PST)
+    - cron: "30 22 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      actions: write
+
+    steps:
+      - uses: actions/stale@1e223db275d687790206a7acac4d1a11bd6fe629 # v10
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          days-before-issue-stale: 14
+          days-before-issue-close: 13
+          stale-issue-label: "status:stale"
+          close-issue-reason: not_planned
+          any-of-labels: "status:awaiting response,status:more data needed"
+          stale-issue-message: >
+            Marking this issue as stale since it has been open for 14 days with no activity.
+            This issue will be closed if no further activity occurs.
+          close-issue-message: >
+            This issue was closed because it has been inactive for 27 days.
+            Please post a new issue if you need further assistance. Thanks!
+          days-before-pr-stale: 14
+          days-before-pr-close: 13
+          stale-pr-label: "status:stale"
+          stale-pr-message: >
+            Marking this pull request as stale since it has been open for 14 days with no activity.
+            This PR will be closed if no further activity occurs.
+          close-pr-message: >
+            This pull request was closed because it has been inactive for 27 days.
+            Please open a new pull request if you need further assistance. Thanks!
+          # Labels that exempt an issue/PR from being marked stale.
+          exempt-issue-labels: "override-stale"
+          exempt-pr-labels: "override-stale"

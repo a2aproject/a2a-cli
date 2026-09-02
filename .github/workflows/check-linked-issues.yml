@@ -1,0 +1,31 @@
+name: Check for Linked Issues
+
+# Flags pull requests that don't reference an issue (e.g. "Closes #123"), so
+# every change is traceable back to a tracked feature request or bug.
+#
+# This is advisory: it does not block the merge, it only surfaces the count.
+# Release automation branches are excluded so they never trip the check.
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  check_pull_requests:
+    runs-on: ubuntu-latest
+    name: Check linked issues
+    permissions:
+      issues: read
+      pull-requests: write
+    steps:
+      - uses: nearform-actions/github-action-check-linked-issues@7140e2e01aa0c18b8ac61bddf5e89abde1ca760e # v1
+        id: check-linked-issues
+        with:
+          exclude-branches: 'release/**, dependabot/**, release-please--branches--main'
+          comment: false
+
+      - name: Report linked-issue count
+        run: echo "Linked issues on this PR - ${{ steps.check-linked-issues.outputs.linked_issues_count }}"
