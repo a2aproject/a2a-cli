@@ -317,8 +317,7 @@ func partsText(parts a2a.ContentParts) string {
 	return sb.String()
 }
 
-// filePartText renders a file part by its name, media type and size (for inline
-// bytes) or URL, degrading to whatever fields are present.
+// filePartText renders a file part by name, media type and size or URL.
 func filePartText(p *a2a.Part) string {
 	var sb strings.Builder
 	sb.WriteString("file:")

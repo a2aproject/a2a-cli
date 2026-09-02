@@ -67,8 +67,7 @@ func (s *ServiceParams) Auth() string {
 	return s.auth
 }
 
-// HasCredential reports whether a credential is present, either via --auth or an
-// Authorization --svc-param. It never exposes the credential value.
+// HasCredential reports whether --auth or an Authorization --svc-param is set.
 func (s *ServiceParams) HasCredential() bool {
 	if s.auth != "" {
 		return true

@@ -41,12 +41,9 @@ var compatCardResolver = func() *agentcard.Resolver {
 	return resolver
 }()
 
-// insecureCredentialWarning is emitted once, unconditionally, when a credential
-// would be sent with TLS verification disabled. It never contains the credential.
 const insecureCredentialWarning = "warning: sending a credential with TLS verification disabled (--insecure); the token may be exposed."
 
-// warnInsecureCredential prints a single stderr warning when --insecure is set
-// and a credential is present. It is not silenceable by output mode or verbosity.
+// warnInsecureCredential warns once when a credential is sent with --insecure.
 func warnInsecureCredential(cfg *globalConfig) {
 	if cfg.insecureGRPC && cfg.svcParams.HasCredential() {
 		_, _ = fmt.Fprintln(cfg.stderr(), insecureCredentialWarning)
