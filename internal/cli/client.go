@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
+	"github.com/a2aproject/a2a-cli/internal/transportplugin"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
 	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
@@ -64,20 +65,30 @@ func newClientFromEndpoint(ctx context.Context, cfg *globalConfig, ref string, e
 	if protocol == a2a.TransportProtocolGRPC {
 		endpointURL = stripHTTPScheme(ref)
 	}
+
 	cfg.logf("connecting directly to %s via %s (skipping card resolution)", endpointURL, protocol)
+
+	factoryOpts := append(clientFactoryOpts(cfg), extraOpts...)
+	if !transportplugin.IsBuiltin(protocol) {
+		pluginOpt, err := transportplugin.Load(protocol)
+		if err != nil {
+			return nil, err
+		}
+		factoryOpts = append(factoryOpts, pluginOpt)
+	}
 
 	endpoint := a2a.NewAgentInterface(endpointURL, protocol)
 	if cfg.a2aVersion != "" {
 		endpoint.ProtocolVersion = a2a.ProtocolVersion(cfg.a2aVersion)
 	}
-	client, err := a2aclient.NewFromEndpoints(ctx, []*a2a.AgentInterface{endpoint}, append(clientFactoryOpts(cfg), extraOpts...)...)
+	client, err := a2aclient.NewFromEndpoints(ctx, []*a2a.AgentInterface{endpoint}, factoryOpts...)
 	return client, hintInsecure(err)
 }
 
 // newClientFromCard resolves the Agent Card and builds a client for it, honoring
 // --transport as an ordered client preference over the card's declared interfaces.
 func newClientFromCard(ctx context.Context, cfg *globalConfig, ref string, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
-	protos, err := flagparse.Transports(cfg.transports)
+	transportPrefs, err := flagparse.Transports(cfg.transports)
 	if err != nil {
 		return nil, err
 	}
@@ -94,8 +105,15 @@ func newClientFromCard(ctx context.Context, cfg *globalConfig, ref string, extra
 	}
 
 	factoryOpts := append(clientFactoryOpts(cfg), extraOpts...)
-	if len(protos) > 0 {
-		factoryOpts = append(factoryOpts, a2aclient.WithConfig(a2aclient.Config{PreferredTransports: protos}))
+	pluginOpts, err := transportplugin.LoadForCard(card)
+	if err != nil {
+		return nil, err
+	}
+	factoryOpts = append(factoryOpts, pluginOpts...)
+	if len(transportPrefs) > 0 {
+		factoryOpts = append(factoryOpts, a2aclient.WithConfig(
+			a2aclient.Config{PreferredTransports: transportPrefs},
+		))
 	}
 	cfg.logf("creating client for %s", card.Name)
 	client, err := a2aclient.NewFromCard(ctx, card, factoryOpts...)
