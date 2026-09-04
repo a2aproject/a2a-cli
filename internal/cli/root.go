@@ -55,7 +55,6 @@ type globalConfig struct {
 	timeout      time.Duration
 	verbose      bool
 	insecureGRPC bool
-	pretty       bool
 	configPath   string
 
 	bindings []clicfg.FlagBinding
@@ -104,18 +103,17 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 			cfg.bindings = bindings
 
 			switch output.Mode(cfg.output) {
-			case output.ModeText, output.ModeJson:
+			case output.ModeText, output.ModeJson, output.ModeJSONL:
 				cfg.Mode = output.Mode(cfg.output)
 			default:
-				return fmt.Errorf("invalid --output %q (want text or json)", cfg.output)
+				return fmt.Errorf("invalid --output %q (want text, json, or jsonl)", cfg.output)
 			}
-			cfg.Printer.PrettyJSONL = cfg.pretty
 			return nil
 		},
 	}
 
 	pf := cmd.PersistentFlags()
-	pf.StringVarP(&cfg.output, "output", "o", "text", "Output format: text, json")
+	pf.StringVarP(&cfg.output, "output", "o", "text", "Output format: text, json (indented), or jsonl (one compact JSON object per line)")
 	pf.VarP(&cfg.agentCard, "agent-card", "a", "Agent Card reference: host/origin, full card URL, or local file path")
 	pf.StringVarP(&cfg.url, "endpoint", "e", "", "Agent interface URL for a direct connection; skips card resolution and requires a single --transport flag")
 	pf.StringArrayVar(&cfg.transports, "transport", nil, "Transport preference: rest, jsonrpc, grpc, or an installed plugin name (repeatable, highest preference first)")
@@ -125,7 +123,6 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 	pf.DurationVar(&cfg.timeout, "timeout", 30*time.Second, "Request timeout")
 	pf.BoolVarP(&cfg.verbose, "verbose", "v", false, "Verbose output to stderr")
 	pf.BoolVar(&cfg.insecureGRPC, "insecure", false, "Use insecure (plaintext) gRPC transport credentials")
-	pf.BoolVar(&cfg.pretty, "pretty", false, "Pretty-print (indent) streamed JSONL records instead of emitting one compact object per line")
 	pf.StringVar(&cfg.configPath, "config", "", "Load configuration from an explicit .env file in place of the local .env")
 
 	cmd.AddCommand(

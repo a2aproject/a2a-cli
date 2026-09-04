@@ -34,7 +34,7 @@ These apply to every client-mode command. Each command selects the agent it talk
 | `--agent-card <ref>` | `-a` | Agent Card reference: a host/origin (the well-known path is appended), a full card URL, or a local file path. The card is resolved and a transport negotiated. |
 | `--endpoint <ref>` | `-e` | Agent interface URL for a direct connection, skipping card resolution. Must be paired with exactly one `--transport`. Mutually exclusive with `--agent-card`. |
 | `--transport <name>` | | Transport preference: `rest`, `jsonrpc`, `grpc`. Repeatable and ordered (highest preference first). With `--agent-card` it overrides the card's preference order; with `--endpoint` exactly one is required. |
-| `--output <fmt>` | `-o` | Output format: `text` (default), `json`. |
+| `--output <fmt>` | `-o` | Output format: `text` (default), `json` (indented), or `jsonl` (one compact JSON object per line). |
 | `--svc-param <k=v>` | | Service parameter (repeatable). The chosen transport defines how it's passed. Split on the first `=`. |
 | `--auth <creds>` | | Shorthand for `--svc-param "Authorization=<creds>"`. |
 | `--tenant <id>` | | Tenant identifier. Passed on every request. |
@@ -309,8 +309,14 @@ StatusUpdate:          completed
 
 ## Output Formatting
 
-All commands support `-o json` for machine-readable output, emitting raw protocol objects.
-Text mode is the default, meant for reading in a terminal.
+All commands support machine-readable output, emitting raw protocol objects:
+
+- `-o json` — indented JSON: a single indented document, or one indented record per event under `--stream`.
+- `-o jsonl` — [JSON Lines](https://jsonlines.org/): one compact JSON object per line, ideal for piping and incremental consumption under `--stream`.
+
+Text mode is the default, meant for reading in a terminal. The output format controls
+only presentation (indentation); `--stream` independently controls whether the command
+follows the agent's live events or waits for the terminal result.
 
 ## Custom Transport Plugins
 

@@ -29,8 +29,12 @@ import (
 // Mode selects how a Printer renders values.
 type Mode string
 
-// ModeJson renders values as indented JSON.
+// ModeJson renders values as indented JSON: a single indented document, or one
+// indented record per streamed event.
 const ModeJson Mode = "json"
+
+// ModeJSONL renders values as JSON Lines: one compact JSON object per line.
+const ModeJSONL Mode = "jsonl"
 
 // ModeText renders values as human-readable text.
 const ModeText Mode = "text"
@@ -50,8 +54,6 @@ var taskStateNames = map[a2a.TaskState]string{
 type Printer struct {
 	Out  io.Writer
 	Mode Mode
-	// PrettyJSONL enable JSON indentation for jsonl printing.
-	PrettyJSONL bool
 }
 
 // NewPrinter returns a Printer that writes to out using the given Mode.
@@ -59,16 +61,32 @@ func NewPrinter(out io.Writer, mode Mode) *Printer {
 	return &Printer{Out: out, Mode: mode}
 }
 
-// PrintJSON writes v as an indented, single JSON document.
-func (p *Printer) PrintJSON(v any) error {
+// IsJSON reports whether the printer renders machine-readable JSON, either
+// indented (ModeJson) or one compact object per line (ModeJSONL).
+func (p *Printer) IsJSON() bool {
+	return p.Mode == ModeJson || p.Mode == ModeJSONL
+}
+
+// jsonEncoder returns a JSON encoder configured for the current mode: indented
+// for ModeJson, compact for ModeJSONL.
+func (p *Printer) jsonEncoder() *json.Encoder {
 	enc := json.NewEncoder(p.Out)
-	enc.SetIndent("", "  ")
-	return enc.Encode(v)
+	enc.SetEscapeHTML(false)
+	if p.Mode == ModeJson {
+		enc.SetIndent("", "  ")
+	}
+	return enc
+}
+
+// PrintJSON writes v as a single JSON document, indented in ModeJson and
+// compact in ModeJSONL.
+func (p *Printer) PrintJSON(v any) error {
+	return p.jsonEncoder().Encode(v)
 }
 
 // PrintCard writes an agent card in the configured Mode.
 func (p *Printer) PrintCard(card *a2a.AgentCard) error {
-	if p.Mode == ModeJson {
+	if p.IsJSON() {
 		return p.PrintJSON(card)
 	}
 	_, err := io.WriteString(p.Out, formatCard(card))
@@ -77,23 +95,19 @@ func (p *Printer) PrintCard(card *a2a.AgentCard) error {
 
 // PrintTask writes a task in the configured Mode.
 func (p *Printer) PrintTask(task *a2a.Task) error {
-	if p.Mode == ModeJson {
+	if p.IsJSON() {
 		return p.PrintJSON(task)
 	}
 	_, err := io.WriteString(p.Out, formatTask(task)+formatResumeHint(task))
 	return err
 }
 
-// PrintEvent writes a streaming event in the configured Mode. In json mode each
-// event is emitted as one JSONL record.
+// PrintEvent writes a streaming event in the configured Mode. In ModeJson each
+// event is an indented record; in ModeJSONL each event is one compact object per
+// line.
 func (p *Printer) PrintEvent(event a2a.Event) error {
-	if p.Mode == ModeJson {
-		enc := json.NewEncoder(p.Out)
-		enc.SetEscapeHTML(false)
-		if p.PrettyJSONL {
-			enc.SetIndent("", "  ")
-		}
-		return enc.Encode(a2a.StreamResponse{Event: event})
+	if p.IsJSON() {
+		return p.jsonEncoder().Encode(a2a.StreamResponse{Event: event})
 	}
 
 	var s string
@@ -125,7 +139,7 @@ func (p *Printer) PrintEvent(event a2a.Event) error {
 
 // PrintSendResult writes the result of a send-message call in the configured Mode.
 func (p *Printer) PrintSendResult(result a2a.SendMessageResult) error {
-	if p.Mode == ModeJson {
+	if p.IsJSON() {
 		return p.PrintJSON(a2a.StreamResponse{Event: result})
 	}
 
@@ -142,7 +156,7 @@ func (p *Printer) PrintSendResult(result a2a.SendMessageResult) error {
 
 // PrintTaskList writes a list of tasks in the configured Mode.
 func (p *Printer) PrintTaskList(resp *a2a.ListTasksResponse) error {
-	if p.Mode == ModeJson {
+	if p.IsJSON() {
 		return p.PrintJSON(resp)
 	}
 	_, err := io.WriteString(p.Out, formatTaskList(resp))
@@ -152,7 +166,7 @@ func (p *Printer) PrintTaskList(resp *a2a.ListTasksResponse) error {
 // PrintPushConfig writes a single push-notification configuration in the
 // configured Mode. In text mode the auth credentials are redacted.
 func (p *Printer) PrintPushConfig(pc *a2a.PushConfig) error {
-	if p.Mode == ModeJson {
+	if p.IsJSON() {
 		return p.PrintJSON(pc)
 	}
 	_, err := io.WriteString(p.Out, formatPushConfig(pc))
@@ -162,7 +176,7 @@ func (p *Printer) PrintPushConfig(pc *a2a.PushConfig) error {
 // PrintPushConfigList writes a list of push-notification configurations in the
 // configured Mode.
 func (p *Printer) PrintPushConfigList(configs []*a2a.PushConfig) error {
-	if p.Mode == ModeJson {
+	if p.IsJSON() {
 		return p.PrintJSON(configs)
 	}
 	tw := tabwriter.NewWriter(p.Out, 0, 4, 2, ' ', 0)
@@ -179,7 +193,7 @@ func (p *Printer) PrintPushConfigList(configs []*a2a.PushConfig) error {
 
 // PrintPushConfigDeleted confirms deletion of a push-notification configuration.
 func (p *Printer) PrintPushConfigDeleted(taskID, configID string) error {
-	if p.Mode == ModeJson {
+	if p.IsJSON() {
 		return p.PrintJSON(map[string]any{"deleted": true, "taskId": taskID, "id": configID})
 	}
 	_, err := fmt.Fprintf(p.Out, "Deleted:  %s (task %s)\n", configID, taskID)

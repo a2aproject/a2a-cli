@@ -20,8 +20,6 @@ import (
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
-
-	"github.com/a2aproject/a2a-cli/internal/output"
 )
 
 type flagBindingView struct {
@@ -58,7 +56,7 @@ func newConfigShowCmd(cfg *globalConfig) *cobra.Command {
 				views = append(views, view)
 			}
 
-			if cfg.Mode == output.ModeJson {
+			if cfg.IsJSON() {
 				return cfg.PrintJSON(views)
 			}
 

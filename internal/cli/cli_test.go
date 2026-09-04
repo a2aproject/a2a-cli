@@ -488,13 +488,23 @@ func TestSendStreamJSONL(t *testing.T) {
 		wantObjectPerLine bool
 	}{
 		{
-			name:              "compact one object per line",
-			flags:             []string{"-a", url, "-o", "json", "--stream"},
+			name:              "jsonl streams one compact object per line",
+			flags:             []string{"-a", url, "-o", "jsonl", "--stream"},
 			wantObjectPerLine: true,
 		},
 		{
-			name:              "indented objects when pretty",
-			flags:             []string{"-a", url, "-o", "json", "--stream", "--pretty"},
+			name:              "jsonl compact with non-streaming",
+			flags:             []string{"-a", url, "-o", "jsonl"},
+			wantObjectPerLine: true,
+		},
+		{
+			name:              "json streams indented records",
+			flags:             []string{"-a", url, "-o", "json", "--stream"},
+			wantObjectPerLine: false,
+		},
+		{
+			name:              "json indented with non-streaming",
+			flags:             []string{"-a", url, "-o", "json"},
 			wantObjectPerLine: false,
 		},
 	}
@@ -525,6 +535,14 @@ func TestSendStreamJSONL(t *testing.T) {
 		})
 	}
 
+}
+
+func TestSendOutputInvalidFormat(t *testing.T) {
+	t.Parallel()
+	url := startTestServer(t)
+	if _, err := runCMD(t, "send", "-a", url, "-o", "yaml", "format me"); err == nil {
+		t.Fatal("send -o yaml error = nil, want error")
+	}
 }
 
 func TestSendStreamingFallbackUsesDefaultPoller(t *testing.T) {
