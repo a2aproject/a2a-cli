@@ -300,14 +300,8 @@ func partsText(parts a2a.ContentParts) string {
 			sb.WriteString(t)
 			continue
 		}
-		if u := p.URL(); u != "" {
-			sb.WriteString("[file: ")
-			sb.WriteString(string(u))
-			sb.WriteString("]")
-			continue
-		}
-		if p.Raw() != nil {
-			fmt.Fprintf(&sb, "[binary %d bytes]", len(p.Raw()))
+		if p.URL() != "" || p.Raw() != nil {
+			sb.WriteString(filePartText(p))
 			continue
 		}
 		if p.Data() != nil {
@@ -321,6 +315,43 @@ func partsText(parts a2a.ContentParts) string {
 		}
 	}
 	return sb.String()
+}
+
+// filePartText renders a file part by name, media type and size or URL.
+func filePartText(p *a2a.Part) string {
+	var sb strings.Builder
+	sb.WriteString("file:")
+	if p.Filename != "" {
+		sb.WriteString(" ")
+		sb.WriteString(p.Filename)
+	}
+	var attrs []string
+	if p.MediaType != "" {
+		attrs = append(attrs, p.MediaType)
+	}
+	if raw := p.Raw(); raw != nil {
+		attrs = append(attrs, formatSize(len(raw)))
+	}
+	if u := p.URL(); u != "" {
+		attrs = append(attrs, string(u))
+	}
+	if len(attrs) > 0 {
+		fmt.Fprintf(&sb, " (%s)", strings.Join(attrs, ", "))
+	}
+	return sb.String()
+}
+
+func formatSize(n int) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for size := int64(n) / unit; size >= unit; size /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
 func shortState(state a2a.TaskState) string {

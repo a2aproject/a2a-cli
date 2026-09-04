@@ -67,6 +67,19 @@ func (s *ServiceParams) Auth() string {
 	return s.auth
 }
 
+// HasCredential reports whether --auth or an Authorization --svc-param is set.
+func (s *ServiceParams) HasCredential() bool {
+	if s.auth != "" {
+		return true
+	}
+	for _, e := range s.entries {
+		if strings.EqualFold(e.key, "Authorization") {
+			return true
+		}
+	}
+	return false
+}
+
 type svcParamValue struct{ s *ServiceParams }
 
 func (v *svcParamValue) Set(kv string) error {

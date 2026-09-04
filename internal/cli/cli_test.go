@@ -642,6 +642,64 @@ func TestConfigApplied(t *testing.T) {
 	}
 }
 
+func TestInsecureCredentialWarning(t *testing.T) {
+	t.Parallel()
+	url := startTestServer(t)
+
+	tests := []struct {
+		name     string
+		args     []string
+		wantWarn bool
+	}{
+		{
+			name:     "insecure with --auth warns",
+			args:     []string{"send", "-a", url, "--insecure", "--auth", "Bearer secret-token", "hi"},
+			wantWarn: true,
+		},
+		{
+			name:     "insecure with an authorization --svc-param warns",
+			args:     []string{"send", "-a", url, "--insecure", "--svc-param", "Authorization=Bearer secret-token", "hi"},
+			wantWarn: true,
+		},
+		{
+			name:     "json output mode does not suppress the warning",
+			args:     []string{"send", "-a", url, "--insecure", "--auth", "Bearer secret-token", "-o", "json", "hi"},
+			wantWarn: true,
+		},
+		{
+			name:     "insecure with a non-credential svc-param does not warn",
+			args:     []string{"send", "-a", url, "--insecure", "--svc-param", "X-Trace=abc", "hi"},
+			wantWarn: false,
+		},
+		{
+			name:     "credential without insecure does not warn",
+			args:     []string{"send", "-a", url, "--auth", "Bearer secret-token", "hi"},
+			wantWarn: false,
+		},
+		{
+			name:     "insecure without a credential does not warn",
+			args:     []string{"send", "-a", url, "--insecure", "hi"},
+			wantWarn: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, stderr, err := runCMDCapturingStderr(t, tt.args...)
+			if err != nil {
+				t.Fatalf("runCMDCapturingStderr(%q) error = %v", strings.Join(tt.args, " "), err)
+			}
+			if gotWarn := strings.Contains(stderr, insecureCredentialWarning); gotWarn != tt.wantWarn {
+				t.Fatalf("stderr contains insecure-credential warning = %v, want %v; stderr = %q", gotWarn, tt.wantWarn, stderr)
+			}
+			if strings.Contains(stderr, "secret-token") {
+				t.Fatalf("stderr leaked the credential value: %q", stderr)
+			}
+		})
+	}
+}
+
 func startTestServer(t *testing.T) string {
 	t.Helper()
 	return startTestServerWith(t, a2a.AgentCapabilities{Streaming: true})
@@ -749,6 +807,20 @@ func runCMDWithConfig(t *testing.T, deps deps, args ...string) (string, error) {
 	root.SetArgs(args)
 	err := root.Execute()
 	return buf.String(), err
+}
+
+func runCMDCapturingStderr(t *testing.T, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	var out, errBuf bytes.Buffer
+	cfg := &globalConfig{
+		Printer:   output.NewPrinter(&out, output.ModeText),
+		svcParams: &flagparse.ServiceParams{},
+		errOut:    &errBuf,
+	}
+	root := newRootCmd(cfg, deps{poller: polling.Stream, cfgLoader: clicfg.LoadEmpty})
+	root.SetArgs(args)
+	err = root.Execute()
+	return out.String(), errBuf.String(), err
 }
 
 type legacyExecutor struct{}

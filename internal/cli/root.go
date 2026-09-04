@@ -17,6 +17,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -57,13 +58,21 @@ type globalConfig struct {
 	configPath   string
 
 	bindings []clicfg.FlagBinding
+	errOut   io.Writer
 
 	*output.Printer
 }
 
+func (g *globalConfig) stderr() io.Writer {
+	if g.errOut != nil {
+		return g.errOut
+	}
+	return os.Stderr
+}
+
 func (g *globalConfig) logf(format string, args ...any) {
 	if g.verbose {
-		_, _ = fmt.Fprintf(os.Stderr, "# "+format+"\n", args...)
+		_, _ = fmt.Fprintf(g.stderr(), "# "+format+"\n", args...)
 	}
 }
 
