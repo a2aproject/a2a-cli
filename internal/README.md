@@ -168,11 +168,19 @@ a2a send -a <url> --context-id <context-id> "Related question"
 a2a task get -a <url> <id>
 a2a task get -a <url> <id> --history 10
 a2a task get -a <url> <id> -o json
+
+# Follow a task started with `send --async` until it finishes
+a2a task get -a <url> <id> --wait
+a2a task get -a <url> <id> --wait --poll-interval 2s --timeout 60s
 ```
 
 | Flag | Description |
 |---|---|
 | `--history <n>` | Include up to `n` history messages. |
+| `--wait` | Poll until the task reaches a terminal (`completed`/`failed`/`canceled`/`rejected`) state, returning early on an interrupted (`input-required`/`auth-required`) state so the caller can act. |
+| `--poll-interval <duration>` | Delay between polls while waiting (default `2s`); only used with `--wait`. |
+
+The overall wait budget is the global `--timeout` (default `30s`); when it expires before the task settles, the command reports a timeout error and exits non-zero.
 
 ### `task list` - List Tasks
 
