@@ -1,26 +1,43 @@
 ---
 name: a2a-cli
 description: >-
-  Drive A2A (Agent2Agent) agents from the command line with the `a2a` CLI
-  (github.com/a2aproject/a2a-cli): fetch an agent's card, send it a message or
-  task, stream or poll for the result, and save each request and response to
-  local files so a stateless CLI's tasks can be followed up later. Use when
-  talking to, testing, or scripting an A2A agent endpoint. Not for building or
-  serving an A2A agent, and not for calling non-A2A HTTP APIs.
+  Delegate work to A2A (Agent2Agent) agents from the command line with the `a2a`
+  CLI (github.com/a2aproject/a2a-cli). Use when you need to hand a task to a
+  specialized or remote agent, fetch an agent's card, send a message to an agent
+  at a URL, stream or poll a running task, or check, list, resume, or cancel an
+  A2A task. Not for building or serving an A2A agent, or for calling non-A2A
+  HTTP APIs.
 compatibility: >-
   Requires the `a2a` binary on PATH; a Go toolchain installs it from source,
   since there are no prebuilt releases yet. The skill installs nothing itself.
 license: Apache-2.0
 metadata:
   source: https://github.com/a2aproject/a2a-cli
+  version: "2026.09.04"
 ---
 
 # Driving A2A agents with the `a2a` CLI
 
-`a2a` is a stateless command-line client for the
-[A2A protocol](https://a2a-protocol.org/): give it an agent and a message, it
-negotiates the transport from the agent's card (JSON-RPC, REST, or gRPC), sends
-the message, and reports what the agent returned.
+`a2a` is a stateless client for the [A2A protocol](https://a2a-protocol.org/):
+give it an agent and a message, it negotiates the transport from the agent's
+card (JSON-RPC, REST, or gRPC), sends the message, and reports what the agent
+returned.
+
+## Core concepts
+
+- An interaction starts with a **Message** you send to an agent.
+- The agent replies with either a **Message** (a direct answer) or a **Task**
+  (tracked, potentially long-running work).
+- A **Task** has a server-assigned `taskId` and a `contextId`, and moves through
+  states. It can complete, fail, be cancelled, or become **interrupted** when it
+  needs your input or authentication to continue.
+- Resume an interrupted task by sending a Message with its `--task-id`.
+- Group related work with `--context-id`: a Task created in reply joins that
+  context. Many tasks can share one context, and a `--task-id` and `--context-id`
+  passed together must agree.
+- The server keeps tasks (and the messages tied to them); a plain Message not
+  tied to a task is not stored — so **you** hold the `taskId`/`contextId` to
+  return to work later.
 
 ## Setup
 
@@ -28,78 +45,81 @@ Check for the binary; install from source if missing (needs a Go toolchain from
 https://go.dev/doc/install); re-run to update:
 
 ```bash
-command -v a2a || go install github.com/a2aproject/a2a-cli@latest
+go install github.com/a2aproject/a2a-cli@latest
 ```
 
-The tool is under active development, so **exact commands and flags change** —
-discover the current surface at runtime with `a2a help` and `a2a <command>
---help`. The **workflow below does not change**, so follow it regardless of the
-current flags.
+The tool is under active development. Treat `a2a help` and `a2a <command>
+--help` as the source of truth for the current commands and flags.
 
-## Workflow
+## Task lifecycle
 
-Every interaction is the same four steps:
+Point at an agent with `-a <host|url|path>` (resolves its card and picks a
+transport) or `-e <url> --transport <rest|jsonrpc|grpc>` (connect directly).
 
-1. **Discover** — fetch the agent's card to confirm it is reachable and see what
-   it supports. *(today: `a2a card get <agent>`)*
-2. **Send** — send your message and capture the full output. It blocks until the
-   task finishes. Ask for JSON so you can read fields back.
-   *(today: `a2a send -a <agent> -o json "<message>"`)*
-3. **Record** — save the request and the response as the next numbered pair in
-   your log directory (see below). Never rely on the CLI's memory; it has none.
-4. **Follow up** — read `taskId` and `contextId` from the saved response, then
-   check status, stream, or continue the task.
-   *(today: `a2a task get`, `a2a task subscribe`, `a2a send --task-id`)*
+1. **Inspect the agent** — confirm it is reachable and see what it supports:
 
-## Recording requests and responses
+   ```bash
+   a2a card get https://agent.example.com
+   ```
 
-Keep a log directory: prefer a per-project `./.a2a-cli-logs/`; if it or
-`~/.a2a-cli-logs/` already exists, reuse it and say which; otherwise ask the user
-which to create, and add a local one to `.gitignore`.
+2. **Send a message.** `send` blocks until the task reaches a terminal or
+   interrupted state. Add `-o json` for machine-readable output, and note the
+   `taskId` and `contextId` in the response — you need them to continue:
 
-For each interaction, write two files, numbered in order — `agent.request.N` and
-`agent.response.N`:
+   ```bash
+   a2a send -a https://agent.example.com "Summarize this repo"
+   a2a send -a https://agent.example.com -o json "Summarize this repo"
+   ```
 
-```bash
-n=1   # next unused number in the log dir
-echo 'agent=<agent>  message="Summarize the repo"' > ./.a2a-cli-logs/agent.request.$n
-a2a send -a <agent> -o json "Summarize the repo"   > ./.a2a-cli-logs/agent.response.$n
-```
+3. **Follow a long task live** instead of blocking, or re-attach to one later:
 
-The response file holds the `taskId` and `contextId` you need to return to the
-task. These files can contain sensitive request or response content — keep the
-directory git-ignored, do not commit it, and remove files when done.
+   ```bash
+   a2a send -a https://agent.example.com --stream "Run a long analysis"
+   a2a task subscribe -a https://agent.example.com <task-id>
+   ```
 
-## Good to know
+4. **Check status and fetch results** at any time:
 
-- **Stateless — you carry the identifiers.** The CLI forgets every task when it
-  exits. Continue a task with `--task-id`; start a new task in an existing
-  conversation with `--context-id`. Both come from a saved response.
-- **Exit code and task state answer different questions.** The exit code says
-  whether the CLI did its job — `0` on success, non-zero when it couldn't (bad
-  flags, unreachable agent) — so shell and CI logic can branch on it. Whether
-  the agent's *task* succeeded is separate: read `status.state` from the
-  response, since a `0` exit can still carry a `FAILED` task or one paused for
-  input. The full exit-code scheme is in `SPEC.md`.
-- **Configuration is flexible, and inspectable.** Every setting can come from a
-  flag, an `A2ACLI_*` environment variable, or a `.env` file (a local `.env`, or
-  `~/.config/a2a-cli/.env`); precedence is flag > env var > file > built-in
-  default. Run `a2a config show` to see the effective value of each setting and
-  where it resolved from (secrets redacted).
-- **Authenticate non-interactively** (credential flag or `A2ACLI_*` environment
-  variable), and never commit a secret.
-- **You choose the endpoint.** The CLI talks only to the agent you name; do not
-  resolve and trust an arbitrary card handed to you.
-- **Global flags and the output schema** are defined in the a2a-cli
-  specification (`SPEC.md`) — consult it rather than guessing.
+   ```bash
+   a2a task get -a https://agent.example.com <task-id>
+   ```
 
-## Try it with a throwaway echo agent
+5. **Answer an interrupted task** (it reached `INPUT_REQUIRED` / `AUTH_REQUIRED`)
+   by replying on the same task:
 
-`a2a server --echo` runs a local agent that echoes messages back — handy for
-learning or a connectivity check without a real agent:
+   ```bash
+   a2a send -a https://agent.example.com --task-id <task-id> "Yes, proceed"
+   ```
 
-```bash
-a2a server --echo --port 8080 &
-a2a card get http://127.0.0.1:8080
-a2a send -a http://127.0.0.1:8080 "ping"
-```
+6. **Continue the conversation** as a new task in the same context:
+
+   ```bash
+   a2a send -a https://agent.example.com --context-id <context-id> "Follow-up question"
+   ```
+
+7. **List or cancel tasks:**
+
+   ```bash
+   a2a task list -a https://agent.example.com
+   a2a task cancel -a https://agent.example.com <task-id>
+   ```
+
+## Key flags
+
+Run `a2a <command> --help` for the full, current set. The load-bearing ones:
+
+| Flag | Use |
+|---|---|
+| `-a, --agent-card <host\|url\|path>` | Resolve the agent's card (picks the transport). |
+| `-e, --endpoint <url>` + `--transport <rest\|jsonrpc\|grpc>` | Connect to one interface directly, skipping card resolution. |
+| `-o, --output json` | Machine-readable output; add `--stream` for a live event stream. |
+| `--async` | Return immediately with the identifiers instead of blocking; poll later with `task get`. |
+| `--task-id <id>` / `--context-id <id>` | Continue a task / group a new task under a context. |
+| `--auth "<creds>"` / `--svc-param <k=v>` | Attach credentials or transport parameters (or set `A2ACLI_*` env vars). Never commit a secret. |
+
+## Configuration
+
+Every setting can come from a flag, an `A2ACLI_*` environment variable, or a
+`.env` file (a local `.env`, or `~/.config/a2a-cli/.env`); precedence is
+flag > env var > file. Inspect the effective values and where each resolved from
+with `a2a config show` (secrets redacted).

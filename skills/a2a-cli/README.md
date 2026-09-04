@@ -28,7 +28,7 @@ a2a version
 ## Installation
 
 Fetch the one skill file into the place your agent loads skills from. Many agents
-read `~/.agents/skills/`; CloudCode reads `~/.config/cloudcode/skills/`.
+read `~/.agents/skills/`. Use `~/.gemini/config/skills/` for Google Antigravity.
 
 ```bash
 mkdir -p ~/.agents/skills/a2a-cli
