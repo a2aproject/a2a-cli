@@ -21,7 +21,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-cli/internal/transportplugin"
 )
 
@@ -42,7 +41,7 @@ func newTransportListCmd(cfg *globalConfig) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			entries := collectTransportEntries(cmd)
-			if cfg.Mode == output.ModeJson {
+			if cfg.IsJSON() {
 				return cfg.PrintJSON(entries)
 			}
 			return printTransportTable(cfg.Out, entries)

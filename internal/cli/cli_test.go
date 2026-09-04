@@ -241,11 +241,8 @@ func TestSend(t *testing.T) {
 				if err != nil {
 					t.Fatalf("runCMD(%q) error = %v", strings.Join(tt.args(mode.url), " "), err)
 				}
-				var task a2a.Task
-				if err := json.Unmarshal([]byte(out), &task); err != nil {
-					t.Fatalf("json.Unmarshal() error = %v", err)
-				}
-				if text := testutil.AllArtifactText(&task); text != tt.wantText {
+				task := mustDecodeTask(t, out)
+				if text := testutil.AllArtifactText(task); text != tt.wantText {
 					t.Fatalf("allArtifactText() = %q, want %q", text, tt.wantText)
 				}
 			})
@@ -285,11 +282,8 @@ func TestSend_AgentCardFromFile(t *testing.T) {
 			if err != nil {
 				t.Fatalf("runCMD(%q) error = %v", strings.Join(tt.args, " "), err)
 			}
-			var task a2a.Task
-			if err := json.Unmarshal([]byte(out), &task); err != nil {
-				t.Fatalf("json.Unmarshal() error = %v", err)
-			}
-			if text := testutil.AllArtifactText(&task); text != tt.wantText {
+			task := mustDecodeTask(t, out)
+			if text := testutil.AllArtifactText(task); text != tt.wantText {
 				t.Fatalf("allArtifactText() = %q, want %q", text, tt.wantText)
 			}
 		})
@@ -306,11 +300,8 @@ func TestSendDataPart(t *testing.T) {
 	}
 
 	out := mustRunCMD(t, "send", "-a", url, "-o", "json", "--data-part", path)
-	var task a2a.Task
-	if err := json.Unmarshal([]byte(out), &task); err != nil {
-		t.Fatalf("json.Unmarshal(send --data-part output) error = %v", err)
-	}
-	if got := testutil.AllArtifactText(&task); got != `{"hello":"world"}` {
+	task := mustDecodeTask(t, out)
+	if got := testutil.AllArtifactText(task); got != `{"hello":"world"}` {
 		t.Fatalf("allArtifactText() = %q, want %q", got, `{"hello":"world"}`)
 	}
 }
@@ -325,11 +316,8 @@ func TestSendRequestPayloadFile(t *testing.T) {
 	}
 
 	out := mustRunCMD(t, "send", "-a", url, "-o", "json", "--request-payload", path)
-	var task a2a.Task
-	if err := json.Unmarshal([]byte(out), &task); err != nil {
-		t.Fatalf("json.Unmarshal(send --request-payload output) error = %v", err)
-	}
-	if got := testutil.AllArtifactText(&task); got != "from file" {
+	task := mustDecodeTask(t, out)
+	if got := testutil.AllArtifactText(task); got != "from file" {
 		t.Fatalf("allArtifactText() = %q, want %q", got, "from file")
 	}
 }
@@ -490,12 +478,79 @@ func TestSendStreaming(t *testing.T) {
 	}
 }
 
+func TestSendStreamJSONL(t *testing.T) {
+	t.Parallel()
+	url := startTestServer(t)
+
+	testCases := []struct {
+		name              string
+		flags             []string
+		wantObjectPerLine bool
+	}{
+		{
+			name:              "jsonl streams one compact object per line",
+			flags:             []string{"-a", url, "-o", "jsonl", "--stream"},
+			wantObjectPerLine: true,
+		},
+		{
+			name:              "jsonl compact with non-streaming",
+			flags:             []string{"-a", url, "-o", "jsonl"},
+			wantObjectPerLine: true,
+		},
+		{
+			name:              "json streams indented records",
+			flags:             []string{"-a", url, "-o", "json", "--stream"},
+			wantObjectPerLine: false,
+		},
+		{
+			name:              "json indented with non-streaming",
+			flags:             []string{"-a", url, "-o", "json"},
+			wantObjectPerLine: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			command := append([]string{"send", "stream me"}, tc.flags...)
+			out := mustRunCMD(t, command...)
+			lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+			if len(lines) == 0 {
+				t.Fatalf("send --stream produced no JSONL lines")
+			}
+			objectPerLine := true
+			for i, line := range lines {
+				var sr a2a.StreamResponse
+				if err := json.Unmarshal([]byte(line), &sr); err != nil {
+					if tc.wantObjectPerLine {
+						t.Fatalf("JSONL line %d is not an independently parseable object: %v\nline: %s", i, err, line)
+					}
+					objectPerLine = false
+					break
+				}
+			}
+			if objectPerLine && !tc.wantObjectPerLine {
+				t.Fatalf("all outputs lines contained a well-formed a2a.StreamResponse:\n%s", out)
+			}
+		})
+	}
+
+}
+
+func TestSendOutputInvalidFormat(t *testing.T) {
+	t.Parallel()
+	url := startTestServer(t)
+	if _, err := runCMD(t, "send", "-a", url, "-o", "yaml", "format me"); err == nil {
+		t.Fatal("send -o yaml error = nil, want error")
+	}
+}
+
 func TestSendStreamingFallbackUsesDefaultPoller(t *testing.T) {
 	t.Parallel()
 	nonStreamingURL := startTestServerWith(t, a2a.AgentCapabilities{Streaming: false})
 
 	out, err := runCMDWithConfig(t, deps{cfgLoader: clicfg.LoadEmpty},
-		"send", "-a", nonStreamingURL, "-o", "json", "--stream", "stream me", "--polling-interval", "5ms")
+		"send", "-a", nonStreamingURL, "-o", "json", "--stream", "stream me", "--poll-interval", "5ms")
 	if err != nil {
 		t.Fatalf("runCMDWithConfig() error = %v", err)
 	}
@@ -511,6 +566,108 @@ func TestSendStreamingFallbackUsesDefaultPoller(t *testing.T) {
 	}
 	if events == 0 {
 		t.Fatalf("send --stream via default poller produced %d events, want > 0", events)
+	}
+}
+
+func TestSend_ResumeHintForInputRequiredTask(t *testing.T) {
+	t.Parallel()
+
+	var taskID a2a.TaskID
+	server := httptest.NewServer(a2asrv.NewRESTHandler(a2asrv.NewHandler(
+		a2asrv.AgentExecutorFunc(func(ctx context.Context, ec *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
+			return func(yield func(a2a.Event, error) bool) {
+				taskID = ec.TaskID
+				task := &a2a.Task{
+					ID:        ec.TaskID,
+					ContextID: ec.ContextID,
+					Status:    a2a.TaskStatus{State: a2a.TaskStateInputRequired},
+				}
+				yield(task, nil)
+			}
+		}),
+	)))
+	t.Cleanup(server.Close)
+
+	out := mustRunCMD(t, "send", "-e", server.URL, "--transport", "rest", "hello")
+	if !strings.Contains(out, "a2a send --task-id "+string(taskID)) {
+		t.Fatalf("send text output missing the resume hint:\n%s", out)
+	}
+}
+
+func TestSendWithVersionSelector(t *testing.T) {
+	t.Parallel()
+	url := startTestServer(t)
+	legacyURL := startLegacyTestServer(t)
+
+	testCases := []struct {
+		name    string
+		connect []string
+		version string
+		wantErr bool
+	}{
+		{
+			name:    "new server success",
+			connect: []string{"-a", url},
+			version: "1.0",
+		},
+		{
+			name:    "old server success",
+			connect: []string{"-a", legacyURL},
+			version: "0.3",
+		},
+		{
+			name:    "new server direct success",
+			connect: []string{"-e", url, "--transport", "rest"},
+			version: "1.0",
+		},
+		{
+			name:    "old server direct success",
+			connect: []string{"-e", legacyURL, "--transport", "jsonrpc"},
+			version: "0.3",
+		},
+		{
+			name:    "new server failure",
+			connect: []string{"-a", url},
+			version: "0.3",
+			wantErr: true,
+		},
+		{
+			name:    "new server direct failure",
+			connect: []string{"-e", url, "--transport", "rest"},
+			version: "0.3",
+			wantErr: true,
+		},
+		{
+			name:    "old server failure",
+			connect: []string{"-a", legacyURL},
+			version: "1.0",
+			wantErr: true,
+		},
+		{
+			name:    "old server direct failure",
+			connect: []string{"-e", legacyURL, "--transport", "jsonrpc"},
+			version: "1.0",
+			wantErr: true,
+		},
+		{
+			name:    "unknown version failure",
+			connect: []string{"-e", url},
+			version: "3.0",
+			wantErr: true,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			command := []string{"send", "--a2a-version", tc.version, "-o", "json", "hi"}
+			command = append(command, tc.connect...)
+			_, err := runCMD(t, command...)
+			if err != nil && !tc.wantErr {
+				t.Fatalf("send error = %v", err)
+			}
+			if err == nil && tc.wantErr {
+				t.Fatal("send error = nil, wanted a failure")
+			}
+		})
 	}
 }
 
@@ -693,6 +850,19 @@ func startLegacyTestServer(t *testing.T) string {
 	}))
 
 	return server.URL
+}
+
+func mustDecodeTask(t *testing.T, out string) *a2a.Task {
+	t.Helper()
+	var resp a2a.StreamResponse
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v\noutput: %s", err, out)
+	}
+	task, ok := resp.Event.(*a2a.Task)
+	if !ok {
+		t.Fatalf("send output has no task wrapper: %s", out)
+	}
+	return task
 }
 
 func sendTestMessage(t *testing.T, url, text string) a2a.TaskID {

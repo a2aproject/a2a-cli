@@ -78,6 +78,9 @@ func newClientFromEndpoint(ctx context.Context, cfg *globalConfig, ref string, e
 	}
 
 	endpoint := a2a.NewAgentInterface(endpointURL, protocol)
+	if cfg.a2aVersion != "" {
+		endpoint.ProtocolVersion = a2a.ProtocolVersion(cfg.a2aVersion)
+	}
 	client, err := a2aclient.NewFromEndpoints(ctx, []*a2a.AgentInterface{endpoint}, factoryOpts...)
 	return client, hintInsecure(err)
 }
@@ -126,19 +129,28 @@ func hintInsecure(err error) error {
 }
 
 func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
-	factoryOpts := []a2aclient.FactoryOption{
-		a2av0.WithRESTTransport(a2av0.RESTTransportConfig{}),
-		a2av0.WithJSONRPCTransport(a2av0.JSONRPCTransportConfig{}),
-	}
 	var grpcOpts []grpc.DialOption
 	if cfg.insecureGRPC {
 		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
-	factoryOpts = append(factoryOpts,
-		a2agrpcv0.WithGRPCTransport(grpcOpts...),
-		a2agrpc.WithGRPCTransport(grpcOpts...),
-	)
-	return factoryOpts
+	opts := []a2aclient.FactoryOption{a2aclient.WithDefaultsDisabled()}
+	if cfg.a2aVersion == "" || cfg.a2aVersion == "1.0" {
+		opts = append(
+			opts,
+			a2aclient.WithRESTTransport(nil),
+			a2aclient.WithJSONRPCTransport(nil),
+			a2agrpc.WithGRPCTransport(grpcOpts...),
+		)
+	}
+	if cfg.a2aVersion == "" || cfg.a2aVersion == "0.3" {
+		opts = append(
+			opts,
+			a2av0.WithRESTTransport(a2av0.RESTTransportConfig{}),
+			a2av0.WithJSONRPCTransport(a2av0.JSONRPCTransportConfig{}),
+			a2agrpcv0.WithGRPCTransport(grpcOpts...),
+		)
+	}
+	return opts
 }
 
 func stripHTTPScheme(raw string) string {

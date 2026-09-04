@@ -44,6 +44,31 @@ func TestServiceParamsParse(t *testing.T) {
 			want: a2aclient.ServiceParams{"k": {"a=b"}},
 		},
 		{
+			name: "colon separator",
+			args: []string{"--svc-param", "x-trace:abc"},
+			want: a2aclient.ServiceParams{"x-trace": {"abc"}},
+		},
+		{
+			name: "colon value may contain colon",
+			args: []string{"--svc-param", "redirect:http://example.com"},
+			want: a2aclient.ServiceParams{"redirect": {"http://example.com"}},
+		},
+		{
+			name: "equals before colon splits on equals",
+			args: []string{"--svc-param", "url=http://example.com"},
+			want: a2aclient.ServiceParams{"url": {"http://example.com"}},
+		},
+		{
+			name: "colon before equals splits on colon",
+			args: []string{"--svc-param", "x-trace:a=b"},
+			want: a2aclient.ServiceParams{"x-trace": {"a=b"}},
+		},
+		{
+			name:    "empty key with colon is an error",
+			args:    []string{"--svc-param", ":value"},
+			wantErr: true,
+		},
+		{
 			name: "repeated keys append in order",
 			args: []string{"--svc-param", "k=1", "--svc-param", "k=2"},
 			want: a2aclient.ServiceParams{"k": {"1", "2"}},

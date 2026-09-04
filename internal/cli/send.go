@@ -31,15 +31,15 @@ import (
 )
 
 type sendFlags struct {
-	stream          bool
-	async           bool
-	payload         string
-	taskID          string
-	contextID       string
-	history         int
-	pollingInterval time.Duration
-	parts           flagparse.Parts
-	meta            flagparse.Metadata
+	stream       bool
+	async        bool
+	payload      string
+	taskID       string
+	contextID    string
+	history      int
+	pollInterval time.Duration
+	parts        flagparse.Parts
+	meta         flagparse.Metadata
 }
 
 type pollerFunc func(ctx context.Context, client *a2aclient.Client, req *a2a.SendMessageRequest, interval time.Duration) iter.Seq2[a2a.Event, error]
@@ -81,9 +81,9 @@ func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 					return utils.UnpackCause(ctx, err)
 				}
 
-				cfg.logf("falling back to polling (%v): %v", flags.pollingInterval, err)
+				cfg.logf("falling back to polling (%v): %v", flags.pollInterval, err)
 
-				for event, err := range poller(ctx, client, req, flags.pollingInterval) {
+				for event, err := range poller(ctx, client, req, flags.pollInterval) {
 					debounceTimeout()
 					if err := handleStreamEntry(cfg, event, err); err != nil {
 						return utils.UnpackCause(ctx, err)
@@ -113,7 +113,7 @@ func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 	f.StringVar(&flags.taskID, "task-id", "", "Task ID to continue an existing task")
 	f.StringVar(&flags.contextID, "context-id", "", "Context ID to group this turn under")
 	f.IntVar(&flags.history, "history", 0, "Request n history messages in the response")
-	f.DurationVar(&flags.pollingInterval, "polling-interval", 5*time.Second, "Duration between GetTask requests in polling fallback mode.")
+	f.DurationVar(&flags.pollInterval, "poll-interval", 2*time.Second, "Duration between GetTask requests in polling fallback mode.")
 	flags.parts.Attach(f)
 	flags.meta.Attach(f, "metadata", "Attach request metadata as a JSON object (repeatable)")
 
