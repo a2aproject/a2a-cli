@@ -59,11 +59,8 @@ func TestTransportPluginIntegration(t *testing.T) {
 
 	t.Run("send proxies through the plugin", func(t *testing.T) {
 		out := mustRunCMD(t, "send", "--transport", "echo", "--endpoint", "echo://demo", "-o", "json", "hello plugin")
-		var task a2a.Task
-		if err := json.Unmarshal([]byte(out), &task); err != nil {
-			t.Fatalf("json.Unmarshal(send output) error = %v", err)
-		}
-		if got := testutil.AllArtifactText(&task); got != "hello plugin" {
+		task := mustDecodeTask(t, out)
+		if got := testutil.AllArtifactText(task); got != "hello plugin" {
 			t.Fatalf("send via echo plugin artifact text = %q, want %q", got, "hello plugin")
 		}
 	})
