@@ -13,11 +13,19 @@ It is one file, `SKILL.md`. Once it is installed, your agent can:
 
 ## Prerequisite
 
-The skill drives the `a2a` binary; it does not install it. Install `a2a` first:
+The skill drives the `a2a` binary; it does not install it. With a Go toolchain
+matching the repository's `go.mod`, build it from source with the expected name:
 
 ```bash
-go install github.com/a2aproject/a2a-cli@latest
+git clone https://github.com/a2aproject/a2a-cli.git
+cd a2a-cli
+go build -o a2a .
+export PATH="$PWD:$PATH"
 ```
+
+The PATH change applies to this shell. For future sessions, place the binary in
+a directory on your PATH. A plain `go install` names the executable `a2a-cli`,
+whereas this skill invokes `a2a`.
 
 Confirm it is on your `PATH`:
 
