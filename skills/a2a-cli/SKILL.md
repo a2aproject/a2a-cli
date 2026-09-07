@@ -41,12 +41,16 @@ returned.
 
 ## Setup
 
-Check for the binary; install from source if missing (needs a Go toolchain from
-https://go.dev/doc/install); re-run to update:
+Check that the binary is available:
 
 ```bash
-go install github.com/a2aproject/a2a-cli@latest
+a2a version
 ```
+
+If it is missing, ask the user to install it using the
+[setup instructions](https://github.com/a2aproject/a2a-cli/blob/main/skills/a2a-cli/README.md#prerequisite),
+then retry the check. The binary must be available as `a2a` on PATH; the skill
+does not install or update it.
 
 The tool is under active development. Treat `a2a help` and `a2a <command>
 --help` as the source of truth for the current commands and flags.
