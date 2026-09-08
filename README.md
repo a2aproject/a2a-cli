@@ -10,10 +10,6 @@
 
 The **A2A CLI** (`a2a`) is a standardized command-line client for discovering, interacting with, and managing [A2A (Agent2Agent) agents](https://a2a-protocol.org/latest/).
 
-> [!IMPORTANT]
-> **Specification in Active Review (v0.2)**  
-> We are formalizing and reviewing the **A2A CLI Specification**. Share feedback, questions, and contributions on the specification documents as we finalize v0.2 in **August 2026**.
-
 
 ## Why the A2A CLI
 
@@ -26,30 +22,40 @@ The `a2a` CLI is one consistent way to work with A2A agents — no throwaway scr
 The CLI handles the underlying complexity. It negotiates the transport (JSON-RPC, REST, or gRPC) from the agent's card, waits for a task to finish unless you tell it not to, and behaves the same across agents and languages.
 
 
-## About the Project
+## Installation
 
-Several community-driven CLI tools exist across languages, but they vary in coverage and behavior. To prevent fragmentation, this project defines one **standardized, officially supported CLI specification and reference implementation** — built for long-term stability, cross-transport consistency, and community alignment.
+**Homebrew (macOS / Linux)**
 
-The initial codebase builds on the CLI from the [A2A Go SDK](https://github.com/a2aproject/a2a-go/tree/9d95b95445f4208ba77f48a137a278067937adb7#-cli). We will refine and expand it to match the finalized specification.
+```bash
+brew tap a2aproject/a2a-cli https://github.com/a2aproject/a2a-cli
+brew install a2a
+```
+
+**WinGet (Windows)**
+
+```powershell
+winget install a2aproject.a2acli
+```
+
+**Prebuilt binaries** — download an archive from the [latest release](https://github.com/a2aproject/a2a-cli/releases/latest), extract it, and put the `a2a` binary on your `PATH`.
+
+**From source** — `go install github.com/a2aproject/a2a-cli@latest` (installs the binary as `a2a-cli`).
 
 
-## Specification & Conformance (Core Focus)
+## Usage
 
-The specification is a standalone document that defines the CLI behavior, command surface, output schemas, and transport rules for `a2a-cli`:
+```bash
+# Discover an agent's card
+a2a card get https://agent.example.com
 
-* **[Specification Document (v0.2)](./specification/SPEC.md):** The normative behavior specification covering command taxonomy, output contracts, polling/streaming rules, and exit codes.
-* **[Compliance Model (v0.2)](./specification/COMPLIANCE.md):** The requirement registry and verification model for claiming conformance.
-* **[Compliance Report Template](./specification/compliance-report.template.yaml):** The standardized machine-readable report for implementations.
+# Send a message and wait for the result
+a2a send -a https://agent.example.com "Hello, what can you do?"
 
+# Stream events as they arrive
+a2a send -a https://agent.example.com --stream "Summarize this document"
+```
 
-## CLI Development Phases & Roadmap
-
-The specification organizes CLI capabilities into three cumulative tiers. We will build and ship them in order:
-
-* **Tier 1 (Core Requirements):** Essential foundation — agent card discovery (`card get`), basic messaging (`send`), task inspection (`task get`), cancellation (`task cancel`), polling, exit codes, and standard text/JSON output contracts.
-* **Tier 2 (Standard Features):** Expanded capabilities — task listing (`task list`), real-time event streaming (`task subscribe`), transport auto-negotiation (REST, JSON-RPC, gRPC), push-configuration, and auth management.
-* **Tier 3 (Advanced & Ergonomics):** Advanced tooling — interactive terminal chat, push-notification webhook receivers, extended card verification, and mTLS / OpenID Connect authentication.
-
+See the **[full command reference](./internal/README.md)** for all commands, flags, configuration, and server mode.
 
 ## Custom Transport Plugins
 
@@ -69,6 +75,23 @@ Authoring a plugin in Go is a few lines with the
 `a2aclient.Transport`, it produces a CLI-compatible plugin. See the
 **[transport plugin guide](./docs/transport-plugins.md)** and the runnable
 **[echo plugin example](./examples/a2a-transport-echo)**.
+
+
+## About the Project
+
+Several community-driven CLI tools existed across languages, but they varied in coverage and behavior. This project is the result of reconciling these into one **standardized, officially supported CLI implementation** — built for long-term stability, cross-transport consistency, and community alignment.
+
+The specification is the product of reconciling the various community- and SDK-provided A2A CLIs — which had diverged in command names, flags, output shapes, and transport handling — and converging them on a single, agreed upon representation. It served as the roadmap for bringing `a2a-go` CLI in shape for becoming the official A2A cli:
+
+* **[Specification Document (v0.2)](./specification/SPEC.md):** The normative behavior specification covering command taxonomy, output contracts, polling/streaming rules, and exit codes.
+
+The specification organized CLI capabilities into three cumulative tiers:
+
+* **Tier 1 (Core Requirements):** Essential foundation — agent card discovery (`card get`), basic messaging (`send`), task inspection (`task get`), cancellation (`task cancel`), polling, exit codes, and standard text/JSON output contracts.
+* **Tier 2 (Standard Features):** Expanded capabilities — task listing (`task list`), real-time event streaming (`task subscribe`), transport auto-negotiation (REST, JSON-RPC, gRPC), push-configuration, and auth management.
+* **Tier 3 (Advanced & Ergonomics):** Advanced tooling — interactive terminal chat, push-notification webhook receivers, extended card verification, and mTLS / OpenID Connect authentication.
+
+The initial codebase builds on the CLI from the [A2A Go SDK](https://github.com/a2aproject/a2a-go/tree/9d95b95445f4208ba77f48a137a278067937adb7#-cli). We will refine and expand it to match the finalized specification.
 
 
 ## How to Contribute & Provide Feedback

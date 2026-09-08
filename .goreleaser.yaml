@@ -53,6 +53,62 @@ archives:
 checksum:
   name_template: checksums.txt
 
+brews:
+  - name: a2a
+    ids:
+      - a2a
+    homepage: "https://github.com/a2aproject/a2a-cli"
+    description: "The official command-line interface for A2A (Agent-to-Agent) compatible agents."
+    license: "Apache-2.0"
+    directory: Formula
+    skip_upload: "auto
+    commit_msg_template: "release: update Homebrew formula for a2a {{ .Tag }}"
+    install: |
+      bin.install "a2a"
+    test: |
+      system "#{bin}/a2a", "version"
+    repository:
+      owner: a2aproject
+      name: a2a-cli
+      branch: "homebrew/a2a-{{ .Version }}"
+      token: "{{ .Env.A2A_BOT_PAT }}"
+      pull_request:
+        enabled: true
+
+winget:
+  - name: a2a
+    package_identifier: a2aproject.a2acli
+    publisher: a2aproject
+    publisher_url: "https://github.com/a2aproject"
+    publisher_support_url: "https://github.com/a2aproject/a2a-cli/issues"
+    homepage: "https://github.com/a2aproject/a2a-cli"
+    short_description: "The official command-line interface for A2A-compatible agents."
+    description: "The official command-line interface for A2A (Agent-to-Agent) compatible agents."
+    license: "Apache-2.0"
+    license_url: "https://github.com/a2aproject/a2a-cli/blob/{{ .Tag }}/LICENSE"
+    copyright: "The A2A Authors"
+    ids:
+      - a2a
+    tags:
+      - a2a
+      - agent
+      - cli
+      - llm
+      - protocol
+    skip_upload: "auto"
+    commit_msg_template: "release: add a2a {{ .Version }} winget manifest"
+    repository:
+      owner: a2aproject
+      name: winget-pkgs
+      branch: "a2a-{{ .Version }}"
+      token: "{{ .Env.A2A_BOT_PAT }}"
+      pull_request:
+        enabled: true
+        base:
+          owner: microsoft
+          name: winget-pkgs
+          branch: master
+
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
