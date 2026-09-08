@@ -40,7 +40,7 @@ Export a setting once and every command in that shell session picks it up. It la
 export A2ACLI_AGENT_CARD=http://localhost:8090
 
 a2a card get       # no -a needed
-a2a send "hello"   # response: hello
+a2a send "hello"   # runs as a task; the reply is in the artifacts
 ```
 
 Good for a focused session against one agent, without editing any file.
@@ -94,7 +94,8 @@ Set any of these as a flag, an environment variable, or a `.env` entry. The tabl
 | `--agent-card` | `-a` | `A2ACLI_AGENT_CARD` | (unset) | Agent Card reference: host, card URL, or file path |
 | `--endpoint` | `-e` | `A2ACLI_ENDPOINT` | (unset) | Direct interface URL; skips card resolution |
 | `--transport` | | `A2ACLI_TRANSPORT` | (card order) | Transport preference: `rest`, `jsonrpc`, `grpc` |
-| `--output` | `-o` | `A2ACLI_OUTPUT` | `text` | Output format: `text` or `json` |
+| `--a2a-version` | | `A2ACLI_A2A_VERSION` | (unset) | A2A protocol version to advertise to the server |
+| `--output` | `-o` | `A2ACLI_OUTPUT` | `text` | Output format: `text`, `json`, or `jsonl` |
 | `--svc-param` | | `A2ACLI_SVC_PARAM` | (unset) | Service parameter, `key=value` |
 | `--auth` | | `A2ACLI_AUTH` | (unset) | Authorization credentials (redacted in `config show`) |
 | `--tenant` | | `A2ACLI_TENANT` | (unset) | Tenant identifier, sent on every request |
@@ -116,7 +117,7 @@ bash run.sh
 
 ## Next
 
-Lesson 4 goes deeper into [messages and tasks](../messages-and-tasks/). You will build multi-part messages, stream replies, and manage tasks.
+Lesson 4 goes deeper into [messages and tasks](../04-messages-and-tasks/). You will build multi-part messages, stream replies, and send async.
 
 ## Learn more
 

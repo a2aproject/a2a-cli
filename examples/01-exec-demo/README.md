@@ -95,7 +95,7 @@ bash test.sh
 
 ## Next
 
-You have a running agent. In [lesson 2](../card-and-send/) you learn the client side properly: reading the agent card, saving it, and setting it once through config so you can drop the `-a` flag from every command.
+You have a running agent. In [lesson 2](../02-card-and-send/) you learn the client side properly: reading the agent card, saving it, and setting it once through config so you can drop the `-a` flag from every command.
 
 ## Learn more
 

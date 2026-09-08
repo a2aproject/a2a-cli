@@ -73,21 +73,29 @@ a2a config show       # confirm the value and where it resolved from
 ```
 
 ```text
-SETTING      VALUE                    SOURCE
-agent-card   http://localhost:8090    local
+SETTING      VALUE                  SOURCE
+agent-card   http://localhost:8090  local-file
 ...
 ```
 
+The `local-file` source means the value came from a `.env` file in the working directory.
+
 ## Step 4 — send a message
 
-The echo agent sends your text right back:
+The echo agent sends your text right back. Every `send` runs as a task, so the CLI prints the task, its status, and the reply in the artifacts:
 
 ```bash
 a2a send "hello world from A2A"
 ```
 
 ```text
-hello world from A2A
+Task:     01a08152-ae99-73ae-98a3-58b82e14bde0
+Context:  01a08152-ae99-74bc-bfc7-d6ce8b2c74d2
+Status:   completed (2026-09-08T14:01:14Z)
+Artifacts:
+  [01a08152-ae99-75cd-891b-cceb14223d58] hello world from A2A
+History:
+  [user] hello world from A2A
 ```
 
 ## Run the whole lesson
@@ -100,7 +108,7 @@ bash run.sh
 
 ## Next
 
-Lesson 3 shows the three ways to [configure the CLI](../config/) and lists every setting you can change.
+Lesson 3 shows the three ways to [configure the CLI](../03-config/) and lists every setting you can change.
 
 ## Learn more
 
