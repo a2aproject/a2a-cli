@@ -16,15 +16,21 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/a2aproject/a2a-cli/internal/polling"
 	"github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/a2aproject/a2a-go/v2/a2aclient"
 )
 
 func newTaskGetCmd(cfg *globalConfig) *cobra.Command {
 	var history int
+	var wait bool
+	var pollInterval time.Duration
 
 	cmd := &cobra.Command{
 		Use:   "get <task-id>",
@@ -49,9 +55,9 @@ func newTaskGetCmd(cfg *globalConfig) *cobra.Command {
 				req.HistoryLength = &history
 			}
 
-			task, err := client.GetTask(ctx, req)
+			task, err := getTask(ctx, cfg, client, req, wait, pollInterval)
 			if err != nil {
-				return fmt.Errorf("failed to get task %s: %w", args[0], err)
+				return err
 			}
 
 			if err := cfg.PrintTask(task); err != nil {
@@ -61,6 +67,30 @@ func newTaskGetCmd(cfg *globalConfig) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().IntVar(&history, "history", 0, "Include up to n history messages")
+	f := cmd.Flags()
+	f.IntVar(&history, "history", 0, "Include up to n history messages")
+	f.BoolVar(&wait, "wait", false, "Poll until the task reaches a terminal or interrupted (input/auth-required) state")
+	f.DurationVar(&pollInterval, "poll-interval", 2*time.Second, "Duration between polls while waiting; only used with --wait. Overall wait budget is --timeout.")
 	return cmd
+}
+
+func getTask(ctx context.Context, cfg *globalConfig, client *a2aclient.Client, req *a2a.GetTaskRequest, wait bool, interval time.Duration) (*a2a.Task, error) {
+	if !wait {
+		task, err := client.GetTask(ctx, req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get task %s: %w", req.ID, err)
+		}
+		return task, nil
+	}
+
+	cfg.logf("waiting for task %s (poll interval %v, timeout %v)", req.ID, interval, cfg.timeout)
+
+	task, err := polling.WaitForTask(ctx, client, req, interval)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, fmt.Errorf("timed out after %s waiting for task %s: %w", cfg.timeout, req.ID, err)
+		}
+		return nil, fmt.Errorf("failed to wait for task %s: %w", req.ID, err)
+	}
+	return task, nil
 }

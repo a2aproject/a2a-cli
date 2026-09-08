@@ -187,6 +187,114 @@ func TestHandlePolling(t *testing.T) {
 	}
 }
 
+func TestWaitForTask(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		getResponses []getTaskResponse
+		wantState    a2a.TaskState
+		wantErr      string
+	}{
+		{
+			name:         "returns immediately when already terminal",
+			getResponses: []getTaskResponse{{task: &a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateCompleted}}}},
+			wantState:    a2a.TaskStateCompleted,
+		},
+		{
+			name: "polls until completion",
+			getResponses: []getTaskResponse{
+				{task: &a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateSubmitted}}},
+				{task: &a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateWorking}}},
+				{task: &a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateCompleted}}},
+			},
+			wantState: a2a.TaskStateCompleted,
+		},
+		{
+			name: "stops on input-required",
+			getResponses: []getTaskResponse{
+				{task: &a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateWorking}}},
+				{task: &a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateInputRequired}}},
+			},
+			wantState: a2a.TaskStateInputRequired,
+		},
+		{
+			name: "stops on auth-required",
+			getResponses: []getTaskResponse{
+				{task: &a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateWorking}}},
+				{task: &a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateAuthRequired}}},
+			},
+			wantState: a2a.TaskStateAuthRequired,
+		},
+		{
+			name: "tolerates transient failures below threshold",
+			getResponses: []getTaskResponse{
+				{err: errors.New("temporary 1")},
+				{err: errors.New("temporary 2")},
+				{task: &a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateWorking}}},
+				{err: errors.New("temporary 3")},
+				{task: &a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateCompleted}}},
+			},
+			wantState: a2a.TaskStateCompleted,
+		},
+		{
+			name: "successive failures exceed threshold",
+			getResponses: []getTaskResponse{
+				{err: errors.New("temporary 1")},
+				{err: errors.New("temporary 2")},
+				{err: errors.New("temporary 3")},
+			},
+			wantErr: "successive polling failure threshold exceeded",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			transport := &fakePollingTransport{getResponses: tt.getResponses}
+			client := newPollingClient(t, transport)
+			req := &a2a.GetTaskRequest{ID: "task-1"}
+
+			task, err := WaitForTask(t.Context(), client, req, 0)
+
+			if tt.wantErr != "" {
+				if err == nil {
+					t.Fatalf("WaitForTask() error = nil, want error containing %q", tt.wantErr)
+				}
+				if !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("WaitForTask() error = %v, want error containing %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("WaitForTask() error = %v, want nil", err)
+			}
+			if task.Status.State != tt.wantState {
+				t.Fatalf("WaitForTask() state = %v, want %v", task.Status.State, tt.wantState)
+			}
+		})
+	}
+}
+
+func TestWaitForTask_CancelledWithContext(t *testing.T) {
+	t.Parallel()
+
+	transport := &fakePollingTransport{
+		getResponses: []getTaskResponse{{task: &a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateWorking}}}},
+	}
+	client := newPollingClient(t, transport)
+	req := &a2a.GetTaskRequest{ID: "task-1"}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	_, err := WaitForTask(ctx, client, req, time.Hour)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("WaitForTask() error = %v, want context.Canceled", err)
+	}
+}
+
 func TestStream_SleepCancelledWithContext(t *testing.T) {
 	t.Parallel()
 
@@ -253,6 +361,7 @@ type fakePollingTransport struct {
 	sendErr    error
 
 	getResponses []getTaskResponse
+	getAlways    *a2a.Task
 	getCalls     int
 
 	sendRequest *a2a.SendMessageRequest
@@ -267,6 +376,9 @@ func (f *fakePollingTransport) SendMessage(ctx context.Context, c a2aclient.Serv
 }
 
 func (f *fakePollingTransport) GetTask(context.Context, a2aclient.ServiceParams, *a2a.GetTaskRequest) (*a2a.Task, error) {
+	if f.getAlways != nil {
+		return f.getAlways, nil
+	}
 	i := f.getCalls
 	f.getCalls++
 	if i >= len(f.getResponses) {

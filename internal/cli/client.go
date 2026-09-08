@@ -42,7 +42,17 @@ var compatCardResolver = func() *agentcard.Resolver {
 	return resolver
 }()
 
+const insecureCredentialWarning = "warning: sending a credential with TLS verification disabled (--insecure); the token may be exposed."
+
+// warnInsecureCredential warns once when a credential is sent with --insecure.
+func warnInsecureCredential(cfg *globalConfig) {
+	if cfg.insecureGRPC && cfg.svcParams.HasCredential() {
+		_, _ = fmt.Fprintln(cfg.stderr(), insecureCredentialWarning)
+	}
+}
+
 func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
+	warnInsecureCredential(cfg)
 	switch {
 	case cfg.url != "" && cfg.agentCard.IsSet():
 		return nil, clierr.Usage("--endpoint and --agent-card are mutually exclusive")
