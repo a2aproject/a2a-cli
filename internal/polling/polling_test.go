@@ -61,6 +61,11 @@ func TestHandlePolling(t *testing.T) {
 			wantEvents: []a2a.Event{&a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateInputRequired}}},
 		},
 		{
+			name:       "auth-required task on send stops without polling",
+			sendResult: &a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateAuthRequired}},
+			wantEvents: []a2a.Event{&a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateAuthRequired}}},
+		},
+		{
 			name:       "polls until completion recovering intermediate updates",
 			sendResult: &a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateSubmitted}},
 			getResponses: []getTaskResponse{
@@ -84,6 +89,19 @@ func TestHandlePolling(t *testing.T) {
 				&a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateSubmitted}},
 				&a2a.TaskStatusUpdateEvent{Status: a2a.TaskStatus{State: a2a.TaskStateWorking}},
 				&a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateInputRequired}},
+			},
+		},
+		{
+			name:       "polls until auth-required",
+			sendResult: &a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateSubmitted}},
+			getResponses: []getTaskResponse{
+				{task: &a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateWorking}}},
+				{task: &a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateAuthRequired}}},
+			},
+			wantEvents: []a2a.Event{
+				&a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateSubmitted}},
+				&a2a.TaskStatusUpdateEvent{Status: a2a.TaskStatus{State: a2a.TaskStateWorking}},
+				&a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateAuthRequired}},
 			},
 		},
 		{

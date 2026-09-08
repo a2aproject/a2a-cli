@@ -64,7 +64,8 @@ func WaitForTask(ctx context.Context, client *a2aclient.Client, req *a2a.GetTask
 }
 
 // Stream sends the original message and then polls the resulting task at the
-// given interval, yielding task events until it reaches a terminal state.
+// given interval, yielding task events until it reaches a terminal state or an
+// interrupted state that needs the caller to act (input/auth-required).
 func Stream(ctx context.Context, client *a2aclient.Client, original *a2a.SendMessageRequest, interval time.Duration) iter.Seq2[a2a.Event, error] {
 	return func(yield func(a2a.Event, error) bool) {
 		req := *original
@@ -95,7 +96,9 @@ func Stream(ctx context.Context, client *a2aclient.Client, original *a2a.SendMes
 		tid := prevState.ID
 
 		successiveFailures := 0
-		for !prevState.Status.State.Terminal() && prevState.Status.State != a2a.TaskStateInputRequired {
+		for !prevState.Status.State.Terminal() &&
+			prevState.Status.State != a2a.TaskStateInputRequired &&
+			prevState.Status.State != a2a.TaskStateAuthRequired {
 			select {
 			case <-ctx.Done():
 				yield(nil, ctx.Err())
@@ -115,7 +118,9 @@ func Stream(ctx context.Context, client *a2aclient.Client, original *a2a.SendMes
 			successiveFailures = 0
 
 			var events []a2a.Event
-			if task.Status.State.Terminal() || task.Status.State == a2a.TaskStateInputRequired {
+			if task.Status.State.Terminal() ||
+				task.Status.State == a2a.TaskStateInputRequired ||
+				task.Status.State == a2a.TaskStateAuthRequired {
 				events = append(events, task)
 			} else {
 				events = a2aevent.Recover(prevState, task)
