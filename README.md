@@ -39,8 +39,15 @@ winget install a2aproject.a2acli
 
 **Prebuilt binaries** — download an archive from the [latest release](https://github.com/a2aproject/a2a-cli/releases/latest), extract it, and put the `a2a` binary on your `PATH`.
 
-**From source** — `go install github.com/a2aproject/a2a-cli@latest` (installs the binary as `a2a-cli`).
+**From source**
 
+```bash
+go install github.com/a2aproject/a2a-cli@latest
+
+# rename to a2a to match the docs
+
+mv "$(command -v a2a-cli)" "$(dirname "$(command -v a2a-cli)")/a2a"
+```
 
 ## Usage
 
