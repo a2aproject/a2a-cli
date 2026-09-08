@@ -45,7 +45,7 @@ func TestClassify(t *testing.T) {
 			name:     "already-classified card error passes through",
 			err:      CardResolution(errors.New("not found")),
 			wantCode: CodeCardInvalid,
-			wantExit: 4,
+			wantExit: 1,
 		},
 		{
 			name:     "deadline exceeded is a timeout",
@@ -61,11 +61,16 @@ func TestClassify(t *testing.T) {
 			wantExit: 1,
 		},
 		{
-			name:     "auth is a protocol error, not a special case",
+			name:     "unauthenticated is an auth failure, exit 4",
 			err:      fmt.Errorf("send: %w", a2a.NewError(a2a.ErrUnauthenticated, "unauthenticated")),
-			wantCode: CodeProtocol,
-			wantA2A:  "UNAUTHENTICATED",
-			wantExit: 1,
+			wantCode: CodeAuth,
+			wantExit: 4,
+		},
+		{
+			name:     "unauthorized is an auth failure, exit 4",
+			err:      fmt.Errorf("send: %w", a2a.NewError(a2a.ErrUnauthorized, "unauthorized")),
+			wantCode: CodeAuth,
+			wantExit: 4,
 		},
 		{
 			name:     "net error is io, exit 3",
@@ -144,7 +149,7 @@ func TestCardResolution(t *testing.T) {
 			name:     "non-transport failure is card-invalid",
 			err:      errors.New("card request failed, status: 404 Not Found"),
 			wantCode: CodeCardInvalid,
-			wantExit: 4,
+			wantExit: 1,
 		},
 	}
 

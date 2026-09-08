@@ -36,11 +36,15 @@ const (
 	// CodeProtocol marks a failure the agent reported as an a2a.Error; the
 	// specific A2A reason travels in the A2ACode field. Exit 1.
 	CodeProtocol = "A2ACLI_ERR_PROTOCOL"
+	// CodeAuth marks an authentication or authorization failure. These are
+	// transport-level conditions the a2a-go SDK surfaces as sentinels rather
+	// than A2A protocol errors, so they are classified on their own. Exit 4.
+	CodeAuth = "A2ACLI_ERR_AUTH"
 	// CodeIO marks a transport failure reaching or reading from the agent —
 	// DNS, connection, TLS, reset, broken pipe. Exit 3.
 	CodeIO = "A2ACLI_ERR_IO"
 	// CodeCardInvalid marks a card that was reached but is not usable — a
-	// non-OK status or a malformed body. Exit 4.
+	// non-OK status or a malformed body. Exit 1.
 	CodeCardInvalid = "A2ACLI_ERR_CARD_INVALID"
 	// CodeTimeout marks a --timeout that expired before a terminal state; exit 5.
 	CodeTimeout = "A2ACLI_ERR_TIMEOUT"
@@ -97,7 +101,7 @@ func CardResolution(err error) *Error {
 	return &Error{
 		Code:    CodeCardInvalid,
 		Message: msg,
-		Exit:    4,
+		Exit:    1,
 		Hint:    "check the --agent-card reference (host, full card URL, or local file path)",
 		err:     err,
 	}
@@ -144,6 +148,16 @@ func Classify(err error) *Error {
 			Exit:    5,
 			err:     err,
 			Hint:    "increase --timeout, or start the task with --async and follow it later",
+		}
+	}
+
+	if errors.Is(err, a2a.ErrUnauthenticated) || errors.Is(err, a2a.ErrUnauthorized) {
+		return &Error{
+			Code:    CodeAuth,
+			Message: msg,
+			Exit:    4,
+			err:     err,
+			Hint:    `provide credentials with --auth (e.g. --auth "Bearer <token>")`,
 		}
 	}
 
