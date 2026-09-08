@@ -20,6 +20,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
 )
@@ -82,7 +83,10 @@ func getExtendedAgentCard(ctx context.Context, cfg *globalConfig) (*a2a.AgentCar
 
 func getPublicAgentCard(ctx context.Context, cfg *globalConfig) (*a2a.AgentCard, error) {
 	if !cfg.agentCard.IsSet() {
-		return nil, fmt.Errorf("specify the agent card URL as an argument or with --agent-card")
+		return nil, clierr.Usage("specify the agent card URL as an argument or with --agent-card")
+	}
+	if err := cfg.agentCard.Validate(); err != nil {
+		return nil, clierr.Usage(err.Error())
 	}
 	ref := cfg.agentCard.URL()
 
@@ -94,7 +98,7 @@ func getPublicAgentCard(ctx context.Context, cfg *globalConfig) (*a2a.AgentCard,
 
 	card, err := compatCardResolver.Resolve(ctx, ref, resolveOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve agent card: %w", err)
+		return nil, clierr.CardResolution(err)
 	}
 	return card, nil
 }

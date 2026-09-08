@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/transportplugin"
 	"github.com/a2aproject/a2a-go/v2/a2a"
@@ -44,13 +45,16 @@ var compatCardResolver = func() *agentcard.Resolver {
 func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
 	switch {
 	case cfg.url != "" && cfg.agentCard.IsSet():
-		return nil, fmt.Errorf("--endpoint and --agent-card are mutually exclusive")
+		return nil, clierr.Usage("--endpoint and --agent-card are mutually exclusive")
 	case cfg.url != "":
 		return newClientFromEndpoint(ctx, cfg, cfg.url, extraOpts...)
 	case cfg.agentCard.IsSet():
+		if err := cfg.agentCard.Validate(); err != nil {
+			return nil, clierr.Usage(err.Error())
+		}
 		return newClientFromCard(ctx, cfg, cfg.agentCard.URL(), extraOpts...)
 	default:
-		return nil, fmt.Errorf("either '--agent-card <ref>' or '--endpoint <url> --transport <t>' must be provided")
+		return nil, clierr.Usage("either '--agent-card <ref>' or '--endpoint <url> --transport <t>' must be provided")
 	}
 }
 
@@ -101,7 +105,7 @@ func newClientFromCard(ctx context.Context, cfg *globalConfig, ref string, extra
 	}
 	card, err := compatCardResolver.Resolve(ctx, ref, resolveOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("resolving agent card: %w", err)
+		return nil, clierr.CardResolution(err)
 	}
 
 	factoryOpts := append(clientFactoryOpts(cfg), extraOpts...)

@@ -23,6 +23,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/localsrv"
 	"github.com/a2aproject/a2a-cli/internal/transportplugin"
@@ -66,10 +67,10 @@ func newServeCmd(cfg *globalConfig) *cobra.Command {
 				modes++
 			}
 			if modes > 1 {
-				return fmt.Errorf("--echo, --proxy, and --exec are mutually exclusive")
+				return clierr.Usage("--echo, --proxy, and --exec are mutually exclusive")
 			}
 			if modes == 0 {
-				return fmt.Errorf("specify --echo, --proxy <url>, or --exec <cmd>")
+				return clierr.Usage("specify --echo, --proxy <url>, or --exec <cmd>")
 			}
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 			defer stop()

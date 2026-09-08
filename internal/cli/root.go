@@ -23,6 +23,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/a2aproject/a2a-cli/internal/clicfg"
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-cli/internal/polling"
@@ -76,10 +77,24 @@ func Execute() int {
 	}
 	root := newRootCmd(cfg, deps{})
 	if err := root.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return 1
+		return cfg.renderError(err)
 	}
 	return 0
+}
+
+func (g *globalConfig) renderError(err error) int {
+	ce := clierr.Classify(err)
+	if g.Mode == output.ModeJson {
+		if perr := g.PrintJSON(ce); perr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
+		return ce.Exit
+	}
+	fmt.Fprintf(os.Stderr, "Error: %s\n", ce.Message)
+	if ce.Hint != "" {
+		fmt.Fprintf(os.Stderr, "hint: %s\n", ce.Hint)
+	}
+	return ce.Exit
 }
 
 func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
@@ -91,6 +106,13 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 		Version:       buildVersionInfo().Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		Args:          cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return cmd.Help()
+			}
+			return clierr.Usage(fmt.Sprintf("unknown command %q for %q", args[0], cmd.CommandPath()))
+		},
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			store, err := deps.cfgLoader(clicfg.LoadOpts{ConfigPath: cfg.configPath})
 			if err != nil {
@@ -106,7 +128,7 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 			case output.ModeText, output.ModeJson, output.ModeJSONL:
 				cfg.Mode = output.Mode(cfg.output)
 			default:
-				return fmt.Errorf("invalid --output %q (want text, json, or jsonl)", cfg.output)
+				return clierr.Usage(fmt.Sprintf("invalid --output %q (want text or json)", cfg.output))
 			}
 			return nil
 		},
@@ -136,8 +158,32 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 	)
 
 	cmd.SetUsageTemplate(rootUsageTemplate)
+	markUsageErrors(cmd)
 
 	return cmd
+}
+
+// markUsageErrors makes cobra's flag- and argument-validation failures surface
+// as clierr usage errors.
+func markUsageErrors(cmd *cobra.Command) {
+	cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		return clierr.Usage(err.Error())
+	})
+	wrapArgsUsage(cmd)
+}
+
+func wrapArgsUsage(cmd *cobra.Command) {
+	if validate := cmd.Args; validate != nil {
+		cmd.Args = func(c *cobra.Command, args []string) error {
+			if err := validate(c, args); err != nil {
+				return clierr.Usage(err.Error())
+			}
+			return nil
+		}
+	}
+	for _, sub := range cmd.Commands() {
+		wrapArgsUsage(sub)
+	}
 }
 
 // rootUsageTemplate is cobra's default usage template with one change: the root

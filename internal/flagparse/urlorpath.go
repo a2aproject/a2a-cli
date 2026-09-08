@@ -15,7 +15,9 @@
 package flagparse
 
 import (
+	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,8 +46,42 @@ func (u *URLOrPath) Type() string { return "host|url|path" }
 func (u *URLOrPath) IsSet() bool { return u.raw != "" }
 
 // URL returns the reference normalized to a URL with an explicit scheme.
-func (u *URLOrPath) URL() string {
-	ref := u.raw
+func (u *URLOrPath) URL() string { return normalize(u.raw) }
+
+// Validate reports whether the reference is well-formed: a local file path must
+// exist, and a host/URL form must parse to a URL with a host.
+func (u *URLOrPath) Validate() error {
+	if u.raw == "" {
+		return nil
+	}
+	parsed, err := url.Parse(normalize(u.raw))
+	if err != nil {
+		return fmt.Errorf("invalid agent card reference %q: %w", u.raw, err)
+	}
+	if parsed.Scheme == "file" {
+		path := parsed.Path
+		if path == "" {
+			path = parsed.Opaque
+		}
+		if path == "" {
+			return nil
+		}
+		return statCardFile(u.raw, path)
+	}
+	if parsed.Host == "" {
+		return fmt.Errorf("invalid agent card reference %q: missing host", u.raw)
+	}
+	return nil
+}
+
+func statCardFile(ref, path string) error {
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("agent card file %q: %w", ref, err)
+	}
+	return nil
+}
+
+func normalize(ref string) string {
 	if ref == "" || strings.Contains(ref, "://") {
 		return ref
 	}
@@ -63,13 +99,20 @@ func (u *URLOrPath) URL() string {
 }
 
 func maybeFilePath(ref string) bool {
+	if hasFilePrefix(ref) {
+		return true
+	}
+	if _, err := os.Stat(ref); err == nil {
+		return true
+	}
+	return false
+}
+
+func hasFilePrefix(ref string) bool {
 	for _, prefix := range []string{"/", "./", "../"} {
 		if strings.HasPrefix(ref, prefix) {
 			return true
 		}
-	}
-	if _, err := os.Stat(ref); err == nil {
-		return true
 	}
 	return false
 }
