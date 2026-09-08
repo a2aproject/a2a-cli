@@ -27,6 +27,42 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2aevent"
 )
 
+// maxSuccessiveFailures is the number of consecutive GetTask failures tolerated
+// before polling gives up.
+const maxSuccessiveFailures = 3
+
+// WaitForTask polls the task identified by req at the given interval until it
+// reaches a terminal state (completed/failed/canceled/rejected) or an
+// interrupted state that needs the caller to act (input-required/auth-required),
+// returning the final task. The first poll happens immediately.
+func WaitForTask(ctx context.Context, client *a2aclient.Client, req *a2a.GetTaskRequest, interval time.Duration) (*a2a.Task, error) {
+	successiveFailures := 0
+	for {
+		task, err := client.GetTask(ctx, req)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			successiveFailures++
+			if successiveFailures >= maxSuccessiveFailures {
+				return nil, fmt.Errorf("successive polling failure threshold exceeded for task %q: %w", req.ID, err)
+			}
+		} else {
+			successiveFailures = 0
+			if task.Status.State.Terminal() ||
+				task.Status.State == a2a.TaskStateInputRequired ||
+				task.Status.State == a2a.TaskStateAuthRequired {
+				return task, nil
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(interval):
+		}
+	}
+}
+
 // Stream sends the original message and then polls the resulting task at the
 // given interval, yielding task events until it reaches a terminal state.
 func Stream(ctx context.Context, client *a2aclient.Client, original *a2a.SendMessageRequest, interval time.Duration) iter.Seq2[a2a.Event, error] {
@@ -70,7 +106,7 @@ func Stream(ctx context.Context, client *a2aclient.Client, original *a2a.SendMes
 			task, err := client.GetTask(ctx, &a2a.GetTaskRequest{ID: tid, Tenant: req.Tenant})
 			if err != nil {
 				successiveFailures++
-				if successiveFailures == 3 {
+				if successiveFailures >= maxSuccessiveFailures {
 					yield(nil, fmt.Errorf("successive polling failure threshold exceeded for task %q", tid))
 					return
 				}
