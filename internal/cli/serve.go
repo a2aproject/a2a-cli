@@ -25,6 +25,7 @@ import (
 
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/localsrv"
+	"github.com/a2aproject/a2a-cli/internal/transportplugin"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
 )
@@ -54,7 +55,6 @@ func newServeCmd(cfg *globalConfig) *cobra.Command {
 			if protocol != "latest" && protocol != "0.3" {
 				return fmt.Errorf("--protocol must be %q or %q", "latest", "0.3")
 			}
-
 			modes := 0
 			if echo {
 				modes++
@@ -71,27 +71,25 @@ func newServeCmd(cfg *globalConfig) *cobra.Command {
 			if modes == 0 {
 				return fmt.Errorf("specify --echo, --proxy <url>, or --exec <cmd>")
 			}
-
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 			defer stop()
-
 			listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", host, port))
 			if err != nil {
 				return fmt.Errorf("listen: %w", err)
 			}
-
 			transport, err := flagparse.SingleTransport([]string{serveTransport})
 			if err != nil {
 				return err
 			}
+			if !transportplugin.IsBuiltin(transport) {
+				return fmt.Errorf("serve %q transport not supported", transport)
+			}
 			sc := localsrv.Config{
-				Listener: listener,
-				Logger:   cfg.logf,
-
+				Listener:        listener,
+				Logger:          cfg.logf,
 				ProtocolVersion: a2a.ProtocolVersion(protocol),
 				CardCompat:      cardCompat,
 				Quiet:           quiet,
-
 				CardParams: localsrv.CardParams{
 					AgentName:        name,
 					AgentDesc:        desc,
@@ -103,7 +101,6 @@ func newServeCmd(cfg *globalConfig) *cobra.Command {
 			if sc.AdvertiseAddress == "" {
 				sc.AdvertiseAddress = listener.Addr().String()
 			}
-
 			switch {
 			case echo:
 				return localsrv.ServeEcho(ctx, sc)

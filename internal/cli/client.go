@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
+	"github.com/a2aproject/a2a-cli/internal/transportplugin"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
 	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
@@ -40,7 +41,17 @@ var compatCardResolver = func() *agentcard.Resolver {
 	return resolver
 }()
 
+const insecureCredentialWarning = "warning: sending a credential with TLS verification disabled (--insecure); the token may be exposed."
+
+// warnInsecureCredential warns once when a credential is sent with --insecure.
+func warnInsecureCredential(cfg *globalConfig) {
+	if cfg.insecureGRPC && cfg.svcParams.HasCredential() {
+		_, _ = fmt.Fprintln(cfg.stderr(), insecureCredentialWarning)
+	}
+}
+
 func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
+	warnInsecureCredential(cfg)
 	switch {
 	case cfg.url != "" && cfg.agentCard.IsSet():
 		return nil, fmt.Errorf("--endpoint and --agent-card are mutually exclusive")
@@ -64,17 +75,30 @@ func newClientFromEndpoint(ctx context.Context, cfg *globalConfig, ref string, e
 	if protocol == a2a.TransportProtocolGRPC {
 		endpointURL = stripHTTPScheme(ref)
 	}
+
 	cfg.logf("connecting directly to %s via %s (skipping card resolution)", endpointURL, protocol)
 
+	factoryOpts := append(clientFactoryOpts(cfg), extraOpts...)
+	if !transportplugin.IsBuiltin(protocol) {
+		pluginOpt, err := transportplugin.Load(protocol)
+		if err != nil {
+			return nil, err
+		}
+		factoryOpts = append(factoryOpts, pluginOpt)
+	}
+
 	endpoint := a2a.NewAgentInterface(endpointURL, protocol)
-	client, err := a2aclient.NewFromEndpoints(ctx, []*a2a.AgentInterface{endpoint}, append(clientFactoryOpts(cfg), extraOpts...)...)
+	if cfg.a2aVersion != "" {
+		endpoint.ProtocolVersion = a2a.ProtocolVersion(cfg.a2aVersion)
+	}
+	client, err := a2aclient.NewFromEndpoints(ctx, []*a2a.AgentInterface{endpoint}, factoryOpts...)
 	return client, hintInsecure(err)
 }
 
 // newClientFromCard resolves the Agent Card and builds a client for it, honoring
 // --transport as an ordered client preference over the card's declared interfaces.
 func newClientFromCard(ctx context.Context, cfg *globalConfig, ref string, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
-	protos, err := flagparse.Transports(cfg.transports)
+	transportPrefs, err := flagparse.Transports(cfg.transports)
 	if err != nil {
 		return nil, err
 	}
@@ -91,8 +115,15 @@ func newClientFromCard(ctx context.Context, cfg *globalConfig, ref string, extra
 	}
 
 	factoryOpts := append(clientFactoryOpts(cfg), extraOpts...)
-	if len(protos) > 0 {
-		factoryOpts = append(factoryOpts, a2aclient.WithConfig(a2aclient.Config{PreferredTransports: protos}))
+	pluginOpts, err := transportplugin.LoadForCard(card)
+	if err != nil {
+		return nil, err
+	}
+	factoryOpts = append(factoryOpts, pluginOpts...)
+	if len(transportPrefs) > 0 {
+		factoryOpts = append(factoryOpts, a2aclient.WithConfig(
+			a2aclient.Config{PreferredTransports: transportPrefs},
+		))
 	}
 	cfg.logf("creating client for %s", card.Name)
 	client, err := a2aclient.NewFromCard(ctx, card, factoryOpts...)
@@ -108,19 +139,28 @@ func hintInsecure(err error) error {
 }
 
 func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
-	factoryOpts := []a2aclient.FactoryOption{
-		a2av0.WithRESTTransport(a2av0.RESTTransportConfig{}),
-		a2av0.WithJSONRPCTransport(a2av0.JSONRPCTransportConfig{}),
-	}
 	var grpcOpts []grpc.DialOption
 	if cfg.insecureGRPC {
 		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
-	factoryOpts = append(factoryOpts,
-		a2agrpcv0.WithGRPCTransport(grpcOpts...),
-		a2agrpc.WithGRPCTransport(grpcOpts...),
-	)
-	return factoryOpts
+	opts := []a2aclient.FactoryOption{a2aclient.WithDefaultsDisabled()}
+	if cfg.a2aVersion == "" || cfg.a2aVersion == "1.0" {
+		opts = append(
+			opts,
+			a2aclient.WithRESTTransport(nil),
+			a2aclient.WithJSONRPCTransport(nil),
+			a2agrpc.WithGRPCTransport(grpcOpts...),
+		)
+	}
+	if cfg.a2aVersion == "" || cfg.a2aVersion == "0.3" {
+		opts = append(
+			opts,
+			a2av0.WithRESTTransport(a2av0.RESTTransportConfig{}),
+			a2av0.WithJSONRPCTransport(a2av0.JSONRPCTransportConfig{}),
+			a2agrpcv0.WithGRPCTransport(grpcOpts...),
+		)
+	}
+	return opts
 }
 
 func stripHTTPScheme(raw string) string {

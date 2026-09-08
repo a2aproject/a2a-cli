@@ -17,6 +17,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -50,6 +51,7 @@ type globalConfig struct {
 	url          string
 	transports   []string
 	svcParams    *flagparse.ServiceParams
+	a2aVersion   string
 	tenant       string
 	timeout      time.Duration
 	verbose      bool
@@ -57,13 +59,21 @@ type globalConfig struct {
 	configPath   string
 
 	bindings []clicfg.FlagBinding
+	errOut   io.Writer
 
 	*output.Printer
 }
 
+func (g *globalConfig) stderr() io.Writer {
+	if g.errOut != nil {
+		return g.errOut
+	}
+	return os.Stderr
+}
+
 func (g *globalConfig) logf(format string, args ...any) {
 	if g.verbose {
-		_, _ = fmt.Fprintf(os.Stderr, "# "+format+"\n", args...)
+		_, _ = fmt.Fprintf(g.stderr(), "# "+format+"\n", args...)
 	}
 }
 
@@ -102,20 +112,21 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 			cfg.bindings = bindings
 
 			switch output.Mode(cfg.output) {
-			case output.ModeText, output.ModeJson:
+			case output.ModeText, output.ModeJson, output.ModeJSONL:
 				cfg.Mode = output.Mode(cfg.output)
 			default:
-				return fmt.Errorf("invalid --output %q (want text or json)", cfg.output)
+				return fmt.Errorf("invalid --output %q (want text, json, or jsonl)", cfg.output)
 			}
 			return nil
 		},
 	}
 
 	pf := cmd.PersistentFlags()
-	pf.StringVarP(&cfg.output, "output", "o", "text", "Output format: text, json")
+	pf.StringVarP(&cfg.output, "output", "o", "text", "Output format: text, json (indented), or jsonl (one compact JSON object per line)")
 	pf.VarP(&cfg.agentCard, "agent-card", "a", "Agent Card reference: host/origin, full card URL, or local file path")
 	pf.StringVarP(&cfg.url, "endpoint", "e", "", "Agent interface URL for a direct connection; skips card resolution and requires a single --transport flag")
-	pf.StringArrayVar(&cfg.transports, "transport", nil, "Transport preference: rest, jsonrpc, grpc (repeatable, highest preference first)")
+	pf.StringArrayVar(&cfg.transports, "transport", nil, "Transport preference: rest, jsonrpc, grpc, or an installed plugin name (repeatable, highest preference first)")
+	pf.StringVar(&cfg.a2aVersion, "a2a-version", "", "Controls which a2a-protocol version client will advertise to the server.")
 	cfg.svcParams.Attach(pf)
 	pf.StringVar(&cfg.tenant, "tenant", "", "Tenant identifier")
 	pf.DurationVar(&cfg.timeout, "timeout", 30*time.Second, "Request timeout")
@@ -129,6 +140,7 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 		newTaskCmd(cfg),
 		newConfigCmd(cfg),
 		newServeCmd(cfg),
+		newTransportCmd(cfg),
 		newVersionCmd(cfg),
 	)
 

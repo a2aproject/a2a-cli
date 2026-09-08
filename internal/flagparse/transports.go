@@ -46,20 +46,25 @@ func SingleTransport(ss []string) (a2a.TransportProtocol, error) {
 		return "", err
 	}
 	if len(protos) != 1 {
-		return "", fmt.Errorf("exactly one --transport is required (rest, jsonrpc, or grpc)")
+		return "", fmt.Errorf("exactly one --transport is required (rest, jsonrpc, grpc, or a plugin name)")
 	}
 	return protos[0], nil
 }
 
+// parseTransport resolves a transport alias. The built-in aliases map to their
+// canonical protocols; any other non-empty value is treated as a custom
+// (plugin) transport binding and returned verbatim.
 func parseTransport(s string) (a2a.TransportProtocol, error) {
 	switch strings.ToLower(s) {
+	case "":
+		return "", fmt.Errorf("empty --transport value")
 	case "rest":
-		return a2a.TransportProtocolHTTPJSON, nil
+		return a2a.TransportProtocol(a2a.TransportProtocolHTTPJSON), nil
 	case "jsonrpc":
-		return a2a.TransportProtocolJSONRPC, nil
+		return a2a.TransportProtocol(a2a.TransportProtocolJSONRPC), nil
 	case "grpc":
-		return a2a.TransportProtocolGRPC, nil
+		return a2a.TransportProtocol(a2a.TransportProtocolGRPC), nil
 	default:
-		return "", fmt.Errorf("unknown transport %q (use rest, jsonrpc, or grpc)", s)
+		return a2a.TransportProtocol(s), nil
 	}
 }

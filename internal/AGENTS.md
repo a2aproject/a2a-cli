@@ -1,5 +1,6 @@
 ### General
 
+* Specification exists in the repository for historic purposes. Do not modify it and do not treat is as the source of truth.
 * Keep the CLI package clean, create a file-per-command. Try extracting logic into a different package.
 * Ask clarifying questions from the user if details important for the task are missing.
 * When working on a bug fix, follow the RED-GREEN-BLUE TDD approach.

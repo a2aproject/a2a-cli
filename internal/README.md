@@ -34,7 +34,7 @@ These apply to every client-mode command. Each command selects the agent it talk
 | `--agent-card <ref>` | `-a` | Agent Card reference: a host/origin (the well-known path is appended), a full card URL, or a local file path. The card is resolved and a transport negotiated. |
 | `--endpoint <ref>` | `-e` | Agent interface URL for a direct connection, skipping card resolution. Must be paired with exactly one `--transport`. Mutually exclusive with `--agent-card`. |
 | `--transport <name>` | | Transport preference: `rest`, `jsonrpc`, `grpc`. Repeatable and ordered (highest preference first). With `--agent-card` it overrides the card's preference order; with `--endpoint` exactly one is required. |
-| `--output <fmt>` | `-o` | Output format: `text` (default), `json`. |
+| `--output <fmt>` | `-o` | Output format: `text` (default), `json` (indented), or `jsonl` (one compact JSON object per line). |
 | `--svc-param <k=v>` | | Service parameter (repeatable). The chosen transport defines how it's passed. Split on the first `=`. |
 | `--auth <creds>` | | Shorthand for `--svc-param "Authorization=<creds>"`. |
 | `--tenant <id>` | | Tenant identifier. Passed on every request. |
@@ -168,11 +168,19 @@ a2a send -a <url> --context-id <context-id> "Related question"
 a2a task get -a <url> <id>
 a2a task get -a <url> <id> --history 10
 a2a task get -a <url> <id> -o json
+
+# Follow a task started with `send --async` until it finishes
+a2a task get -a <url> <id> --wait
+a2a task get -a <url> <id> --wait --poll-interval 2s --timeout 60s
 ```
 
 | Flag | Description |
 |---|---|
 | `--history <n>` | Include up to `n` history messages. |
+| `--wait` | Poll until the task reaches a terminal (`completed`/`failed`/`canceled`/`rejected`) state, returning early on an interrupted (`input-required`/`auth-required`) state so the caller can act. |
+| `--poll-interval <duration>` | Delay between polls while waiting (default `2s`); only used with `--wait`. |
+
+The overall wait budget is the global `--timeout` (default `30s`); when it expires before the task settles, the command reports a timeout error and exits non-zero.
 
 ### `task list` - List Tasks
 
@@ -309,5 +317,29 @@ StatusUpdate:          completed
 
 ## Output Formatting
 
-All commands support `-o json` for machine-readable output, emitting raw protocol objects.
-Text mode is the default, meant for reading in a terminal.
+All commands support machine-readable output, emitting raw protocol objects:
+
+- `-o json` — indented JSON: a single indented document, or one indented record per event under `--stream`.
+- `-o jsonl` — [JSON Lines](https://jsonlines.org/): one compact JSON object per line, ideal for piping and incremental consumption under `--stream`.
+
+Text mode is the default, meant for reading in a terminal. The output format controls
+only presentation (indentation); `--stream` independently controls whether the command
+follows the agent's live events or waits for the terminal result.
+
+## Custom Transport Plugins
+
+The CLI speaks JSON-RPC, REST and gRPC out of the box. Additional transport
+bindings can be added **without recompiling** by dropping an `a2a-transport-<name>` 
+binary on your `PATH`. The CLI launches the plugin as a local proxy that speaks a 
+standard A2A binding and forwards to the custom protocol.
+
+```console
+$ a2a transport list
+$ a2a send --transport slimrpc --endpoint slim://agents.example/agent "hello"
+```
+
+Authoring a plugin in Go is a few lines with the
+[`devkit/clitransport`](./devkit/clitransport) package — you provide an
+`a2aclient.Transport`, it produces a CLI-compatible plugin. See the
+**[transport plugin guide](./docs/transport-plugins.md)** and the runnable
+**[echo plugin example](./examples/a2a-transport-echo)**.

@@ -1,0 +1,63 @@
+name: "Conventional Commits"
+
+# Enforce one simple rule: every pull request title must follow the
+# Conventional Commits spec (https://www.conventionalcommits.org/).
+#
+# Why it matters here: this repo squash-merges, so the PR title becomes the
+# commit message, and release-please (release-type: go, see release-please.yaml)
+# reads those commits to version the CLI and generate the changelog. A well-formed
+# title => correct version bump + clean changelog.
+#
+# Picking a type (see CONTRIBUTING.md):
+#   feat / fix   -> CLI code            e.g. "feat: add subscribe command"
+#   docs(spec)   -> specification/SPEC.md or COMPLIANCE.md
+#   docs         -> any other docs      e.g. "docs: clarify README install steps"
+#   chore/ci/... -> tooling, config, tests, refactors
+
+on:
+  # pull_request_target so the check also runs on PRs from forks (this is a
+  # public repo). Safe here because this workflow never checks out or runs any
+  # PR-authored code — it only reads the PR title from the event payload.
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - edited
+      - synchronize
+
+permissions:
+  contents: read
+
+jobs:
+  validate-pr-title:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Allowed types (the Conventional Commits standard set).
+          types: |
+            feat
+            fix
+            docs
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+            style
+          # Scope is optional and free-form, so `docs(spec):`, `feat(cli):`, or no
+          # scope at all are all accepted.
+          requireScope: false
+          # Good-title hygiene: subject starts lowercase and has no trailing period.
+          # (Optional — delete these two lines if you'd rather not enforce it.)
+          subjectPattern: ^(?![A-Z]).+[^.]$
+          subjectPatternError: |
+            The subject "{subject}" in PR title "{title}" should start with a
+            lowercase letter and must not end with a period.
