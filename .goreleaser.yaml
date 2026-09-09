@@ -61,7 +61,7 @@ brews:
     description: "The official command-line interface for A2A (Agent-to-Agent) compatible agents."
     license: "Apache-2.0"
     directory: Formula
-    skip_upload: "auto
+    skip_upload: "auto"
     commit_msg_template: "release: update Homebrew formula for a2a {{ .Tag }}"
     install: |
       bin.install "a2a"
