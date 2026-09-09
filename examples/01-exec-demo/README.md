@@ -1,5 +1,7 @@
 # Lesson 1 — build an A2A server from a script
 
+Last updated: 2026.09.08
+
 The first step in learning the `a2a` CLI is to stand up a server you can send messages to and get replies from. The CLI gives you two ready-made server modes, no A2A-specific code required.
 
 The simplest is `--echo`, which sends your message straight back. It is a "ping" for A2A: perfect for a first connection test. The more advanced is `--exec`: point it at any script that reads input and prints output, and it becomes a working A2A server. `--exec` is where the fun is — it turns any program into an agent for demos, testing, and small jobs.

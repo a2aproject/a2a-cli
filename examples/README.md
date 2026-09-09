@@ -30,6 +30,10 @@ Learn the three ways to pass a setting: a CLI flag, a session environment variab
 
 Go deeper: build messages from text, file, and data parts; stream a reply; and send async to get back a task id and watch its lifecycle. Includes a reference for the `task` commands.
 
+## Extend the CLI: transport plugins
+
+The `a2a` CLI supports **transport plugins** — drop-in binaries that add custom ways for it to reach an agent. For a working reference, see [`a2a-transport-plugin/`](a2a-transport-plugin/) and the [transport-plugins guide](../docs/transport-plugins.md).
+
 ## Learn more
 
 Read the [a2a-cli specification](../specification/SPEC.md) for everything the tool offers.

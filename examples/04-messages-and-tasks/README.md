@@ -1,5 +1,7 @@
 # Lesson 4 — messages and tasks
 
+Last updated: 2026.09.08
+
 You can already talk to an agent. This lesson explores two richer areas. First, building a message from several **parts**. Second, the **task** every send creates.
 
 ## What you'll learn

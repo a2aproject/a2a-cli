@@ -1,5 +1,7 @@
 # Lesson 2 — discover and talk to an agent
 
+Last updated: 2026.09.08
+
 In lesson 1 you started a server. Now learn the client side: read an agent's card, save it, set it once through config, and send a message.
 
 ## What you'll learn

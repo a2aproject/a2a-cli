@@ -1,5 +1,7 @@
 # Lesson 3 — configure the CLI
 
+Last updated: 2026.09.08
+
 In lesson 2 you set the agent card in a `.env` file. That is one of three ways to give the `a2a` CLI a setting. This lesson covers all three. It also shows how `a2a config show` reveals which one won, and lists every setting you can configure.
 
 ## What you'll learn
