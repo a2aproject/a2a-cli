@@ -15,6 +15,7 @@
 package flagparse
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -58,6 +59,51 @@ func TestURLOrPathURL(t *testing.T) {
 			}
 			if got := u.URL(); got != tt.want {
 				t.Fatalf("URLOrPath.URL() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestURLOrPathValidate(t *testing.T) {
+	t.Parallel()
+
+	existing := filepath.Join(t.TempDir(), "card.json")
+	if err := os.WriteFile(existing, []byte("{}"), 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		ref       string
+		wantErr   bool
+		wantErrIs error
+	}{
+		{name: "empty is valid", ref: ""},
+		{name: "bare host is valid", ref: "agent.example"},
+		{name: "loopback host:port is valid", ref: "localhost:9000"},
+		{name: "full https url is valid", ref: "https://agent.example/card.json"},
+		{name: "existing absolute path is valid", ref: existing},
+		{name: "existing file url is valid", ref: "file://" + existing},
+		{name: "missing absolute path is a usage error", ref: "/no/such/card.json", wantErr: true, wantErrIs: os.ErrNotExist},
+		{name: "missing relative path is a usage error", ref: "./no-such-card.json", wantErr: true, wantErrIs: os.ErrNotExist},
+		{name: "missing file url is a usage error", ref: "file:///no/such/card.json", wantErr: true, wantErrIs: os.ErrNotExist},
+		{name: "malformed url is a usage error", ref: "http://exa mple.com", wantErr: true},
+		{name: "url without host is a usage error", ref: "https://", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var u URLOrPath
+			if err := u.Set(tt.ref); err != nil {
+				t.Fatalf("URLOrPath.Set(%q) error = %v", tt.ref, err)
+			}
+			err := u.Validate()
+			if tt.wantErr != (err != nil) {
+				t.Fatalf("URLOrPath.Validate() error = %v, want error = %v", err, tt.wantErr)
+			}
+			if tt.wantErrIs != nil && !errors.Is(err, tt.wantErrIs) {
+				t.Errorf("URLOrPath.Validate() error = %v, want errors.Is %v", err, tt.wantErrIs)
 			}
 		})
 	}

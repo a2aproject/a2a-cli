@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"iter"
 	"net/http"
@@ -31,6 +32,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/a2aproject/a2a-cli/internal/clicfg"
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/localsrv"
 	"github.com/a2aproject/a2a-cli/internal/output"
@@ -728,6 +730,43 @@ func TestGetTask(t *testing.T) {
 			t.Fatal("a2a task get (missing id) should fail")
 		}
 	})
+}
+
+func TestUsageErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"unknown flag", []string{"card", "get", "--bogus", "http://x"}},
+		{"missing positional arg", []string{"task", "get", "-a", "http://x"}},
+		{"too many positional args", []string{"task", "get", "-a", "http://x", "one", "two"}},
+		{"unknown top-level command", []string{"bogus"}},
+		{"mutually exclusive targets", []string{"send", "-a", "http://x", "-e", "http://y", "hi"}},
+		{"malformed agent-card url", []string{"card", "get", "-a", "http://exa mple.com"}},
+		{"missing agent-card file", []string{"card", "get", "-a", "/no/such/card.json"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := runCMD(t, tt.args...)
+			if err == nil {
+				t.Fatalf("runCMD(%v) error = nil, want a usage error", tt.args)
+			}
+			var ce *clierr.Error
+			if !errors.As(err, &ce) {
+				t.Fatalf("runCMD(%v) error = %v, want *clierr.Error", tt.args, err)
+			}
+			if ce.Code != clierr.CodeUsage {
+				t.Errorf("runCMD(%v) code = %q, want %q", tt.args, ce.Code, clierr.CodeUsage)
+			}
+			if ce.Exit != 2 {
+				t.Errorf("runCMD(%v) exit = %d, want 2", tt.args, ce.Exit)
+			}
+		})
+	}
 }
 
 func TestGetTaskWait_Timeout(t *testing.T) {
