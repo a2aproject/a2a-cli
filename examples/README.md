@@ -32,7 +32,7 @@ Go deeper: build messages from text, file, and data parts; stream a reply; and s
 
 ## Extend the CLI
 
-The `a2a` CLI supports plugin-style customization. See the [specification](../specification/SPEC.md) for details, and [`a2a-transport-plugin/`](a2a-transport-plugin/) for a working example.
+The `a2a` CLI supports plugin-style customization. See the [specification](../specification/SPEC.md) for details, and [`a2a-transport-echo/`](a2a-transport-echo/) for a working example.
 
 ## Learn more
 

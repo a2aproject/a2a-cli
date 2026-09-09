@@ -1,6 +1,4 @@
-# a2a-transport-plugin
-
-A reference transport plugin for the `a2a` CLI. It ships as an `echo` transport, so the build output and plugin name below are `echo`.
+# a2a-transport-echo
 
 A reference [A2A CLI transport plugin](../../docs/transport-plugins.md) built with
 the [`clitransport` devkit](../../devkit/clitransport).
