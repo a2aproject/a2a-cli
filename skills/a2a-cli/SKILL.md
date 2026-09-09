@@ -8,12 +8,13 @@ description: >-
   A2A task. Not for building or serving an A2A agent, or for calling non-A2A
   HTTP APIs.
 compatibility: >-
-  Requires the `a2a` binary on PATH; a Go toolchain installs it from source,
-  since there are no prebuilt releases yet. The skill installs nothing itself.
+  Requires the `a2a` binary on PATH. Install it with Homebrew or WinGet, from a
+  prebuilt release binary, or from source with a Go toolchain. The skill installs
+  nothing itself.
 license: Apache-2.0
 metadata:
   source: https://github.com/a2aproject/a2a-cli
-  version: "2026.09.04"
+  version: "2026.09.08"
 ---
 
 # Driving A2A agents with the `a2a` CLI
@@ -41,11 +42,19 @@ returned.
 
 ## Setup
 
-Check for the binary; install from source if missing (needs a Go toolchain from
-https://go.dev/doc/install); re-run to update:
+The skill needs the `a2a` binary on PATH — check with `a2a version`. If it is
+missing, install it with Homebrew (`brew tap a2aproject/a2a-cli
+https://github.com/a2aproject/a2a-cli && brew install a2a`), WinGet
+(`winget install a2aproject.a2acli`), a prebuilt binary from the
+[releases page](https://github.com/a2aproject/a2a-cli/releases/latest), or from
+source with a Go toolchain (re-run to update):
 
 ```bash
 go install github.com/a2aproject/a2a-cli@latest
+
+# rename to a2a to match the docs
+
+mv "$(command -v a2a-cli)" "$(dirname "$(command -v a2a-cli)")/a2a"
 ```
 
 The tool is under active development. Treat `a2a help` and `a2a <command>
