@@ -1,7 +1,7 @@
 # A2A CLI
 
-<div align="center">
-   <img src="https://raw.githubusercontent.com/a2aproject/A2A/refs/heads/main/docs/assets/a2a_logo/color/SVG/a2a_color.svg" width="800" alt="Agent2Agent Protocol Logo"/>
+<div align="center" width="800">
+   <img src="https://raw.githubusercontent.com/a2aproject/A2A/refs/heads/main/docs/assets/a2a_logo/color/SVG/a2a_color.svg" width="600" alt="Agent2Agent Protocol Logo"/>
    <h3>
        The <strong>A2A CLI</strong> (<code>a2a</code>) is an official tool developed and maintained by the <a href="https://a2a-protocol.org/latest/"><strong>A2A Project Team</strong></a>.
    </h3>
@@ -63,6 +63,27 @@ a2a send -a https://agent.example.com --stream "Summarize this document"
 ```
 
 See the **[full command reference](./internal/README.md)** for all commands, flags, configuration, and server mode.
+
+## Cookbook
+
+Learn the CLI by example. The **[cookbook](./examples/)** is a short, hands-on course — each lesson is a small folder you can run on its own, building from your first A2A server up to streaming, configuration, and the full message and task lifecycle:
+
+1. **[Build a quick A2A server](./examples/01-exec-demo/)** — turn an ordinary script into an A2A server with `--exec`, then send it a message.
+2. **[Discover and talk to an agent](./examples/02-card-and-send/)** — read an agent's card, save it, and send a text message.
+3. **[Configure the CLI](./examples/03-config/)** — flags, environment variables, and `.env` files, and how to tell which one won.
+4. **[Messages and tasks](./examples/04-messages-and-tasks/)** — build multi-part messages, stream replies, and follow a task through its lifecycle.
+
+## Agent Skill
+
+Give your AI coding agent the ability to drive `a2a` directly. The **[a2a-cli Agent Skill](https://www.skills.sh/a2aproject/a2a-cli/a2a-cli)** teaches harnesses like Claude Code, Cursor, and Codex to delegate work to A2A agents from the command line.
+
+Install it into your agent with [`skills`](https://www.skills.sh):
+
+```bash
+npx skills add https://github.com/a2aproject/a2a-cli --skill a2a-cli
+```
+
+The skill drives the `a2a` binary, so [install the CLI](#installation) first. The descriptor lives at [`skills/a2a-cli/SKILL.md`](./skills/a2a-cli/SKILL.md).
 
 ## Custom Transport Plugins
 
