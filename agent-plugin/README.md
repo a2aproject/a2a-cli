@@ -2,7 +2,7 @@
 
 An [Agent Plugin](https://agent-plugins.org/) that teaches a plugin-aware AI agent how to drive the [`a2a` CLI](https://github.com/a2aproject/a2a-cli) — discovering, messaging, and managing A2A (Agent2Agent) agents from the command line.
 
-It packages the single Agent Skill the CLI ships (per [SPEC.md §14](../specification/SPEC.md)) as one installable unit. The skill it carries is a byte-for-byte copy of the baseline skill at [`skills/a2a-cli/`](../skills/a2a-cli/) — a CI check keeps the two identical (see [Versioning](#versioning)). The skill and the binary can always be installed independently — the plugin is a convenience, never a precondition.
+It packages the single Agent Skill the CLI ships (per [SPEC.md §14](../specification/SPEC.md)) as one installable unit. The skill and the binary can always be installed independently — the plugin is a convenience, never a precondition.
 
 ## Contents
 
@@ -12,7 +12,7 @@ agent-plugin/
 ├── LICENSE                     # Apache-2.0
 └── skills/
     └── a2a-cli/
-        └── SKILL.md            # agent-facing usage guidance (copy of ../../skills/a2a-cli/SKILL.md)
+        └── SKILL.md            # agent-facing usage guidance
 ```
 
 Skills-only: this plugin carries no MCP server, which is valid under Agent Plugins (a skills-only plugin conforms).
@@ -37,4 +37,4 @@ A plugin-aware client can instead load this directory as an Agent Plugin: it rea
 
 ## Versioning
 
-The plugin `version` in `plugin.json` (`0.2.0`) tracks the `a2a` CLI release. The bundled skill keeps its own date-based `metadata.version` and is a byte-for-byte copy of [`skills/a2a-cli/SKILL.md`](../skills/a2a-cli/SKILL.md); the `plugin-skill-sync` CI check fails the build if the two ever drift. The manifest targets Agent Plugins spec **1.0.0**.
+The plugin `version` in `plugin.json` (`0.2.0`) tracks the `a2a` CLI release; the bundled skill keeps its own date-based `metadata.version`. The manifest targets Agent Plugins spec **1.0.0**.
