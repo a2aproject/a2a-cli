@@ -2,7 +2,7 @@
 
 An [Agent Plugin](https://agent-plugins.org/) that teaches a plugin-aware AI agent how to drive the [`a2a` CLI](https://github.com/a2aproject/a2a-cli) — discovering, messaging, and managing A2A (Agent2Agent) agents from the command line.
 
-It packages the `a2a-cli` Agent Skill as one installable unit for a plugin-aware client. The skill and the binary can always be installed independently — the plugin is a convenience, never a precondition.
+It packages the a2a-cli Agent Skill as one installable unit for a plugin-aware client. The skill and the binary can always be installed independently — the plugin is a convenience, never a precondition.
 
 ## Contents
 
