@@ -1,0 +1,39 @@
+# Guards against drift between the baseline skill and the copy the Agent Plugin
+# carries. Agent Plugins require the skill to live inside the plugin root, so the
+# repo holds two physical copies; this check keeps them byte-identical.
+
+name: Plugin skill sync
+
+on:
+  push:
+    branches: [ "main", "release/**" ]
+    paths:
+      - 'skills/a2a-cli/SKILL.md'
+      - 'agent-plugin/skills/a2a-cli/SKILL.md'
+      - '.github/workflows/plugin-skill-sync.yml'
+
+  pull_request:
+    branches: [ "main", "release/**" ]
+    paths:
+      - 'skills/a2a-cli/SKILL.md'
+      - 'agent-plugin/skills/a2a-cli/SKILL.md'
+      - '.github/workflows/plugin-skill-sync.yml'
+
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  diff:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+    - name: Skill copies must match
+      run: |
+        if ! diff -u skills/a2a-cli/SKILL.md agent-plugin/skills/a2a-cli/SKILL.md; then
+          echo "::error::agent-plugin/skills/a2a-cli/SKILL.md has drifted from skills/a2a-cli/SKILL.md. Copy the canonical skill into the plugin so the two stay identical."
+          exit 1
+        fi
