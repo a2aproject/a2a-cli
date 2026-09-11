@@ -3,7 +3,7 @@
 <div align="center" width="800">
    <img src="https://raw.githubusercontent.com/a2aproject/A2A/refs/heads/main/docs/assets/a2a_logo/color/SVG/a2a_color.svg" width="600" alt="Agent2Agent Protocol Logo"/>
    <h3>
-       The <strong>A2A CLI</strong> (<code>a2a</code>) is an official tool developed and maintained by the <a href="https://a2a-protocol.org/latest/"><strong>A2A Project Team</strong></a>.
+       Discover, message, and manage A2A agents from your terminal.
    </h3>
 </div>
 
@@ -12,7 +12,7 @@
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/a2aproject/a2a-cli" alt="License: Apache-2.0"></a>
 </p>
 
-The **A2A CLI** (`a2a`) is a standardized command-line client for discovering, interacting with, and managing [A2A (Agent2Agent) agents](https://a2a-protocol.org/latest/).
+The **A2A CLI** (`a2a`) is the official command-line client for [A2A (Agent2Agent) agents](https://a2a-protocol.org/latest/), maintained by the **A2A Project Team**.
 
 <div align="center">
   <img src="./docs/demo/a2a-demo.gif" alt="a2a CLI demo: build a server from a script, then discover and message it" width="720">
@@ -91,6 +91,23 @@ npx skills add https://github.com/a2aproject/a2a-cli --skill a2a-cli
 
 The skill drives the `a2a` binary, so [install the CLI](#installation) first. The descriptor lives at [`skills/a2a-cli/SKILL.md`](./skills/a2a-cli/SKILL.md).
 
+### Agent Plugin
+
+Prefer a plugin-aware client? The **[Agent Plugin](./agent-plugin/)** bundles the same skill as one installable unit ([Agent Plugins](https://agent-plugins.org/) 1.0.0, skills-only). Install it with [`skills`](https://www.skills.sh):
+
+```bash
+npx skills add https://github.com/a2aproject/a2a-cli/tree/main/agent-plugin/skills/a2a-cli -g
+```
+
+Like the skill, it drives the `a2a` binary — [install the CLI](#installation) first.
+
+## About the Project
+
+Several community and SDK-provided A2A CLIs existed across languages, but they diverged in command names, flags, output shapes, and transport handling. This project reconciles them into one **standardized** CLI — built for long-term stability and cross-transport consistency. It builds on the CLI from the [A2A Go SDK](https://github.com/a2aproject/a2a-go).
+
+The **[Specification (`SPEC.md`)](./specification/SPEC.md)** captured that reconciliation — command taxonomy, output contracts, polling/streaming rules, and exit codes — and served as the roadmap.
+
+
 ## Custom Transport Plugins
 
 The CLI speaks JSON-RPC, REST and gRPC out of the box. Additional transport
@@ -111,22 +128,14 @@ Authoring a plugin in Go is a few lines with the
 **[echo plugin example](./examples/a2a-transport-echo)**.
 
 
-## About the Project
-
-Several community and SDK-provided A2A CLIs existed across languages, but they diverged in command names, flags, output shapes, and transport handling. This project reconciles them into one **standardized, officially supported CLI** — built for long-term stability and cross-transport consistency. It builds on the CLI from the [A2A Go SDK](https://github.com/a2aproject/a2a-go).
-
-The **[Specification (`SPEC.md`)](./specification/SPEC.md)** captured that reconciliation — command taxonomy, output contracts, polling/streaming rules, and exit codes — and served as the roadmap.
-
-
 ## How to Contribute & Provide Feedback
 
-We invite review and input from engineers and the broader community:
+We welcome review and input from engineers and the community:
 
-1. Read the **[Specification Document (`SPEC.md`)](./specification/SPEC.md)**.
-2. Review the **[Compliance Checklist (`COMPLIANCE.md`)](./specification/COMPLIANCE.md)**.
-3. Open an issue or pull request in this repository to share suggestions, questions, or edge cases.
+1. Read the **[Specification (`SPEC.md`)](./specification/SPEC.md)** for background.
+2. Open an issue or pull request to share suggestions, questions, or edge cases.
 
-You can also help us in other ways like sharing how you use the tool. See the **[Contributing guide](CONTRIBUTING.md)** to get started.
+You can also help by sharing how you use the tool. See the **[Contributing guide](CONTRIBUTING.md)**; conformance details live in the [Compliance Checklist (`COMPLIANCE.md`)](./specification/COMPLIANCE.md).
 
 
 ## License
