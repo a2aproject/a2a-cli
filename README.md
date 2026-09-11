@@ -7,8 +7,17 @@
    </h3>
 </div>
 
+<p align="center">
+  <a href="https://github.com/a2aproject/a2a-cli/releases/latest"><img src="https://img.shields.io/github/v/release/a2aproject/a2a-cli?sort=semver" alt="Latest release"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/a2aproject/a2a-cli" alt="License: Apache-2.0"></a>
+  <a href="https://goreportcard.com/report/github.com/a2aproject/a2a-cli"><img src="https://goreportcard.com/badge/github.com/a2aproject/a2a-cli" alt="Go Report Card"></a>
+</p>
 
 The **A2A CLI** (`a2a`) is a standardized command-line client for discovering, interacting with, and managing [A2A (Agent2Agent) agents](https://a2a-protocol.org/latest/).
+
+<div align="center">
+  <img src="./docs/demo/a2a-demo.gif" alt="a2a CLI demo: build a server from a script, then discover and message it" width="720">
+</div>
 
 
 ## Why the A2A CLI
@@ -43,9 +52,7 @@ winget install a2aproject.a2acli
 
 ```bash
 go install github.com/a2aproject/a2a-cli@latest
-
-# rename to a2a to match the docs
-
+# go install names the binary `a2a-cli`; rename it to `a2a`
 mv "$(command -v a2a-cli)" "$(dirname "$(command -v a2a-cli)")/a2a"
 ```
 
@@ -107,19 +114,9 @@ Authoring a plugin in Go is a few lines with the
 
 ## About the Project
 
-Several community-driven CLI tools existed across languages, but they varied in coverage and behavior. This project is the result of reconciling these into one **standardized, officially supported CLI implementation** — built for long-term stability, cross-transport consistency, and community alignment.
+Several community and SDK-provided A2A CLIs existed across languages, but they diverged in command names, flags, output shapes, and transport handling. This project reconciles them into one **standardized, officially supported CLI** — built for long-term stability and cross-transport consistency. It builds on the CLI from the [A2A Go SDK](https://github.com/a2aproject/a2a-go).
 
-The specification is the product of reconciling the various community- and SDK-provided A2A CLIs — which had diverged in command names, flags, output shapes, and transport handling — and converging them on a single, agreed upon representation. It served as the roadmap for bringing `a2a-go` CLI in shape for becoming the official A2A cli:
-
-* **[Specification Document (v0.2)](./specification/SPEC.md):** The normative behavior specification covering command taxonomy, output contracts, polling/streaming rules, and exit codes.
-
-The specification organized CLI capabilities into three cumulative tiers:
-
-* **Tier 1 (Core Requirements):** Essential foundation — agent card discovery (`card get`), basic messaging (`send`), task inspection (`task get`), cancellation (`task cancel`), polling, exit codes, and standard text/JSON output contracts.
-* **Tier 2 (Standard Features):** Expanded capabilities — task listing (`task list`), real-time event streaming (`task subscribe`), transport auto-negotiation (REST, JSON-RPC, gRPC), push-configuration, and auth management.
-* **Tier 3 (Advanced & Ergonomics):** Advanced tooling — interactive terminal chat, push-notification webhook receivers, extended card verification, and mTLS / OpenID Connect authentication.
-
-The initial codebase builds on the CLI from the [A2A Go SDK](https://github.com/a2aproject/a2a-go/tree/9d95b95445f4208ba77f48a137a278067937adb7#-cli). We will refine and expand it to match the finalized specification.
+The **[Specification (`SPEC.md`)](./specification/SPEC.md)** captured that reconciliation — command taxonomy, output contracts, polling/streaming rules, and exit codes — and served as the roadmap.
 
 
 ## How to Contribute & Provide Feedback

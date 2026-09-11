@@ -32,6 +32,8 @@ Install the CLI (see the [repo README](../../README.md)):
 
 ```bash
 go install github.com/a2aproject/a2a-cli@latest
+# go install names the binary `a2a-cli`; rename it to `a2a`
+mv "$(command -v a2a-cli)" "$(dirname "$(command -v a2a-cli)")/a2a"
 ```
 
 ## Step 1 — warm up with the echo server
