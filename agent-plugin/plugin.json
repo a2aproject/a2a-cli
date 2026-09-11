@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "a2a-cli",
+  "version": "0.2.0",
+  "description": "Drive A2A (Agent2Agent) agents from the command line with the a2a CLI: fetch an agent card, send a message, stream or poll a task, and list, resume, or cancel tasks.",
+  "author": {
+    "name": "A2A Project",
+    "url": "https://a2a-protocol.org"
+  },
+  "homepage": "https://github.com/a2aproject/a2a-cli",
+  "repository": "https://github.com/a2aproject/a2a-cli",
+  "license": "Apache-2.0",
+  "keywords": ["a2a", "agent2agent", "cli", "agents", "interoperability", "agent-card"]
+}
