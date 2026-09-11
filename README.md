@@ -10,7 +10,6 @@
 <p align="center">
   <a href="https://github.com/a2aproject/a2a-cli/releases/latest"><img src="https://img.shields.io/github/v/release/a2aproject/a2a-cli?sort=semver" alt="Latest release"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/a2aproject/a2a-cli" alt="License: Apache-2.0"></a>
-  <a href="https://goreportcard.com/report/github.com/a2aproject/a2a-cli"><img src="https://goreportcard.com/badge/github.com/a2aproject/a2a-cli" alt="Go Report Card"></a>
 </p>
 
 The **A2A CLI** (`a2a`) is a standardized command-line client for discovering, interacting with, and managing [A2A (Agent2Agent) agents](https://a2a-protocol.org/latest/).
