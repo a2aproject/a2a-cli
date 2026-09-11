@@ -6,26 +6,44 @@
 # discovers and talks to them with the a2a CLI. Nothing here is A2A-specific
 # code; that is the point of the demo.
 #
+# The prompt STYLE (agnoster | robbyrussell) is baked into the recording; the
+# color palette is chosen at render time with `agg --theme`. Agnoster needs a
+# Nerd Font for its powerline glyphs.
+#
 # Record and render (run from the repo root, with `a2a` on PATH):
-#   asciinema rec --cols 92 --rows 26 --command "bash docs/demo/demo.sh" docs/demo/a2a-demo.cast
-#   agg --theme asciinema --idle-time-limit 2.5 docs/demo/a2a-demo.cast docs/demo/a2a-demo.gif
+#   STYLE=agnoster asciinema rec --cols 92 --rows 26 \
+#     --command "bash docs/demo/demo.sh" docs/demo/a2a-demo.cast
+#   agg --theme kanagawa --bold-is-bright --idle-time-limit 2.5 \
+#     --font-dir <nerd-font-dir> --font-family "JetBrainsMono Nerd Font" \
+#     docs/demo/a2a-demo.cast docs/demo/a2a-demo.gif
 #
 # Requires: a2a on PATH, python3, bash. Run from the repo root.
 
 set -euo pipefail
 
 EX="examples/01-exec-demo"
+STYLE="${STYLE:-agnoster}"
 
-# A robbyrussell-style zsh prompt, simulated with ANSI colors so the recording
-# needs no oh-my-zsh install: green arrow, cyan dir, blue/red git segment.
 esc=$'\033'
-c_reset="${esc}[0m"
-c_arrow="${esc}[1;32m"
-c_dir="${esc}[36m"
-c_git="${esc}[34m"
-c_branch="${esc}[31m"
-c_comment="${esc}[90m"
-PROMPT="${c_arrow}➜${c_reset}  ${c_dir}a2a-cli${c_reset} ${c_git}git:(${c_branch}main${c_git})${c_reset} "
+r="${esc}[0m"
+# Bright/pastel yellow for comments — clearly legible on any dark theme.
+c_comment="${esc}[93m"
+
+case "$STYLE" in
+  agnoster)
+    sep=$'\ue0b0'          # powerline separator (Nerd Font)
+    branch=$'\ue0a0'       # git branch glyph (Nerd Font)
+    # dir segment (blue bg) -> git segment (green bg), agnoster style.
+    PROMPT="${esc}[44;1;37m a2a-cli ${esc}[0;34;42m${sep}${esc}[42;30m ${branch} main ${esc}[0;32m${sep}${r} "
+    ;;
+  robbyrussell)
+    PROMPT="${esc}[1;32m➜${r}  ${esc}[36ma2a-cli${r} ${esc}[34mgit:(${esc}[31mmain${esc}[34m)${r} "
+    ;;
+  *)
+    echo "unknown STYLE: $STYLE" >&2
+    exit 1
+    ;;
+esac
 
 TYPE_DELAY=0.045   # per-keystroke typing speed
 AFTER_CMD=2.0      # pause to read command output
@@ -49,12 +67,12 @@ run() {
   sleep "$AFTER_CMD"
 }
 
-# Print a comment at the prompt (prompt-prefixed, dimmed, not executed).
+# Print a comment at the prompt (prompt-prefixed, bright, not executed).
 note() {
   printf '%s' "$PROMPT"
   printf '%s' "$c_comment"
   type_out "# $*"
-  printf '%s\n' "$c_reset"
+  printf '%s\n' "$r"
   sleep "$AFTER_NOTE"
 }
 
