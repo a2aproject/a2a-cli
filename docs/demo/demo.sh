@@ -87,6 +87,7 @@ note "The a2a CLI: one command surface for any A2A agent."
 run "a2a version"
 
 note "Turn an ordinary script into an A2A server -- no A2A code."
+note "--echo = ping, --exec <script> = custom server; see cookbook lesson 01"
 a2a server --exec "bash $EX/content-generator.sh" --port 8080 >/tmp/a2a-demo-a.log 2>&1 &
 SRV_A=$!
 a2a server --exec "python3 -u $EX/a2a_unaware_agent.py" --chunk=$'\n' --port 8081 >/tmp/a2a-demo-b.log 2>&1 &
