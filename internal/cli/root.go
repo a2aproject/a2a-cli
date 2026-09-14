@@ -16,6 +16,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/a2aproject/a2a-cli/internal/clicfg"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
+	"github.com/a2aproject/a2a-cli/internal/commandplugin"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-cli/internal/polling"
@@ -163,13 +165,49 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 		newConfigCmd(cfg),
 		newServeCmd(cfg),
 		newTransportCmd(cfg),
+		newPluginCmd(cfg),
 		newVersionCmd(cfg),
 	)
+
+	addCommandPlugins(cmd)
 
 	cmd.SetUsageTemplate(rootUsageTemplate)
 	markUsageErrors(cmd)
 
 	return cmd
+}
+
+// addCommandPlugins discovers command plugin binaries on PATH and registers
+// each as a dynamic top-level command. Built-in commands always win: a plugin
+// whose name collides with an existing command is silently skipped.
+func addCommandPlugins(root *cobra.Command) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	builtins := map[string]bool{}
+	for _, sub := range root.Commands() {
+		builtins[sub.Name()] = true
+	}
+
+	for _, d := range commandplugin.List(ctx) {
+		if builtins[d.Name] {
+			continue
+		}
+		d := d // capture
+		var short string
+		if d.Info != nil {
+			short = d.Info.Description
+		}
+		pluginCmd := &cobra.Command{
+			Use:                d.Name,
+			Short:              short,
+			DisableFlagParsing: true,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				return commandplugin.Exec(d.Path, args)
+			},
+		}
+		root.AddCommand(pluginCmd)
+	}
 }
 
 // markUsageErrors makes cobra's flag- and argument-validation failures surface
