@@ -24,6 +24,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/utils"
 	"github.com/a2aproject/a2a-go/v2/a2a"
@@ -53,7 +54,7 @@ func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if flags.stream && flags.async {
-				return fmt.Errorf("--stream is incompatible with --async")
+				return clierr.Usage("--stream is incompatible with --async")
 			}
 			baseCtx := withServiceParams(cmd.Context(), cfg)
 
@@ -182,13 +183,13 @@ func buildMessage(positional []string, flags *sendFlags) (*a2a.Message, error) {
 		return nil, err
 	}
 	if len(positional) > 1 {
-		return nil, fmt.Errorf("at most one positional argument is allowed, use --text-part for multi-part messages")
+		return nil, clierr.Usage("at most one positional argument is allowed, use --text-part for multi-part messages")
 	}
 	if len(positional) == 1 { // a2a send "check it out" --file-part <url> -> [TextPart("check it out"), FilePart("<url>")]
 		parts = append([]*a2a.Part{a2a.NewTextPart(positional[0])}, parts...)
 	}
 	if len(parts) == 0 {
-		return nil, fmt.Errorf("provide a message as text, or via --text-part, --file-part, --data-part, or --request-payload")
+		return nil, clierr.Usage("provide a message as text, or via --text-part, --file-part, --data-part, or --request-payload")
 	}
 	msg := a2a.NewMessage(a2a.MessageRoleUser, parts...)
 	if flags.taskID != "" {
@@ -205,10 +206,10 @@ func buildMessage(positional []string, flags *sendFlags) (*a2a.Message, error) {
 func parseRequestPayload(ref string) (*a2a.SendMessageRequest, error) {
 	req := new(a2a.SendMessageRequest)
 	if err := json.Unmarshal(flagparse.RawOrInline(ref), req); err != nil {
-		return nil, fmt.Errorf("--request-payload %q is not a readable file or valid JSON: %w", ref, err)
+		return nil, clierr.Usage(fmt.Sprintf("--request-payload %q is not a readable file or valid JSON: %v", ref, err))
 	}
 	if req.Message == nil {
-		return nil, fmt.Errorf("--request-payload must include a message")
+		return nil, clierr.Usage("--request-payload must include a message")
 	}
 	if req.Message.ID == "" {
 		req.Message.ID = a2a.NewMessageID()
@@ -220,11 +221,11 @@ func parseRequestPayload(ref string) (*a2a.SendMessageRequest, error) {
 // conflict with a --request-payload, which already carries the whole request.
 func ensureNoPayloadOverrides(cmd *cobra.Command, positional []string) error {
 	if len(positional) > 0 {
-		return fmt.Errorf("--request-payload cannot be combined with a positional message")
+		return clierr.Usage("--request-payload cannot be combined with a positional message")
 	}
 	for _, name := range []string{"text-part", "file-part", "data-part", "task-id", "context-id", "metadata", "history", "async"} {
 		if cmd.Flags().Changed(name) {
-			return fmt.Errorf("--request-payload cannot be combined with --%s", name)
+			return clierr.Usage(fmt.Sprintf("--request-payload cannot be combined with --%s", name))
 		}
 	}
 	return nil

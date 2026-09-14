@@ -13,13 +13,15 @@ It is one file, `SKILL.md`. Once it is installed, your agent can:
 
 ## Prerequisite
 
-The skill drives the `a2a` binary; it does not install it. Install `a2a` first:
+The skill drives the `a2a` binary; it does not install it. Install `a2a` first
+using any of:
 
-```bash
-go install github.com/a2aproject/a2a-cli@latest
-```
+- **Homebrew (macOS / Linux):** `brew tap a2aproject/a2a-cli https://github.com/a2aproject/a2a-cli && brew install a2a`
+- **WinGet (Windows):** `winget install a2aproject.a2acli`
+- **Prebuilt binary:** download from the [latest release](https://github.com/a2aproject/a2a-cli/releases/latest) and put `a2a` on your `PATH`.
+- **From source:** `go install github.com/a2aproject/a2a-cli@latest` (installs as `a2a-cli`; rename to `a2a`).
 
-Confirm it is on your `PATH`:
+See the [project README](https://github.com/a2aproject/a2a-cli#installation) for details. Confirm it is on your `PATH`:
 
 ```bash
 a2a version

@@ -45,3 +45,4 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          A2A_BOT_PAT: ${{ secrets.A2A_BOT_PAT }}
