@@ -21,18 +21,21 @@ The **A2A CLI** (`a2a`) is the official command-line client for [A2A (Agent2Agen
 
 ## Why the A2A CLI
 
-The `a2a` CLI is one consistent way to work with A2A agents — no throwaway scripts or raw-JSON parsing just to talk to an agent.
+A2A is a bidirectional protocol: any A2A agent can act as a client to another and hand off a task. But an agent without an A2A layer can't easily send messages or receive updates. The A2A CLI fills that gap.
 
-* **AI coding agents** delegate work to A2A agents through one command surface, driven from a bundled skill descriptor — no custom plugins per harness.
-* **Developers** inspect and drive any deployed agent from the terminal — fetch a card, send a message, stream updates, list or cancel tasks, one readable command each.
-* **Automation and CI** call agents from a stable, scriptable surface: protocol-native JSON (`-o json`) and predictable exit codes, no client library required.
+With it, you — or any model, agent, or coding harness that can call tools — can discover A2A agent's capabilities and send it work.
 
-The CLI handles the underlying complexity. It negotiates the transport (JSON-RPC, REST, or gRPC) from the agent's card, waits for a task to finish unless you tell it not to, and behaves the same across agents and languages.
+Three ways to get started:
 
+1. **Empower AI coding assistants** — give your coding agent the `a2a` tool to offload work to remote A2A agents.
+1. **Interact instantly** — fetch agent cards, send messages, and stream real-time updates from the terminal.
+1. **Automate workflows** — seamlessly integrate A2A agents with non A2A Agents and build pipelines by taking advanteage of cli's protocol-native JSON outputs and predictable exit codes.
+
+Built on [A2A Protocol v1.0](https://a2a-protocol.org/v1.0.0/specification/).
 
 ## Installation
 
-**Homebrew (macOS / Linux)**
+**Homebrew (macOS)**
 
 ```bash
 brew tap a2aproject/a2a-cli https://github.com/a2aproject/a2a-cli
@@ -45,15 +48,17 @@ brew install a2a
 winget install a2aproject.a2acli
 ```
 
-**Prebuilt binaries** — download an archive from the [latest release](https://github.com/a2aproject/a2a-cli/releases/latest), extract it, and put the `a2a` binary on your `PATH`.
-
-**From source**
+**From Source (Linux / Windows / macOS)**
 
 ```bash
 go install github.com/a2aproject/a2a-cli@latest
 # go install names the binary `a2a-cli`; rename it to `a2a`
 mv "$(command -v a2a-cli)" "$(dirname "$(command -v a2a-cli)")/a2a"
 ```
+
+**Prebuilt binaries**
+
+Download an archive from the [latest release](https://github.com/a2aproject/a2a-cli/releases/latest), extract it, and put the `a2a` binary on your `PATH`.
 
 ## Usage
 
