@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -180,33 +181,82 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 // addCommandPlugins discovers command plugin binaries on PATH and registers
 // each as a dynamic top-level command. Built-in commands always win: a plugin
 // whose name collides with an existing command is silently skipped.
+//
+// Descriptions are populated lazily and in parallel the first time root --help
+// is invoked, so startup latency is not affected by the number of plugins.
 func addCommandPlugins(root *cobra.Command) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
+	// Initialise cobra's auto-generated help and completion commands so they
+	// appear in the builtins map and cannot be shadowed by a plugin.
+	root.InitDefaultHelpCmd()
+	root.InitDefaultCompletionCmd()
 
 	builtins := map[string]bool{}
 	for _, sub := range root.Commands() {
 		builtins[sub.Name()] = true
 	}
 
-	for _, d := range commandplugin.List(ctx) {
+	plugins := commandplugin.Discover()
+	pluginPaths := make(map[string]string, len(plugins))
+	for _, d := range plugins {
 		if builtins[d.Name] {
 			continue
 		}
-		d := d // capture
-		var short string
-		if d.Info != nil {
-			short = d.Info.Description
-		}
+		pluginPaths[d.Name] = d.Path
 		pluginCmd := &cobra.Command{
 			Use:                d.Name,
-			Short:              short,
 			DisableFlagParsing: true,
 			RunE: func(cmd *cobra.Command, args []string) error {
 				return commandplugin.Exec(d.Path, args)
 			},
 		}
 		root.AddCommand(pluginCmd)
+	}
+
+	if len(pluginPaths) > 0 {
+		setLazyPluginDescriptions(root, pluginPaths)
+	}
+}
+
+// setLazyPluginDescriptions installs a help-func wrapper that, the first time
+// root-level help is rendered, queries every plugin's "info" subcommand in
+// parallel and fills in the Short description on each registered command.
+func setLazyPluginDescriptions(root *cobra.Command, pluginPaths map[string]string) {
+	defaultHelp := root.HelpFunc()
+	var once sync.Once
+	root.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		if cmd == root {
+			once.Do(func() { fillPluginDescriptions(root, pluginPaths) })
+		}
+		defaultHelp(cmd, args)
+	})
+}
+
+func fillPluginDescriptions(root *cobra.Command, pluginPaths map[string]string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	subs := root.Commands()
+	shorts := make([]string, len(subs))
+	var wg sync.WaitGroup
+	for i, sub := range subs {
+		path, ok := pluginPaths[sub.Name()]
+		if !ok || sub.Short != "" {
+			continue
+		}
+		wg.Add(1)
+		go func(i int, path string) {
+			defer wg.Done()
+			if info, err := commandplugin.QueryInfo(ctx, path); err == nil {
+				shorts[i] = info.Description
+			}
+		}(i, path)
+	}
+	wg.Wait()
+
+	for i, sub := range subs {
+		if shorts[i] != "" {
+			sub.Short = shorts[i]
+		}
 	}
 }
 

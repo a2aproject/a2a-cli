@@ -46,6 +46,12 @@ type Discovered struct {
 	InfoErr error
 }
 
+// Discover returns every command plugin found on PATH without querying info.
+// Use this for fast startup registration; descriptions can be filled later via QueryInfo.
+func Discover() []Discovered {
+	return discover()
+}
+
 // List discovers every command plugin on PATH and queries each one's info document.
 func List(ctx context.Context) []Discovered {
 	out := discover()
@@ -117,12 +123,4 @@ func discover() []Discovered {
 		out = append(out, Discovered{Name: name, Path: seen[name]})
 	}
 	return out
-}
-
-func isExecutable(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil || info.IsDir() {
-		return false
-	}
-	return info.Mode()&0b001001001 != 0
 }
