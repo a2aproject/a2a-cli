@@ -35,7 +35,7 @@ Built on [A2A Protocol v1.0](https://a2a-protocol.org/v1.0.0/specification/).
 
 ## Installation
 
-**Homebrew (macOS)**
+**Homebrew (macOS / Linux)**
 
 ```bash
 brew tap a2aproject/a2a-cli https://github.com/a2aproject/a2a-cli
