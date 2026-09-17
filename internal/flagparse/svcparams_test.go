@@ -27,11 +27,10 @@ func TestServiceParamsParse(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		args     []string
-		want     a2aclient.ServiceParams
-		wantAuth string
-		wantErr  bool
+		name    string
+		args    []string
+		want    a2aclient.ServiceParams
+		wantErr bool
 	}{
 		{
 			name: "single svc-param",
@@ -74,16 +73,14 @@ func TestServiceParamsParse(t *testing.T) {
 			want: a2aclient.ServiceParams{"k": {"1", "2"}},
 		},
 		{
-			name:     "auth maps to Authorization",
-			args:     []string{"--auth", "Bearer tok"},
-			want:     a2aclient.ServiceParams{"authorization": {"Bearer tok"}},
-			wantAuth: "Bearer tok",
+			name: "auth maps to Authorization",
+			args: []string{"--auth", "Bearer tok"},
+			want: a2aclient.ServiceParams{"authorization": {"Bearer tok"}},
 		},
 		{
-			name:     "svc-param and auth merge together",
-			args:     []string{"--svc-param", "X-Trace=abc", "--auth", "Bearer tok"},
-			want:     a2aclient.ServiceParams{"x-trace": {"abc"}, "authorization": {"Bearer tok"}},
-			wantAuth: "Bearer tok",
+			name: "svc-param and auth merge together",
+			args: []string{"--svc-param", "X-Trace=abc", "--auth", "Bearer tok"},
+			want: a2aclient.ServiceParams{"x-trace": {"abc"}, "authorization": {"Bearer tok"}},
 		},
 		{
 			name:    "missing separator is an error",
@@ -118,9 +115,6 @@ func TestServiceParamsParse(t *testing.T) {
 			if diff := cmp.Diff(tt.want, sp.Params()); diff != "" {
 				t.Fatalf("sp.Params() wrong result (-want +got) diff = %s", diff)
 			}
-			if sp.Auth() != tt.wantAuth {
-				t.Fatalf("sp.Auth() = %q, want %q", sp.Auth(), tt.wantAuth)
-			}
 		})
 	}
 }
@@ -150,8 +144,5 @@ func TestServiceParamsEmpty(t *testing.T) {
 	var sp ServiceParams
 	if sp.Params() != nil {
 		t.Fatalf("sp.Params() = %v, want nil", sp.Params())
-	}
-	if sp.Auth() != "" {
-		t.Fatalf("sp.Auth() = %q, want empty", sp.Auth())
 	}
 }
