@@ -93,15 +93,6 @@ func (p *Printer) PrintCard(card *a2a.AgentCard) error {
 	return err
 }
 
-// PrintTask writes a task in the configured Mode.
-func (p *Printer) PrintTask(task *a2a.Task) error {
-	if p.IsJSON() {
-		return p.PrintJSON(task)
-	}
-	_, err := io.WriteString(p.Out, formatTask(task)+formatResumeHint(task))
-	return err
-}
-
 // PrintEvent writes a streaming event in the configured Mode. In ModeJson each
 // event is an indented record; in ModeJSONL each event is one compact object per
 // line.
@@ -127,7 +118,7 @@ func (p *Printer) PrintEvent(event a2a.Event) error {
 			s = fmt.Sprintf("[artifact] %s\n", text)
 		}
 	case *a2a.Task:
-		s = formatTask(e)
+		s = formatTask(e) + formatResumeHint(e)
 	case *a2a.Message:
 		s = formatMessage(e)
 	default:
@@ -135,23 +126,6 @@ func (p *Printer) PrintEvent(event a2a.Event) error {
 	}
 	_, err := io.WriteString(p.Out, s)
 	return err
-}
-
-// PrintSendResult writes the result of a send-message call in the configured Mode.
-func (p *Printer) PrintSendResult(result a2a.SendMessageResult) error {
-	if p.IsJSON() {
-		return p.PrintJSON(a2a.StreamResponse{Event: result})
-	}
-
-	switch r := result.(type) {
-	case *a2a.Task:
-		_, err := io.WriteString(p.Out, formatTask(r)+formatResumeHint(r))
-		return err
-	case *a2a.Message:
-		_, err := io.WriteString(p.Out, formatMessage(r))
-		return err
-	}
-	return fmt.Errorf("unexpected send result type %T", result)
 }
 
 // PrintTaskList writes a list of tasks in the configured Mode.
