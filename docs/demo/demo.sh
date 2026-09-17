@@ -86,7 +86,7 @@ clear
 note "The a2a CLI: one command surface for any A2A agent."
 run "a2a version"
 
-note "Turn an ordinary script into an A2A server -- no A2A code."
+note "Turn an ordinary script into a demo A2A server -- no A2A code."
 note "see cookbook lesson 01 to learn about --echo & --exec options"
 a2a server --exec "bash $EX/content-generator.sh" --port 8080 >/tmp/a2a-demo-a.log 2>&1 &
 SRV_A=$!
