@@ -100,8 +100,8 @@ func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("failed to send message: %w", err)
 			}
-			if err := cfg.PrintSendResult(result); err != nil {
-				return fmt.Errorf("failed to print result: %w", err)
+			if err := cfg.handleEvent(result); err != nil {
+				return err
 			}
 			return nil
 		},
@@ -115,6 +115,7 @@ func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 	f.StringVar(&flags.contextID, "context-id", "", "Context ID to group this turn under")
 	f.IntVar(&flags.history, "history", 0, "Request n history messages in the response")
 	f.DurationVar(&flags.pollInterval, "poll-interval", 2*time.Second, "Duration between GetTask requests in polling fallback mode.")
+	flagparse.AttachFilePartsOutDir(f)
 	flags.parts.Attach(f)
 	flags.meta.Attach(f, "metadata", "Attach request metadata as a JSON object (repeatable)")
 
@@ -171,10 +172,7 @@ func handleStreamEntry(cfg *globalConfig, event a2a.Event, err error) error {
 	if err != nil {
 		return fmt.Errorf("streaming error: %w", err)
 	}
-	if err := cfg.PrintEvent(event); err != nil {
-		return fmt.Errorf("failed to print event: %w", err)
-	}
-	return nil
+	return cfg.handleEvent(event)
 }
 
 func buildMessage(positional []string, flags *sendFlags) (*a2a.Message, error) {

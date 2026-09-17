@@ -682,10 +682,7 @@ func TestGetTask(t *testing.T) {
 	t.Run("get task by id", func(t *testing.T) {
 		t.Parallel()
 		out := mustRunCMD(t, "task", "get", "-a", url, string(taskID), "-o", "json")
-		var task a2a.Task
-		if err := json.Unmarshal([]byte(out), &task); err != nil {
-			t.Fatalf("json.Unmarshal(task get output) error = %v", err)
-		}
+		task := mustDecodeTask(t, out)
 		if task.ID != taskID {
 			t.Fatalf("a2a task get ID = %q, want %q", task.ID, taskID)
 		}
@@ -697,10 +694,7 @@ func TestGetTask(t *testing.T) {
 	t.Run("get task with --history", func(t *testing.T) {
 		t.Parallel()
 		out := mustRunCMD(t, "task", "get", "-a", url, string(taskID), "--history", "10", "-o", "json")
-		var task a2a.Task
-		if err := json.Unmarshal([]byte(out), &task); err != nil {
-			t.Fatalf("json.Unmarshal(task get --history output) error = %v", err)
-		}
+		task := mustDecodeTask(t, out)
 		if task.ID != taskID {
 			t.Fatalf("a2a task get --history ID = %q, want %q", task.ID, taskID)
 		}
@@ -712,10 +706,7 @@ func TestGetTask(t *testing.T) {
 	t.Run("get task with --wait polls to terminal state", func(t *testing.T) {
 		t.Parallel()
 		out := mustRunCMD(t, "task", "get", "-a", url, string(taskID), "--wait", "--poll-interval", "5ms", "-o", "json")
-		var task a2a.Task
-		if err := json.Unmarshal([]byte(out), &task); err != nil {
-			t.Fatalf("json.Unmarshal(task get --wait output) error = %v", err)
-		}
+		task := mustDecodeTask(t, out)
 		if task.ID != taskID {
 			t.Fatalf("a2a task get --wait ID = %q, want %q", task.ID, taskID)
 		}

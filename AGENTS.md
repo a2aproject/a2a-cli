@@ -8,6 +8,7 @@
 ### Code Style
 
 * Do not leave comments in the code unless they explain a non-trivial implementation detail or highlight a suboptimally handled edge-case.
+* When writing comments, keep them concise and high-level, do not repeat the implementation.
 * Prefer early `return`-s and `continue` over deeply nested blocks.
 * Never ignore error results `_ = smth.Close()`, errors need to bubble up OR be logged.
 
