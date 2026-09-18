@@ -22,7 +22,6 @@ import (
 
 	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-go/v2/a2a"
-	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
 )
 
 func newCardGetCmd(cfg *globalConfig) *cobra.Command {
@@ -88,17 +87,5 @@ func getPublicAgentCard(ctx context.Context, cfg *globalConfig) (*a2a.AgentCard,
 	if err := cfg.agentCard.Validate(); err != nil {
 		return nil, clierr.Usage(err.Error())
 	}
-	ref := cfg.agentCard.URL()
-
-	var resolveOpts []agentcard.ResolveOption
-	if auth := cfg.svcParams.Auth(); auth != "" {
-		resolveOpts = append(resolveOpts, agentcard.WithRequestHeader("Authorization", auth))
-	}
-	cfg.logf("fetching agent card from %s", ref)
-
-	card, err := compatCardResolver.Resolve(ctx, ref, resolveOpts...)
-	if err != nil {
-		return nil, clierr.CardResolution(err)
-	}
-	return card, nil
+	return resolveCard(ctx, cfg, cfg.agentCard.URL())
 }

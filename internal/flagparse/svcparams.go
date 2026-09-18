@@ -61,12 +61,6 @@ func (s *ServiceParams) Params() a2aclient.ServiceParams {
 	return params
 }
 
-// Auth returns the raw --auth value, needed by flows that attach credentials
-// outside the request path, such as agent card resolution.
-func (s *ServiceParams) Auth() string {
-	return s.auth
-}
-
 // HasCredential reports whether --auth or an Authorization --svc-param is set.
 func (s *ServiceParams) HasCredential() bool {
 	if s.auth != "" {
