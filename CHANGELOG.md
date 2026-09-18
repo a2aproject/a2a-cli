@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/a2aproject/a2a-cli/compare/v0.2.0...v0.3.0) (2026-09-18)
+
+
+### Features
+
+* --save-fileparts flag for get, send and subscribe ([ed5d983](https://github.com/a2aproject/a2a-cli/commit/ed5d983c5df2635052b7a3fdcd8a87c776fbe981)), closes [#41](https://github.com/a2aproject/a2a-cli/issues/41)
+
+
+### Bug Fixes
+
+* send --svc-param headers on the agent card request ([#63](https://github.com/a2aproject/a2a-cli/issues/63)) ([d8d9493](https://github.com/a2aproject/a2a-cli/commit/d8d94933d5c98113301d9fc809e899d34a060eca)), closes [#56](https://github.com/a2aproject/a2a-cli/issues/56)
+
 ## 0.2.0 (2026-09-09)
 
 
