@@ -16,6 +16,8 @@ package clicfg
 
 import (
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/pflag"
@@ -64,7 +66,7 @@ func Bind(flags *pflag.FlagSet, store *Store) ([]FlagBinding, error) {
 			return
 		}
 
-		value, source, ok := store.Lookup(binding.EnvVar)
+		value, source, ok := store.LookupFlag(binding.Name, binding.EnvVar)
 		if !ok {
 			binding.Source = "default"
 			binding.Value = flagValueString(f)
@@ -80,7 +82,7 @@ func Bind(flags *pflag.FlagSet, store *Store) ([]FlagBinding, error) {
 		f.Changed = true
 		binding.Source = source.String()
 		binding.Path = source.Path
-		binding.Value = value
+		binding.Value = formatValue(value)
 		bindings = append(bindings, binding)
 	})
 
@@ -94,17 +96,44 @@ func flagValueString(f *pflag.Flag) string {
 	return f.Value.String()
 }
 
-func setFlagValue(f *pflag.Flag, value string) error {
-	if sv, ok := f.Value.(pflag.SliceValue); ok {
-		parts := strings.Split(value, ",")
-		for i := range parts {
-			parts[i] = strings.TrimSpace(parts[i])
+func setFlagValue(f *pflag.Flag, raw any) error {
+	if slice, ok := toStringSlice(raw); ok {
+		if sv, ok := f.Value.(pflag.SliceValue); ok {
+			return sv.Replace(slice)
 		}
-		return sv.Replace(parts)
+		for _, item := range slice {
+			if err := f.Value.Set(item); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
-	return f.Value.Set(value)
+
+	switch v := raw.(type) {
+	case string:
+		if sv, ok := f.Value.(pflag.SliceValue); ok {
+			parts := strings.Split(v, ",")
+			for i := range parts {
+				parts[i] = strings.TrimSpace(parts[i])
+			}
+			return sv.Replace(parts)
+		}
+		return f.Value.Set(v)
+	case bool:
+		return f.Value.Set(strconv.FormatBool(v))
+	default:
+		return f.Value.Set(fmt.Sprint(v))
+	}
 }
 
 func flagToEnvVar(name string) string {
 	return envPrefix + strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
+}
+
+func envVarToFlag(envVar string) (string, bool) {
+	if !strings.HasPrefix(envVar, envPrefix) {
+		return "", false
+	}
+	trimmed := strings.TrimPrefix(envVar, envPrefix)
+	return strings.ToLower(strings.ReplaceAll(trimmed, "_", "-")), true
 }

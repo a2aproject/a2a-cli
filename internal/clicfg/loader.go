@@ -15,11 +15,15 @@
 package clicfg
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/joho/godotenv"
+	"gopkg.in/yaml.v3"
 )
 
 // LoadOpts controls how Load discovers configuration.
@@ -66,7 +70,7 @@ const configFileName = ".env"
 
 func loadLocal(opts LoadOpts) (*loadedFile, error) {
 	if opts.ConfigPath != "" {
-		values, err := loadDotenv(opts.ConfigPath)
+		values, err := loadConfigFile(opts.ConfigPath)
 		if err != nil {
 			return nil, fmt.Errorf("reading --config %q: %w", opts.ConfigPath, err)
 		}
@@ -89,7 +93,7 @@ func loadLocal(opts LoadOpts) (*loadedFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &loadedFile{path: path, values: values}, nil
+	return &loadedFile{path: path, values: toStringAnyMap(values)}, nil
 }
 
 func loadGlobal(opts LoadOpts) (*loadedFile, error) {
@@ -106,7 +110,92 @@ func loadGlobal(opts LoadOpts) (*loadedFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &loadedFile{path: path, values: values}, nil
+	return &loadedFile{path: path, values: toStringAnyMap(values)}, nil
+}
+
+func loadConfigFile(path string) (map[string]any, error) {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".json":
+		return loadJSON(path)
+	case ".yaml", ".yml":
+		return loadYAML(path)
+	case ".env":
+		m, err := loadDotenv(path)
+		if err != nil {
+			return nil, err
+		}
+		return toStringAnyMap(m), nil
+	default:
+		return loadUnknown(path)
+	}
+}
+
+func loadJSON(path string) (map[string]any, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if len(bytes.TrimSpace(data)) == 0 {
+		return map[string]any{}, nil
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("parsing JSON config: %w", err)
+	}
+	return raw, nil
+}
+
+func loadYAML(path string) (map[string]any, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if len(bytes.TrimSpace(data)) == 0 {
+		return map[string]any{}, nil
+	}
+	var raw map[string]any
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("parsing YAML config: %w", err)
+	}
+	if raw == nil {
+		return map[string]any{}, nil
+	}
+	return raw, nil
+}
+
+func loadUnknown(path string) (map[string]any, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if len(bytes.TrimSpace(data)) == 0 {
+		return map[string]any{}, nil
+	}
+	var jsonMap map[string]any
+	if err := json.Unmarshal(data, &jsonMap); err == nil && jsonMap != nil {
+		return jsonMap, nil
+	}
+	var yamlMap map[string]any
+	if err := yaml.Unmarshal(data, &yamlMap); err == nil && yamlMap != nil {
+		return yamlMap, nil
+	}
+	dotenvMap, err := godotenv.Parse(bytes.NewReader(data))
+	if err == nil {
+		return toStringAnyMap(dotenvMap), nil
+	}
+	return nil, fmt.Errorf("unrecognized config format in %q", path)
+}
+
+func toStringAnyMap(m map[string]string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	res := make(map[string]any, len(m))
+	for k, v := range m {
+		res[k] = v
+	}
+	return res
 }
 
 func loadDotenvIfExists(path string) (map[string]string, error) {
@@ -117,12 +206,16 @@ func loadDotenvIfExists(path string) (map[string]string, error) {
 	return values, err
 }
 
-func loadDotenv(path string) (map[string]string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
+func loadDotenv(path string) (values map[string]string, err error) {
+	f, openErr := os.Open(path)
+	if openErr != nil {
+		return nil, openErr
 	}
-	defer func() { _ = f.Close() }()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
 	return godotenv.Parse(f)
 }
 

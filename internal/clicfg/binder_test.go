@@ -15,7 +15,9 @@
 package clicfg
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -43,6 +45,26 @@ func TestEnvVarName(t *testing.T) {
 			}
 		})
 	}
+}
+
+type testRepeatableValue struct {
+	vals *[]string
+}
+
+func (v *testRepeatableValue) Set(s string) error {
+	*v.vals = append(*v.vals, s)
+	return nil
+}
+
+func (v *testRepeatableValue) String() string {
+	if v.vals == nil {
+		return ""
+	}
+	return strings.Join(*v.vals, ",")
+}
+
+func (v *testRepeatableValue) Type() string {
+	return "string"
 }
 
 func TestApplyConfig(t *testing.T) {
@@ -138,6 +160,403 @@ func TestApplyConfig(t *testing.T) {
 		for _, r := range resolutions {
 			if r.Name == "stream" || r.Name == "config" {
 				t.Errorf("resolutions include excluded flag %q", r.Name)
+			}
+		}
+	})
+
+	t.Run("binds flags from json file", func(t *testing.T) {
+		t.Parallel()
+		fs, vals := newFlags()
+		dir := t.TempDir()
+		cfgPath := filepath.Join(dir, "config.json")
+		if err := os.WriteFile(cfgPath, []byte(`{
+			"agent-card": "https://json-agent.example.com",
+			"transport": ["rest", "jsonrpc"],
+			"insecure": true
+		}`), 0o600); err != nil {
+			t.Fatalf("os.WriteFile(%q) error = %v", cfgPath, err)
+		}
+
+		s, err := Load(LoadOpts{
+			ConfigPath: cfgPath,
+			WorkingDir: dir,
+			LookupEnv:  makeEnv(nil),
+		})
+		if err != nil {
+			t.Fatalf("Load() error = %v, want nil", err)
+		}
+
+		resolutions, err := Bind(fs, s)
+		if err != nil {
+			t.Fatalf("Bind() error = %v, want nil", err)
+		}
+
+		if *vals["agent-card"] != "https://json-agent.example.com" {
+			t.Fatalf("agent-card = %v, want %v", *vals["agent-card"], "https://json-agent.example.com")
+		}
+		transports, err := fs.GetStringArray("transport")
+		if err != nil {
+			t.Fatalf("fs.GetStringArray() error = %v", err)
+		}
+		if diff := cmp.Diff([]string{"rest", "jsonrpc"}, transports); diff != "" {
+			t.Fatalf("fs.GetStringArray() wrong result (-want +got) diff = %s", diff)
+		}
+		insecure, err := fs.GetBool("insecure")
+		if err != nil {
+			t.Fatalf("fs.GetBool() error = %v", err)
+		}
+		if !insecure {
+			t.Fatalf("fs.GetBool(\"insecure\") = %v, want %v", insecure, true)
+		}
+
+		sources := map[string]string{}
+		paths := map[string]string{}
+		for _, r := range resolutions {
+			sources[r.Name] = r.Source
+			paths[r.Name] = r.Path
+		}
+		if sources["agent-card"] != "local-file" {
+			t.Fatalf("sources[\"agent-card\"] = %v, want %v", sources["agent-card"], "local-file")
+		}
+		if paths["agent-card"] != cfgPath {
+			t.Fatalf("paths[\"agent-card\"] = %v, want %v", paths["agent-card"], cfgPath)
+		}
+	})
+
+	t.Run("binds flags from json file specifying only agent-card", func(t *testing.T) {
+		t.Parallel()
+		fs, vals := newFlags()
+		dir := t.TempDir()
+		cfgPath := filepath.Join(dir, "only-card.json")
+		if err := os.WriteFile(cfgPath, []byte(`{"agent-card": "https://json-only-card.example.com"}`), 0o600); err != nil {
+			t.Fatalf("os.WriteFile(%q) error = %v", cfgPath, err)
+		}
+
+		s, err := Load(LoadOpts{
+			ConfigPath: cfgPath,
+			WorkingDir: dir,
+			LookupEnv:  makeEnv(nil),
+		})
+		if err != nil {
+			t.Fatalf("Load() error = %v, want nil", err)
+		}
+
+		resolutions, err := Bind(fs, s)
+		if err != nil {
+			t.Fatalf("Bind() error = %v, want nil", err)
+		}
+
+		if *vals["agent-card"] != "https://json-only-card.example.com" {
+			t.Fatalf("agent-card = %v, want %v", *vals["agent-card"], "https://json-only-card.example.com")
+		}
+		if *vals["tenant"] != "" {
+			t.Fatalf("tenant = %v, want empty", *vals["tenant"])
+		}
+		transports, err := fs.GetStringArray("transport")
+		if err != nil {
+			t.Fatalf("fs.GetStringArray() error = %v", err)
+		}
+		if len(transports) != 0 {
+			t.Fatalf("transport = %v, want empty", transports)
+		}
+		insecure, err := fs.GetBool("insecure")
+		if err != nil {
+			t.Fatalf("fs.GetBool() error = %v", err)
+		}
+		if insecure {
+			t.Fatalf("fs.GetBool(\"insecure\") = %v, want false", insecure)
+		}
+
+		sources := map[string]string{}
+		for _, r := range resolutions {
+			sources[r.Name] = r.Source
+		}
+		if sources["agent-card"] != "local-file" {
+			t.Fatalf("sources[\"agent-card\"] = %v, want %v", sources["agent-card"], "local-file")
+		}
+		if sources["tenant"] != "default" {
+			t.Fatalf("sources[\"tenant\"] = %v, want default", sources["tenant"])
+		}
+		if sources["transport"] != "default" {
+			t.Fatalf("sources[\"transport\"] = %v, want default", sources["transport"])
+		}
+	})
+
+	t.Run("binds flags from yaml file specifying only agent-card", func(t *testing.T) {
+		t.Parallel()
+		fs, vals := newFlags()
+		dir := t.TempDir()
+		cfgPath := filepath.Join(dir, "only-card.yaml")
+		if err := os.WriteFile(cfgPath, []byte("agent-card: https://yaml-only-card.example.com\n"), 0o600); err != nil {
+			t.Fatalf("os.WriteFile(%q) error = %v", cfgPath, err)
+		}
+
+		s, err := Load(LoadOpts{
+			ConfigPath: cfgPath,
+			WorkingDir: dir,
+			LookupEnv:  makeEnv(nil),
+		})
+		if err != nil {
+			t.Fatalf("Load() error = %v, want nil", err)
+		}
+
+		resolutions, err := Bind(fs, s)
+		if err != nil {
+			t.Fatalf("Bind() error = %v, want nil", err)
+		}
+
+		if *vals["agent-card"] != "https://yaml-only-card.example.com" {
+			t.Fatalf("agent-card = %v, want %v", *vals["agent-card"], "https://yaml-only-card.example.com")
+		}
+		if *vals["tenant"] != "" {
+			t.Fatalf("tenant = %v, want empty", *vals["tenant"])
+		}
+		transports, err := fs.GetStringArray("transport")
+		if err != nil {
+			t.Fatalf("fs.GetStringArray() error = %v", err)
+		}
+		if len(transports) != 0 {
+			t.Fatalf("transport = %v, want empty", transports)
+		}
+		insecure, err := fs.GetBool("insecure")
+		if err != nil {
+			t.Fatalf("fs.GetBool() error = %v", err)
+		}
+		if insecure {
+			t.Fatalf("fs.GetBool(\"insecure\") = %v, want false", insecure)
+		}
+
+		sources := map[string]string{}
+		for _, r := range resolutions {
+			sources[r.Name] = r.Source
+		}
+		if sources["agent-card"] != "local-file" {
+			t.Fatalf("sources[\"agent-card\"] = %v, want %v", sources["agent-card"], "local-file")
+		}
+		if sources["tenant"] != "default" {
+			t.Fatalf("sources[\"tenant\"] = %v, want default", sources["tenant"])
+		}
+		if sources["transport"] != "default" {
+			t.Fatalf("sources[\"transport\"] = %v, want default", sources["transport"])
+		}
+	})
+
+	t.Run("ignores additional properties in json and yaml files", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name     string
+			filename string
+			content  string
+		}{
+			{
+				name:     "json with additional properties",
+				filename: "extra.json",
+				content: `{
+					"agent-card": "https://json-extra.example.com",
+					"unknown-flag": "foo",
+					"extra_metadata": {"key": "value"},
+					"custom-number": 42
+				}`,
+			},
+			{
+				name:     "yaml with additional properties",
+				filename: "extra.yaml",
+				content: `agent-card: https://yaml-extra.example.com
+unknown-flag: foo
+extra_metadata:
+  key: value
+custom-number: 42
+`,
+			},
+		}
+
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				fs, vals := newFlags()
+				dir := t.TempDir()
+				cfgPath := filepath.Join(dir, tc.filename)
+				if err := os.WriteFile(cfgPath, []byte(tc.content), 0o600); err != nil {
+					t.Fatalf("os.WriteFile(%q) error = %v", cfgPath, err)
+				}
+
+				s, err := Load(LoadOpts{
+					ConfigPath: cfgPath,
+					WorkingDir: dir,
+					LookupEnv:  makeEnv(nil),
+				})
+				if err != nil {
+					t.Fatalf("Load() error = %v, want nil", err)
+				}
+
+				resolutions, err := Bind(fs, s)
+				if err != nil {
+					t.Fatalf("Bind() error = %v, want nil", err)
+				}
+
+				if !strings.Contains(*vals["agent-card"], "extra.example.com") {
+					t.Fatalf("agent-card = %v, want to contain extra.example.com", *vals["agent-card"])
+				}
+
+				for _, r := range resolutions {
+					if r.Name == "unknown-flag" || r.Name == "extra_metadata" || r.Name == "custom-number" {
+						t.Fatalf("resolutions contain unexpected property %q", r.Name)
+					}
+				}
+			})
+		}
+	})
+
+	t.Run("binds flags from yaml file", func(t *testing.T) {
+		t.Parallel()
+		fs, vals := newFlags()
+		dir := t.TempDir()
+		cfgPath := filepath.Join(dir, "config.yaml")
+		yamlContent := `agent-card: https://yaml-agent.example.com
+transport:
+  - rest
+  - jsonrpc
+insecure: true
+tenant: yaml-tenant
+`
+		if err := os.WriteFile(cfgPath, []byte(yamlContent), 0o600); err != nil {
+			t.Fatalf("os.WriteFile(%q) error = %v", cfgPath, err)
+		}
+
+		s, err := Load(LoadOpts{
+			ConfigPath: cfgPath,
+			WorkingDir: dir,
+			LookupEnv:  makeEnv(nil),
+		})
+		if err != nil {
+			t.Fatalf("Load() error = %v, want nil", err)
+		}
+
+		if _, err := Bind(fs, s); err != nil {
+			t.Fatalf("Bind() error = %v, want nil", err)
+		}
+
+		if *vals["agent-card"] != "https://yaml-agent.example.com" {
+			t.Fatalf("agent-card = %v, want %v", *vals["agent-card"], "https://yaml-agent.example.com")
+		}
+		if *vals["tenant"] != "yaml-tenant" {
+			t.Fatalf("tenant = %v, want %v", *vals["tenant"], "yaml-tenant")
+		}
+		transports, err := fs.GetStringArray("transport")
+		if err != nil {
+			t.Fatalf("fs.GetStringArray() error = %v", err)
+		}
+		if diff := cmp.Diff([]string{"rest", "jsonrpc"}, transports); diff != "" {
+			t.Fatalf("fs.GetStringArray() wrong result (-want +got) diff = %s", diff)
+		}
+		insecure, err := fs.GetBool("insecure")
+		if err != nil {
+			t.Fatalf("fs.GetBool() error = %v", err)
+		}
+		if !insecure {
+			t.Fatalf("fs.GetBool(\"insecure\") = %v, want %v", insecure, true)
+		}
+	})
+
+	t.Run("binds repeatable flag from yaml list of strings", func(t *testing.T) {
+		t.Parallel()
+		fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+		var collected []string
+		fs.Var(&testRepeatableValue{vals: &collected}, "svc-param", "")
+
+		dir := t.TempDir()
+		cfgPath := filepath.Join(dir, "config.yaml")
+		yamlContent := `svc-param:
+  - "key1=val1"
+  - "key2=val2"
+`
+		if err := os.WriteFile(cfgPath, []byte(yamlContent), 0o600); err != nil {
+			t.Fatalf("os.WriteFile(%q) error = %v", cfgPath, err)
+		}
+
+		s, err := Load(LoadOpts{
+			ConfigPath: cfgPath,
+			WorkingDir: dir,
+			LookupEnv:  makeEnv(nil),
+		})
+		if err != nil {
+			t.Fatalf("Load() error = %v, want nil", err)
+		}
+
+		if _, err := Bind(fs, s); err != nil {
+			t.Fatalf("Bind() error = %v, want nil", err)
+		}
+
+		want := []string{"key1=val1", "key2=val2"}
+		if diff := cmp.Diff(want, collected); diff != "" {
+			t.Fatalf("svc-param wrong result (-want +got) diff = %s", diff)
+		}
+	})
+
+	t.Run("env overrides yaml config", func(t *testing.T) {
+		t.Parallel()
+		fs, vals := newFlags()
+		dir := t.TempDir()
+		cfgPath := filepath.Join(dir, "config.yaml")
+		if err := os.WriteFile(cfgPath, []byte("agent-card: https://yaml.example.com\n"), 0o600); err != nil {
+			t.Fatalf("os.WriteFile(%q) error = %v", cfgPath, err)
+		}
+
+		s, err := Load(LoadOpts{
+			ConfigPath: cfgPath,
+			WorkingDir: dir,
+			LookupEnv:  makeEnv(map[string]string{"A2ACLI_AGENT_CARD": "https://env.example.com"}),
+		})
+		if err != nil {
+			t.Fatalf("Load() error = %v, want nil", err)
+		}
+
+		resolutions, err := Bind(fs, s)
+		if err != nil {
+			t.Fatalf("Bind() error = %v, want nil", err)
+		}
+		if *vals["agent-card"] != "https://env.example.com" {
+			t.Fatalf("agent-card = %v, want %v", *vals["agent-card"], "https://env.example.com")
+		}
+		for _, r := range resolutions {
+			if r.Name == "agent-card" && r.Source != "env" {
+				t.Fatalf("r.Source = %v, want %v", r.Source, "env")
+			}
+		}
+	})
+
+	t.Run("cli flag overrides yaml config", func(t *testing.T) {
+		t.Parallel()
+		fs, vals := newFlags()
+		if err := fs.Set("agent-card", "https://flag.example.com"); err != nil {
+			t.Fatalf("fs.Set() error = %v", err)
+		}
+		dir := t.TempDir()
+		cfgPath := filepath.Join(dir, "config.yaml")
+		if err := os.WriteFile(cfgPath, []byte("agent-card: https://yaml.example.com\n"), 0o600); err != nil {
+			t.Fatalf("os.WriteFile(%q) error = %v", cfgPath, err)
+		}
+
+		s, err := Load(LoadOpts{
+			ConfigPath: cfgPath,
+			WorkingDir: dir,
+			LookupEnv:  makeEnv(nil),
+		})
+		if err != nil {
+			t.Fatalf("Load() error = %v, want nil", err)
+		}
+
+		resolutions, err := Bind(fs, s)
+		if err != nil {
+			t.Fatalf("Bind() error = %v, want nil", err)
+		}
+		if *vals["agent-card"] != "https://flag.example.com" {
+			t.Fatalf("agent-card = %v, want %v", *vals["agent-card"], "https://flag.example.com")
+		}
+		for _, r := range resolutions {
+			if r.Name == "agent-card" && r.Source != "flag" {
+				t.Fatalf("r.Source = %v, want %v", r.Source, "flag")
 			}
 		}
 	})
