@@ -107,15 +107,9 @@ func newClientFromCard(ctx context.Context, cfg *globalConfig, ref string, extra
 		return nil, err
 	}
 
-	cfg.logf("resolving agent card from %s", ref)
-
-	var resolveOpts []agentcard.ResolveOption
-	if auth := cfg.svcParams.Auth(); auth != "" {
-		resolveOpts = append(resolveOpts, agentcard.WithRequestHeader("Authorization", auth))
-	}
-	card, err := compatCardResolver.Resolve(ctx, ref, resolveOpts...)
+	card, err := resolveCard(ctx, cfg, ref)
 	if err != nil {
-		return nil, clierr.CardResolution(err)
+		return nil, err
 	}
 
 	factoryOpts := append(clientFactoryOpts(cfg), extraOpts...)
@@ -132,6 +126,21 @@ func newClientFromCard(ctx context.Context, cfg *globalConfig, ref string, extra
 	cfg.logf("creating client for %s", card.Name)
 	client, err := a2aclient.NewFromCard(ctx, card, factoryOpts...)
 	return client, hintInsecure(err)
+}
+
+// resolveCard fetches the agent card with every service parameter sent as a request
+// header, so a gateway authenticating the card fetch sees what the transport sends.
+func resolveCard(ctx context.Context, cfg *globalConfig, ref string) (*a2a.AgentCard, error) {
+	var opts []agentcard.ResolveOption
+	for k, vals := range cfg.svcParams.Params() {
+		opts = append(opts, agentcard.WithRequestHeader(k, strings.Join(vals, ", ")))
+	}
+	cfg.logf("resolving agent card from %s", ref)
+	card, err := compatCardResolver.Resolve(ctx, ref, opts...)
+	if err != nil {
+		return nil, clierr.CardResolution(err)
+	}
+	return card, nil
 }
 
 // hintInsecure wraps gRPC "no transport security set" errors with a user-friendly suggestion to pass --insecure.

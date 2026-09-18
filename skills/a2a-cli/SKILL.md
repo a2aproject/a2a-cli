@@ -124,6 +124,7 @@ Run `a2a <command> --help` for the full, current set. The load-bearing ones:
 | `-o, --output json` | Machine-readable output; add `--stream` for a live event stream. |
 | `--async` | Return immediately with the identifiers instead of blocking; poll later with `task get`. |
 | `--task-id <id>` / `--context-id <id>` | Continue a task / group a new task under a context. |
+| `--save-fileparts <dir>` | Save raw file parts from responses (artifacts and messages) as files under `<dir>`; the output still summarizes them by name/type/size. |
 | `--auth "<creds>"` / `--svc-param <k=v>` | Attach credentials or transport parameters (or set `A2ACLI_*` env vars). Never commit a secret. |
 
 ## Configuration

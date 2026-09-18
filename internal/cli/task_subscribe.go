@@ -19,12 +19,13 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/utils"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 )
 
 func newTaskSubscribeCmd(cfg *globalConfig) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "subscribe <task-id>",
 		Short: "Subscribe to task events",
 		Args:  cobra.ExactArgs(1),
@@ -48,11 +49,15 @@ func newTaskSubscribeCmd(cfg *globalConfig) *cobra.Command {
 				if err != nil {
 					return utils.UnpackCause(ctx, err)
 				}
-				if err := cfg.PrintEvent(event); err != nil {
-					return fmt.Errorf("failed to print event: %w", err)
+				if err := cfg.handleEvent(event); err != nil {
+					return err
 				}
 			}
 			return nil
 		},
 	}
+
+	f := cmd.Flags()
+	flagparse.AttachFilePartsOutDir(f)
+	return cmd
 }

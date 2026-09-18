@@ -53,7 +53,7 @@ func newTaskCancelCmd(cfg *globalConfig) *cobra.Command {
 				return fmt.Errorf("failed to cancel task %s: %w", args[0], err)
 			}
 
-			if err := cfg.PrintTask(task); err != nil {
+			if err := cfg.PrintEvent(task); err != nil {
 				return fmt.Errorf("failed to print task: %w", err)
 			}
 			return nil

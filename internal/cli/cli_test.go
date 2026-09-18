@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/spf13/pflag"
 
 	"github.com/a2aproject/a2a-cli/internal/clicfg"
@@ -682,10 +683,7 @@ func TestGetTask(t *testing.T) {
 	t.Run("get task by id", func(t *testing.T) {
 		t.Parallel()
 		out := mustRunCMD(t, "task", "get", "-a", url, string(taskID), "-o", "json")
-		var task a2a.Task
-		if err := json.Unmarshal([]byte(out), &task); err != nil {
-			t.Fatalf("json.Unmarshal(task get output) error = %v", err)
-		}
+		task := mustDecodeTask(t, out)
 		if task.ID != taskID {
 			t.Fatalf("a2a task get ID = %q, want %q", task.ID, taskID)
 		}
@@ -697,10 +695,7 @@ func TestGetTask(t *testing.T) {
 	t.Run("get task with --history", func(t *testing.T) {
 		t.Parallel()
 		out := mustRunCMD(t, "task", "get", "-a", url, string(taskID), "--history", "10", "-o", "json")
-		var task a2a.Task
-		if err := json.Unmarshal([]byte(out), &task); err != nil {
-			t.Fatalf("json.Unmarshal(task get --history output) error = %v", err)
-		}
+		task := mustDecodeTask(t, out)
 		if task.ID != taskID {
 			t.Fatalf("a2a task get --history ID = %q, want %q", task.ID, taskID)
 		}
@@ -712,10 +707,7 @@ func TestGetTask(t *testing.T) {
 	t.Run("get task with --wait polls to terminal state", func(t *testing.T) {
 		t.Parallel()
 		out := mustRunCMD(t, "task", "get", "-a", url, string(taskID), "--wait", "--poll-interval", "5ms", "-o", "json")
-		var task a2a.Task
-		if err := json.Unmarshal([]byte(out), &task); err != nil {
-			t.Fatalf("json.Unmarshal(task get --wait output) error = %v", err)
-		}
+		task := mustDecodeTask(t, out)
 		if task.ID != taskID {
 			t.Fatalf("a2a task get --wait ID = %q, want %q", task.ID, taskID)
 		}
@@ -1097,4 +1089,97 @@ func (e *legacyExecutor) Execute(ctx context.Context, reqCtx *a2asrvv0.RequestCo
 
 func (e *legacyExecutor) Cancel(ctx context.Context, reqCtx *a2asrvv0.RequestContext, queue eventqueue.Queue) error {
 	return fmt.Errorf("not implemented")
+}
+
+func TestCardRequestCarriesServiceParams(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		args func(url string) []string
+		want map[string][]string
+	}{
+		{
+			name: "card get with svc-param",
+			args: func(url string) []string {
+				return []string{"card", "get", url, "--svc-param", "X-Custom-Auth=Bearer y"}
+			},
+			want: map[string][]string{"X-Custom-Auth": {"Bearer y"}},
+		},
+		{
+			name: "card get -a with svc-param",
+			args: func(url string) []string {
+				return []string{"card", "get", "-a", url, "--svc-param", "X-Custom-Auth=Bearer y"}
+			},
+			want: map[string][]string{"X-Custom-Auth": {"Bearer y"}},
+		},
+		{
+			name: "send -a with svc-param",
+			args: func(url string) []string {
+				return []string{"send", "-a", url, "--svc-param", "X-Custom-Auth=Bearer y", "hi"}
+			},
+			want: map[string][]string{"X-Custom-Auth": {"Bearer y"}},
+		},
+		{
+			name: "auth",
+			args: func(url string) []string { return []string{"card", "get", url, "--auth", "Bearer x"} },
+			want: map[string][]string{"Authorization": {"Bearer x"}},
+		},
+		{
+			name: "auth and svc-param together",
+			args: func(url string) []string {
+				return []string{"card", "get", url, "--auth", "Bearer x", "--svc-param", "X-Custom-Auth=Bearer y"}
+			},
+			want: map[string][]string{"Authorization": {"Bearer x"}, "X-Custom-Auth": {"Bearer y"}},
+		},
+		{
+			name: "repeated key is comma-joined",
+			args: func(url string) []string {
+				return []string{"card", "get", url, "--svc-param", "X-Trace=a", "--svc-param", "X-Trace=b"}
+			},
+			want: map[string][]string{"X-Trace": {"a, b"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			url, cardHeaders := startTestServerRecordingCardHeaders(t)
+			args := tt.args(url)
+			if _, err := runCMD(t, args...); err != nil {
+				t.Fatalf("runCMD(%q) error = %v", strings.Join(args, " "), err)
+			}
+			got := map[string][]string{}
+			for name := range tt.want {
+				got[name] = cardHeaders.Values(name)
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Fatalf("card request headers wrong result (-want +got) diff = %s", diff)
+			}
+		})
+	}
+}
+
+// startTestServerRecordingCardHeaders is startTestServer with the agent card
+// handler wrapped to capture the headers of the card request.
+func startTestServerRecordingCardHeaders(t *testing.T) (string, *http.Header) {
+	t.Helper()
+
+	capabilities := a2a.AgentCapabilities{Streaming: true}
+	handler := a2asrv.NewHandler(localsrv.NewEchoExecutor(), a2asrv.WithCapabilityChecks(&capabilities))
+
+	mux := http.NewServeMux()
+	mux.Handle("/", a2asrv.NewRESTHandler(handler))
+
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	recorded := &http.Header{}
+	cardHandler := a2asrv.NewStaticAgentCardHandler(newAgentCard(server.URL, capabilities))
+	mux.HandleFunc(a2asrv.WellKnownAgentCardPath, func(w http.ResponseWriter, r *http.Request) {
+		*recorded = r.Header.Clone()
+		cardHandler.ServeHTTP(w, r)
+	})
+
+	return server.URL, recorded
 }

@@ -22,6 +22,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/polling"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
@@ -60,8 +61,8 @@ func newTaskGetCmd(cfg *globalConfig) *cobra.Command {
 				return err
 			}
 
-			if err := cfg.PrintTask(task); err != nil {
-				return fmt.Errorf("failed to print task: %w", err)
+			if err := cfg.handleEvent(task); err != nil {
+				return err
 			}
 			return nil
 		},
@@ -71,6 +72,7 @@ func newTaskGetCmd(cfg *globalConfig) *cobra.Command {
 	f.IntVar(&history, "history", 0, "Include up to n history messages")
 	f.BoolVar(&wait, "wait", false, "Poll until the task reaches a terminal or interrupted (input/auth-required) state")
 	f.DurationVar(&pollInterval, "poll-interval", 2*time.Second, "Duration between polls while waiting; only used with --wait. Overall wait budget is --timeout.")
+	flagparse.AttachFilePartsOutDir(f)
 	return cmd
 }
 

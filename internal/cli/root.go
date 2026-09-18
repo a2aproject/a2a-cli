@@ -65,6 +65,7 @@ type globalConfig struct {
 	bindings []clicfg.FlagBinding
 	errOut   io.Writer
 
+	handlers []handleEventFunc
 	*output.Printer
 }
 
@@ -142,7 +143,8 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 			default:
 				return clierr.Usage(fmt.Sprintf("invalid --output %q (want text or json)", cfg.output))
 			}
-			return nil
+
+			return cfg.initEventHandlers(cmd)
 		},
 	}
 
