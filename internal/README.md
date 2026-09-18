@@ -40,35 +40,56 @@ These apply to every client-mode command. Each command selects the agent it talk
 | `--tenant <id>` | | Tenant identifier. Passed on every request. |
 | `--timeout <dur>` | | Request timeout. Default `30s`. |
 | `--verbose` | `-v` | Verbose output to stderr. |
-| `--config <path>` | | Load configuration from an explicit `.env` file in place of the local `.env`. |
+| `--config <path>` | | Load configuration from an explicit file (`.yaml`, `.json`, or `.env`) in place of the local `.env`. |
 
 ---
 
 ## Configuration
 
-Every global default can be set from the environment or a `.env` file. This keeps repeated invocations short.
+Every global default can be set from the environment, an explicit configuration file (`.yaml`, `.json`), or a `.env` file. This keeps repeated invocations short.
 
-**Naming.** The variable for a flag is `A2ACLI_` followed by the long flag name
-upper-snake-cased: `--agent-card` -> `A2ACLI_AGENT_CARD`, `--timeout` ->
-`A2ACLI_TIMEOUT`, `--transport` → `A2ACLI_TRANSPORT` (a comma-separated,
-ordered list).
+### YAML and JSON Configuration
 
-**Precedence** (highest wins):
+Pass `--config <path>` pointing to a `.yaml`, `.yml`, or `.json` file to set global flags using standard kebab-case flag names and native data types (strings, lists, booleans):
 
-1. an explicit flag,
-2. an environment variable,
-3. a local `.env` (the file named by `--config`, or the nearest `.env` found by
-   walking up from the working directory),
-4. the global `.env` at `$XDG_CONFIG_HOME/a2a-cli/.env` (default
-   `~/.config/a2a-cli/.env`),
-5. the built-in default.
+**YAML (`a2a.yaml`):**
+```yaml
+agent-card: https://agent.example.com
+transport:
+  - rest
+  - jsonrpc
+timeout: 60s
+verbose: false
+insecure: false
+tenant: my-team
+svc-param:
+  - "Authorization=Bearer <token>"
+  - "X-Client-ID=cli-app"
+```
 
-`--stream`, `--help`, and `--version` are never read from the environment or a
-file and must be passed explicitly.
+**JSON (`a2a.json`):**
+```json
+{
+  "agent-card": "https://agent.example.com",
+  "transport": ["rest", "jsonrpc"],
+  "timeout": "60s",
+  "verbose": false,
+  "insecure": false,
+  "tenant": "my-team",
+  "svc-param": [
+    "Authorization=Bearer <token>",
+    "X-Client-ID=cli-app"
+  ]
+}
+```
 
-`.env` files use `KEY=value`, one per line. Blank lines and `#` comments are
-ignored, a leading `export ` is tolerated, and one layer of surrounding quotes is
-stripped:
+Additional or unknown properties in YAML and JSON files are safely ignored.
+
+### Environment Variables and `.env` Files
+
+When using environment variables or `.env` files, settings are named `A2ACLI_` followed by the long flag name upper-snake-cased: `--agent-card` $\rightarrow$ `A2ACLI_AGENT_CARD`, `--timeout` $\rightarrow$ `A2ACLI_TIMEOUT`, `--transport` $\rightarrow$ `A2ACLI_TRANSPORT` (a comma-separated list).
+
+`.env` files use `KEY=value`, one per line. Blank lines and `#` comments are ignored, a leading `export ` is tolerated, and surrounding quotes are stripped:
 
 ```dotenv
 A2ACLI_AGENT_CARD=https://agent.example.com
@@ -78,16 +99,28 @@ A2ACLI_TIMEOUT=60s
 A2ACLI_AUTH="Bearer <token>"
 ```
 
+### Precedence
+
+When the same setting is defined in multiple places, the first match wins:
+
+1. an explicit command-line flag,
+2. a session environment variable (`A2ACLI_*`),
+3. a local configuration file (the file named by `--config`, or the nearest `.env` found by walking up from the working directory),
+4. the global `.env` at `$XDG_CONFIG_HOME/a2a-cli/.env` (default `~/.config/a2a-cli/.env`),
+5. the built-in flag default.
+
+`--stream`, `--help`, `--version`, and `--config` are never read from configuration files or the environment and must be passed explicitly.
+
 Store secrets only in files you keep private.
 
 ### `config show` - Inspect configuration
 
-Read-only: print each effective setting and the source it resolved from.
-Credential values are redacted. Change settings by exporting the variable or editing a `.env` file.
+Read-only: print each effective setting and the source it resolved from. Credential values are redacted.
 
 ```bash
 a2a config show
 a2a config show -o json
+a2a --config ./a2a.yaml config show
 a2a --config ./prod.env config show
 ```
 
