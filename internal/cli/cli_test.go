@@ -101,6 +101,46 @@ func TestCardGet(t *testing.T) {
 				t.Fatalf("a2a card get -a card.Name = %q, want %q", card.Name, "Test Echo")
 			}
 		})
+
+		t.Run("accepts agent-card from yaml config specifying only agent-card"+mode.suffix, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			cfgPath := filepath.Join(dir, "a2a.yaml")
+			if err := os.WriteFile(cfgPath, []byte("agent-card: "+mode.url+"\n"), 0o600); err != nil {
+				t.Fatalf("os.WriteFile(%q) error = %v", cfgPath, err)
+			}
+			out, err := runCMDWithConfig(t, deps{poller: polling.Stream, cfgLoader: clicfg.Load}, "--config", cfgPath, "card", "get", "-o", "json")
+			if err != nil {
+				t.Fatalf("runCMDWithConfig() error = %v, want nil", err)
+			}
+			var card a2a.AgentCard
+			if err := json.Unmarshal([]byte(out), &card); err != nil {
+				t.Fatalf("json.Unmarshal(card get output) error = %v", err)
+			}
+			if card.Name != "Test Echo" {
+				t.Fatalf("a2a card get card.Name = %q, want %q", card.Name, "Test Echo")
+			}
+		})
+
+		t.Run("accepts agent-card from json config specifying only agent-card"+mode.suffix, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			cfgPath := filepath.Join(dir, "a2a.json")
+			if err := os.WriteFile(cfgPath, []byte(fmt.Sprintf(`{"agent-card": %q}`, mode.url)), 0o600); err != nil {
+				t.Fatalf("os.WriteFile(%q) error = %v", cfgPath, err)
+			}
+			out, err := runCMDWithConfig(t, deps{poller: polling.Stream, cfgLoader: clicfg.Load}, "--config", cfgPath, "card", "get", "-o", "json")
+			if err != nil {
+				t.Fatalf("runCMDWithConfig() error = %v, want nil", err)
+			}
+			var card a2a.AgentCard
+			if err := json.Unmarshal([]byte(out), &card); err != nil {
+				t.Fatalf("json.Unmarshal(card get output) error = %v", err)
+			}
+			if card.Name != "Test Echo" {
+				t.Fatalf("a2a card get card.Name = %q, want %q", card.Name, "Test Echo")
+			}
+		})
 	}
 
 	t.Run("missing agent fails", func(t *testing.T) {
@@ -1183,3 +1223,129 @@ func startTestServerRecordingCardHeaders(t *testing.T) (string, *http.Header) {
 
 	return server.URL, recorded
 }
+
+func TestConfigShowWithExplicitConfigFiles(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		filename string
+		content  string
+		wantVals map[string]string
+	}{
+		{
+			name:     "yaml config",
+			filename: "a2a.yaml",
+			content: `agent-card: https://yaml-agent.example.com
+tenant: yaml-tenant
+transport:
+  - rest
+  - jsonrpc
+`,
+			wantVals: map[string]string{
+				"agent-card": "https://yaml-agent.example.com",
+				"tenant":     "yaml-tenant",
+				"transport":  "rest,jsonrpc",
+			},
+		},
+		{
+			name:     "json config",
+			filename: "a2a.json",
+			content: `{
+  "agent-card": "https://json-agent.example.com",
+  "tenant": "json-tenant",
+  "transport": ["rest", "jsonrpc"]
+}`,
+			wantVals: map[string]string{
+				"agent-card": "https://json-agent.example.com",
+				"tenant":     "json-tenant",
+				"transport":  "rest,jsonrpc",
+			},
+		},
+		{
+			name:     "yaml config specifying only agent-card",
+			filename: "only-card.yaml",
+			content:  "agent-card: https://yaml-only-agent.example.com\n",
+			wantVals: map[string]string{
+				"agent-card": "https://yaml-only-agent.example.com",
+			},
+		},
+		{
+			name:     "json config specifying only agent-card",
+			filename: "only-card.json",
+			content:  `{"agent-card": "https://json-only-agent.example.com"}`,
+			wantVals: map[string]string{
+				"agent-card": "https://json-only-agent.example.com",
+			},
+		},
+		{
+			name:     "yaml config with additional properties ignored",
+			filename: "extra.yaml",
+			content: `agent-card: https://yaml-extra-agent.example.com
+unknown-field: ignored-value
+extra_nested:
+  nested_key: nested_val
+another_flag: 123
+`,
+			wantVals: map[string]string{
+				"agent-card": "https://yaml-extra-agent.example.com",
+			},
+		},
+		{
+			name:     "json config with additional properties ignored",
+			filename: "extra.json",
+			content: `{
+  "agent-card": "https://json-extra-agent.example.com",
+  "unknown-field": "ignored-value",
+  "extra_nested": {"nested_key": "nested_val"},
+  "another_flag": 123
+}`,
+			wantVals: map[string]string{
+				"agent-card": "https://json-extra-agent.example.com",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			cfgPath := filepath.Join(dir, tt.filename)
+			if err := os.WriteFile(cfgPath, []byte(tt.content), 0o600); err != nil {
+				t.Fatalf("os.WriteFile(%q) error = %v", cfgPath, err)
+			}
+
+			out, err := runCMDWithConfig(t, deps{poller: polling.Stream, cfgLoader: clicfg.Load}, "--config", cfgPath, "config", "show", "-o", "json")
+			if err != nil {
+				t.Fatalf("runCMDWithConfig() error = %v, want nil", err)
+			}
+
+			var views []flagBindingView
+			if err := json.Unmarshal([]byte(out), &views); err != nil {
+				t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+			}
+
+			gotVals := map[string]string{}
+			for _, v := range views {
+				if v.Name == "unknown-field" || v.Name == "extra_nested" || v.Name == "another_flag" {
+					t.Fatalf("config show views contain unexpected property %q", v.Name)
+				}
+				if _, ok := tt.wantVals[v.Name]; ok {
+					gotVals[v.Name] = v.Value
+					if v.Source != "local-file" {
+						t.Fatalf("view for %q source = %v, want local-file", v.Name, v.Source)
+					}
+					if v.Path != cfgPath {
+						t.Fatalf("view for %q path = %v, want %v", v.Name, v.Path, cfgPath)
+					}
+				}
+			}
+
+			if diff := cmp.Diff(tt.wantVals, gotVals); diff != "" {
+				t.Fatalf("config show values wrong result (-want +got) diff = %s", diff)
+			}
+		})
+	}
+}
+

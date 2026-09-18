@@ -127,6 +127,22 @@ func TestLoadStoreErrors(t *testing.T) {
 	dir := t.TempDir()
 	emptyFile := filepath.Join(dir, ".env.empty")
 	writeDotenv(t, emptyFile, nil)
+	emptyJSON := filepath.Join(dir, "empty.json")
+	if err := os.WriteFile(emptyJSON, []byte(""), 0o600); err != nil {
+		t.Fatalf("os.WriteFile(%q) error = %v", emptyJSON, err)
+	}
+	emptyYAML := filepath.Join(dir, "empty.yaml")
+	if err := os.WriteFile(emptyYAML, []byte(""), 0o600); err != nil {
+		t.Fatalf("os.WriteFile(%q) error = %v", emptyYAML, err)
+	}
+	invalidJSON := filepath.Join(dir, "invalid.json")
+	if err := os.WriteFile(invalidJSON, []byte("{invalid json"), 0o600); err != nil {
+		t.Fatalf("os.WriteFile(%q) error = %v", invalidJSON, err)
+	}
+	invalidYAML := filepath.Join(dir, "invalid.yaml")
+	if err := os.WriteFile(invalidYAML, []byte("key: [unclosed list"), 0o600); err != nil {
+		t.Fatalf("os.WriteFile(%q) error = %v", invalidYAML, err)
+	}
 
 	tests := []struct {
 		name            string
@@ -144,6 +160,28 @@ func TestLoadStoreErrors(t *testing.T) {
 			name: "no error if empty config",
 			key:  "A2ACLI_AGENT_CARD",
 			opts: LoadOpts{ConfigPath: emptyFile},
+		},
+		{
+			name: "no error if empty json config",
+			key:  "A2ACLI_AGENT_CARD",
+			opts: LoadOpts{ConfigPath: emptyJSON},
+		},
+		{
+			name: "no error if empty yaml config",
+			key:  "A2ACLI_AGENT_CARD",
+			opts: LoadOpts{ConfigPath: emptyYAML},
+		},
+		{
+			name:            "error if invalid json config",
+			key:             "A2ACLI_AGENT_CARD",
+			opts:            LoadOpts{ConfigPath: invalidJSON},
+			wantErrContains: "parsing JSON config",
+		},
+		{
+			name:            "error if invalid yaml config",
+			key:             "A2ACLI_AGENT_CARD",
+			opts:            LoadOpts{ConfigPath: invalidYAML},
+			wantErrContains: "parsing YAML config",
 		},
 		{
 			name: "no error if no local file",
@@ -209,6 +247,150 @@ func TestLoadWalksUpForLocalEnv(t *testing.T) {
 	}
 }
 
+func TestLoadStoreJSONAndYAML(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		filename  string
+		content   string
+		key       string
+		wantValue string
+		wantKind  SourceKind
+	}{
+		{
+			name:      "load from json file",
+			filename:  "config.json",
+			content:   `{"agent-card": "https://json.example.com", "timeout": "10s"}`,
+			key:       "agent-card",
+			wantValue: "https://json.example.com",
+			wantKind:  SourceLocalFile,
+		},
+		{
+			name:      "load from yaml file",
+			filename:  "config.yaml",
+			content:   "agent-card: https://yaml.example.com\ntimeout: 15s\n",
+			key:       "agent-card",
+			wantValue: "https://yaml.example.com",
+			wantKind:  SourceLocalFile,
+		},
+		{
+			name:      "load from json specifying only agent-card",
+			filename:  "only-agent-card.json",
+			content:   `{"agent-card": "https://json-only.example.com"}`,
+			key:       "agent-card",
+			wantValue: "https://json-only.example.com",
+			wantKind:  SourceLocalFile,
+		},
+		{
+			name:      "load from yaml specifying only agent-card",
+			filename:  "only-agent-card.yaml",
+			content:   "agent-card: https://yaml-only.example.com\n",
+			key:       "agent-card",
+			wantValue: "https://yaml-only.example.com",
+			wantKind:  SourceLocalFile,
+		},
+		{
+			name:      "load from yml file",
+			filename:  "config.yml",
+			content:   "agent-card: https://yml.example.com\n",
+			key:       "agent-card",
+			wantValue: "https://yml.example.com",
+			wantKind:  SourceLocalFile,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			configPath := filepath.Join(dir, tc.filename)
+			if err := os.WriteFile(configPath, []byte(tc.content), 0o600); err != nil {
+				t.Fatalf("os.WriteFile(%q) error = %v", configPath, err)
+			}
+
+			store, err := Load(LoadOpts{
+				ConfigPath: configPath,
+				WorkingDir: dir,
+				LookupEnv:  makeEnv(nil),
+			})
+			if err != nil {
+				t.Fatalf("Load() error = %v, want nil", err)
+			}
+
+			value, source, ok := store.Lookup(tc.key)
+			if !ok {
+				t.Fatalf("store.Lookup(%q) = false, want true", tc.key)
+			}
+			if value != tc.wantValue {
+				t.Fatalf("store.Lookup(%q) = %v, want %v", tc.key, value, tc.wantValue)
+			}
+			if source.Kind != tc.wantKind {
+				t.Fatalf("store.Lookup(%q) = %v, want %v", tc.key, source.Kind, tc.wantKind)
+			}
+		})
+	}
+}
+
+func TestLoadStoreSpecifyingOnlyAgentCard(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		filename string
+		content  string
+	}{
+		{
+			name:     "json specifying only agent-card",
+			filename: "config.json",
+			content:  `{"agent-card": "https://json-only.example.com"}`,
+		},
+		{
+			name:     "yaml specifying only agent-card",
+			filename: "config.yaml",
+			content:  "agent-card: https://yaml-only.example.com\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			configPath := filepath.Join(dir, tc.filename)
+			if err := os.WriteFile(configPath, []byte(tc.content), 0o600); err != nil {
+				t.Fatalf("os.WriteFile(%q) error = %v", configPath, err)
+			}
+
+			store, err := Load(LoadOpts{
+				ConfigPath: configPath,
+				WorkingDir: dir,
+				LookupEnv:  makeEnv(nil),
+			})
+			if err != nil {
+				t.Fatalf("Load() error = %v, want nil", err)
+			}
+
+			if _, _, ok := store.Lookup("agent-card"); !ok {
+				t.Fatalf("store.Lookup(%q) = false, want true", "agent-card")
+			}
+			if _, _, ok := store.Lookup("A2ACLI_AGENT_CARD"); !ok {
+				t.Fatalf("store.Lookup(%q) = false, want true", "A2ACLI_AGENT_CARD")
+			}
+			if val, _, ok := store.Lookup("timeout"); ok {
+				t.Fatalf("store.Lookup(%q) = %v, want not ok", "timeout", val)
+			}
+			if val, _, ok := store.Lookup("A2ACLI_TIMEOUT"); ok {
+				t.Fatalf("store.Lookup(%q) = %v, want not ok", "A2ACLI_TIMEOUT", val)
+			}
+			if val, _, ok := store.Lookup("transport"); ok {
+				t.Fatalf("store.Lookup(%q) = %v, want not ok", "transport", val)
+			}
+		})
+	}
+}
+
 func writeDotenv(t *testing.T, path string, content map[string]string) {
 	t.Helper()
 	var lines [][]byte
@@ -227,3 +409,4 @@ func makeEnv(env map[string]string) func(string) (string, bool) {
 		return v, ok
 	}
 }
+
