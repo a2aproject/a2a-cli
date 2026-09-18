@@ -588,4 +588,3 @@ tenant: yaml-tenant
 		}
 	})
 }
-

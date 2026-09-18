@@ -126,7 +126,7 @@ func TestCardGet(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
 			cfgPath := filepath.Join(dir, "a2a.json")
-			if err := os.WriteFile(cfgPath, []byte(fmt.Sprintf(`{"agent-card": %q}`, mode.url)), 0o600); err != nil {
+			if err := os.WriteFile(cfgPath, fmt.Appendf(nil, `{"agent-card": %q}`, mode.url), 0o600); err != nil {
 				t.Fatalf("os.WriteFile(%q) error = %v", cfgPath, err)
 			}
 			out, err := runCMDWithConfig(t, deps{poller: polling.Stream, cfgLoader: clicfg.Load}, "--config", cfgPath, "card", "get", "-o", "json")
@@ -1348,4 +1348,3 @@ another_flag: 123
 		})
 	}
 }
-
