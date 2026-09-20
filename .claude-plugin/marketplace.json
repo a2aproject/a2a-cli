@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "a2a",
+  "owner": {
+    "name": "A2A Project",
+    "url": "https://a2a-protocol.org"
+  },
+  "description": "Plugins for working with A2A (Agent2Agent) agents.",
+  "plugins": [
+    {
+      "name": "a2a-cli",
+      "source": "./agent-plugin",
+      "description": "Discover and delegate to A2A agents from Claude Code with the a2a CLI. Bundles the a2a-cli skill and progressive-discovery hooks.",
+      "category": "agents",
+      "keywords": ["a2a", "agent2agent", "cli", "discovery", "interoperability"]
+    }
+  ]
+}

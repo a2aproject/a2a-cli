@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "a2a-cli",
+  "displayName": "A2A CLI",
+  "version": "0.3.0",
+  "description": "Discover and delegate to A2A (Agent2Agent) agents from Claude Code: a skill that teaches the a2a CLI, plus hooks that auto-discover an agent card on any domain in context and surface its skills.",
+  "author": {
+    "name": "A2A Project",
+    "url": "https://a2a-protocol.org"
+  },
+  "homepage": "https://github.com/a2aproject/a2a-cli",
+  "repository": "https://github.com/a2aproject/a2a-cli",
+  "license": "Apache-2.0",
+  "keywords": ["a2a", "agent2agent", "cli", "agents", "interoperability", "agent-card", "discovery"]
+}

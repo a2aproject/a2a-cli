@@ -166,6 +166,7 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 		newServeCmd(cfg),
 		newTransportCmd(cfg),
 		newVersionCmd(cfg),
+		newDiscoverCmd(cfg),
 	)
 
 	cmd.SetUsageTemplate(rootUsageTemplate)

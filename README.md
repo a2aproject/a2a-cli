@@ -98,13 +98,22 @@ The skill drives the `a2a` binary, so [install the CLI](#installation) first. Th
 
 ### Agent Plugin
 
-Prefer a plugin-aware client? The **[Agent Plugin](./agent-plugin/)** bundles the same skill as one installable unit ([Agent Plugins](https://agent-plugins.org/) 1.0.0, skills-only). Install it with [`skills`](https://www.skills.sh):
+Prefer a plugin-aware client? The **[Agent Plugin](./agent-plugin/)** bundles the skill and the progressive-discovery hooks as one installable unit — it is both a portable [Agent Plugin](https://agent-plugins.org/) (1.0.0) and a Claude Code plugin.
+
+In **Claude Code**, install it from the bundled marketplace:
+
+```text
+/plugin marketplace add a2aproject/a2a-cli
+/plugin install a2a-cli@a2a
+```
+
+Or install the **skill only** with [`skills`](https://www.skills.sh):
 
 ```bash
 npx skills add https://github.com/a2aproject/a2a-cli/tree/main/agent-plugin/skills/a2a-cli -g
 ```
 
-Like the skill, it drives the `a2a` binary — [install the CLI](#installation) first.
+Either way it drives the `a2a` binary — [install the CLI](#installation) first. The hooks add **progressive discovery**: when a URL enters context, `a2a discover` probes it for an agent card and surfaces the agent's skills — see the [walkthrough](./examples/05-progressive-discovery/).
 
 ## About the Project
 

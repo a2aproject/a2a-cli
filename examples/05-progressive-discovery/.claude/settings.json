@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "a2a discover --allow nimbus.coffee"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "WebFetch|Fetch|Read|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "a2a discover --allow nimbus.coffee"
+          }
+        ]
+      }
+    ]
+  }
+}
