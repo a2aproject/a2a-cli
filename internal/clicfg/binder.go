@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/spf13/pflag"
 )
 
@@ -75,7 +76,15 @@ func Bind(flags *pflag.FlagSet, store *Store) ([]FlagBinding, error) {
 		}
 
 		if err := setFlagValue(f, value); err != nil {
-			errs = append(errs, err)
+			var msg string
+			if source.Path != "" {
+				msg = fmt.Sprintf("invalid value for --%s from config file %s: %v", f.Name, source.Path, err)
+			} else if source.Kind == SourceEnv {
+				msg = fmt.Sprintf("invalid value for --%s from environment variable %s: %v", f.Name, binding.EnvVar, err)
+			} else {
+				msg = fmt.Sprintf("invalid value for --%s from %s: %v", f.Name, source.String(), err)
+			}
+			errs = append(errs, clierr.Usage(msg))
 			return
 		}
 
@@ -86,7 +95,13 @@ func Bind(flags *pflag.FlagSet, store *Store) ([]FlagBinding, error) {
 		bindings = append(bindings, binding)
 	})
 
-	return bindings, errors.Join(errs...)
+	if len(errs) == 1 {
+		return bindings, errs[0]
+	}
+	if len(errs) > 1 {
+		return bindings, clierr.Usage(errors.Join(errs...).Error())
+	}
+	return bindings, nil
 }
 
 func flagValueString(f *pflag.Flag) string {

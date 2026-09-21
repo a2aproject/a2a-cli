@@ -15,11 +15,13 @@
 package clicfg
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/spf13/pflag"
 )
@@ -587,4 +589,145 @@ tenant: yaml-tenant
 			t.Fatalf("resolution sources wrong result (-want +got) diff = %s", diff)
 		}
 	})
+}
+
+func TestBindErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		setupFlags   func() *pflag.FlagSet
+		setupStore   func(t *testing.T) *Store
+		wantContains []string
+	}{
+		{
+			name: "invalid value from yaml config file",
+			setupFlags: func() *pflag.FlagSet {
+				fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+				fs.Duration("timeout", 0, "")
+				return fs
+			},
+			setupStore: func(t *testing.T) *Store {
+				t.Helper()
+				dir := t.TempDir()
+				cfgPath := filepath.Join(dir, "a2a.yaml")
+				if err := os.WriteFile(cfgPath, []byte("timeout: not-a-duration\n"), 0o600); err != nil {
+					t.Fatalf("os.WriteFile(%q) error = %v", cfgPath, err)
+				}
+				s, err := Load(LoadOpts{ConfigPath: cfgPath, WorkingDir: dir})
+				if err != nil {
+					t.Fatalf("Load() error = %v, want nil", err)
+				}
+				return s
+			},
+			wantContains: []string{"--timeout", "a2a.yaml", "invalid value"},
+		},
+		{
+			name: "invalid value from json config file",
+			setupFlags: func() *pflag.FlagSet {
+				fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+				fs.Duration("timeout", 0, "")
+				return fs
+			},
+			setupStore: func(t *testing.T) *Store {
+				t.Helper()
+				dir := t.TempDir()
+				cfgPath := filepath.Join(dir, "a2a.json")
+				if err := os.WriteFile(cfgPath, []byte(`{"timeout": "not-a-duration"}`), 0o600); err != nil {
+					t.Fatalf("os.WriteFile(%q) error = %v", cfgPath, err)
+				}
+				s, err := Load(LoadOpts{ConfigPath: cfgPath, WorkingDir: dir})
+				if err != nil {
+					t.Fatalf("Load() error = %v, want nil", err)
+				}
+				return s
+			},
+			wantContains: []string{"--timeout", "a2a.json", "invalid value"},
+		},
+		{
+			name: "invalid value from environment variable",
+			setupFlags: func() *pflag.FlagSet {
+				fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+				fs.Duration("timeout", 0, "")
+				return fs
+			},
+			setupStore: func(t *testing.T) *Store {
+				t.Helper()
+				dir := t.TempDir()
+				s, err := Load(LoadOpts{
+					WorkingDir: dir,
+					GlobalPath: filepath.Join(dir, "none.env"),
+					LookupEnv: func(k string) (string, bool) {
+						if k == "A2ACLI_TIMEOUT" {
+							return "not-a-duration", true
+						}
+						return "", false
+					},
+				})
+				if err != nil {
+					t.Fatalf("Load() error = %v, want nil", err)
+				}
+				return s
+			},
+			wantContains: []string{"--timeout", "A2ACLI_TIMEOUT", "invalid value"},
+		},
+		{
+			name: "multiple invalid flag values aggregated",
+			setupFlags: func() *pflag.FlagSet {
+				fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+				fs.Duration("timeout", 0, "")
+				fs.Bool("insecure", false, "")
+				return fs
+			},
+			setupStore: func(t *testing.T) *Store {
+				t.Helper()
+				dir := t.TempDir()
+				s, err := Load(LoadOpts{
+					WorkingDir: dir,
+					GlobalPath: filepath.Join(dir, "none.env"),
+					LookupEnv: func(k string) (string, bool) {
+						switch k {
+						case "A2ACLI_TIMEOUT":
+							return "not-a-duration", true
+						case "A2ACLI_INSECURE":
+							return "not-a-bool", true
+						default:
+							return "", false
+						}
+					},
+				})
+				if err != nil {
+					t.Fatalf("Load() error = %v, want nil", err)
+				}
+				return s
+			},
+			wantContains: []string{"--timeout", "--insecure"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			fs := tt.setupFlags()
+			s := tt.setupStore(t)
+
+			_, err := Bind(fs, s)
+			if err == nil {
+				t.Fatalf("Bind() error = %v, want non-nil", err)
+			}
+
+			var clierrTarget *clierr.Error
+			if !errors.As(err, &clierrTarget) {
+				t.Fatalf("Bind() error is not *clierr.Error: %v", err)
+			}
+			if clierrTarget.Code != clierr.CodeUsage {
+				t.Fatalf("clierr.Code = %v, want %v", clierrTarget.Code, clierr.CodeUsage)
+			}
+			for _, want := range tt.wantContains {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("Bind() error = %q, want mention of %q", err.Error(), want)
+				}
+			}
+		})
+	}
 }

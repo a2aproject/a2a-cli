@@ -102,45 +102,43 @@ func TestCardGet(t *testing.T) {
 			}
 		})
 
-		t.Run("accepts agent-card from yaml config specifying only agent-card"+mode.suffix, func(t *testing.T) {
-			t.Parallel()
-			dir := t.TempDir()
-			cfgPath := filepath.Join(dir, "a2a.yaml")
-			if err := os.WriteFile(cfgPath, []byte("agent-card: "+mode.url+"\n"), 0o600); err != nil {
-				t.Fatalf("os.WriteFile(%q) error = %v", cfgPath, err)
-			}
-			out, err := runCMDWithConfig(t, deps{poller: polling.Stream, cfgLoader: clicfg.Load}, "--config", cfgPath, "card", "get", "-o", "json")
-			if err != nil {
-				t.Fatalf("runCMDWithConfig() error = %v, want nil", err)
-			}
-			var card a2a.AgentCard
-			if err := json.Unmarshal([]byte(out), &card); err != nil {
-				t.Fatalf("json.Unmarshal(card get output) error = %v", err)
-			}
-			if card.Name != "Test Echo" {
-				t.Fatalf("a2a card get card.Name = %q, want %q", card.Name, "Test Echo")
-			}
-		})
-
-		t.Run("accepts agent-card from json config specifying only agent-card"+mode.suffix, func(t *testing.T) {
-			t.Parallel()
-			dir := t.TempDir()
-			cfgPath := filepath.Join(dir, "a2a.json")
-			if err := os.WriteFile(cfgPath, fmt.Appendf(nil, `{"agent-card": %q}`, mode.url), 0o600); err != nil {
-				t.Fatalf("os.WriteFile(%q) error = %v", cfgPath, err)
-			}
-			out, err := runCMDWithConfig(t, deps{poller: polling.Stream, cfgLoader: clicfg.Load}, "--config", cfgPath, "card", "get", "-o", "json")
-			if err != nil {
-				t.Fatalf("runCMDWithConfig() error = %v, want nil", err)
-			}
-			var card a2a.AgentCard
-			if err := json.Unmarshal([]byte(out), &card); err != nil {
-				t.Fatalf("json.Unmarshal(card get output) error = %v", err)
-			}
-			if card.Name != "Test Echo" {
-				t.Fatalf("a2a card get card.Name = %q, want %q", card.Name, "Test Echo")
-			}
-		})
+		cfgTests := []struct {
+			format  string
+			file    string
+			content []byte
+		}{
+			{
+				format:  "yaml",
+				file:    "a2a.yaml",
+				content: []byte("agent-card: " + mode.url + "\n"),
+			},
+			{
+				format:  "json",
+				file:    "a2a.json",
+				content: fmt.Appendf(nil, `{"agent-card": %q}`, mode.url),
+			},
+		}
+		for _, tc := range cfgTests {
+			t.Run(fmt.Sprintf("accepts agent-card from %s config specifying only agent-card%s", tc.format, mode.suffix), func(t *testing.T) {
+				t.Parallel()
+				dir := t.TempDir()
+				cfgPath := filepath.Join(dir, tc.file)
+				if err := os.WriteFile(cfgPath, tc.content, 0o600); err != nil {
+					t.Fatalf("os.WriteFile(%q) error = %v", cfgPath, err)
+				}
+				out, err := runCMDWithConfig(t, deps{poller: polling.Stream, cfgLoader: clicfg.Load}, "--config", cfgPath, "card", "get", "-o", "json")
+				if err != nil {
+					t.Fatalf("runCMDWithConfig() error = %v, want nil", err)
+				}
+				var card a2a.AgentCard
+				if err := json.Unmarshal([]byte(out), &card); err != nil {
+					t.Fatalf("json.Unmarshal(card get output) error = %v", err)
+				}
+				if card.Name != "Test Echo" {
+					t.Fatalf("a2a card get card.Name = %q, want %q", card.Name, "Test Echo")
+				}
+			})
+		}
 	}
 
 	t.Run("missing agent fails", func(t *testing.T) {

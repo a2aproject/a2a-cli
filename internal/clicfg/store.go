@@ -53,15 +53,14 @@ type Store struct {
 
 // Lookup returns the string value for key and its source.
 func (s *Store) Lookup(key string) (string, Source, bool) {
-	val, src, ok := s.LookupValue(key)
+	val, src, ok := s.lookupValue(key)
 	if !ok {
 		return "", Source{}, false
 	}
 	return formatValue(val), src, true
 }
 
-// LookupValue returns the raw value for key and its source.
-func (s *Store) LookupValue(key string) (any, Source, bool) {
+func (s *Store) lookupValue(key string) (any, Source, bool) {
 	if flagName, ok := envVarToFlag(key); ok {
 		return s.LookupFlag(flagName, key)
 	}
