@@ -14,6 +14,11 @@
 
 package clicfg
 
+import (
+	"fmt"
+	"strings"
+)
+
 // SourceKind identifies which source a resolved value came from.
 type SourceKind string
 
@@ -46,25 +51,87 @@ type Store struct {
 	global    *loadedFile
 }
 
-// Lookup returns the value for key and its source.
+// Lookup returns the string value for key and its source.
 func (s *Store) Lookup(key string) (string, Source, bool) {
-	if v, ok := s.lookupEnv(key); ok {
-		return v, Source{Kind: SourceEnv}, true
+	val, src, ok := s.lookupValue(key)
+	if !ok {
+		return "", Source{}, false
+	}
+	return formatValue(val), src, true
+}
+
+func (s *Store) lookupValue(key string) (any, Source, bool) {
+	if flagName, ok := envVarToFlag(key); ok {
+		return s.LookupFlag(flagName, key)
+	}
+	return s.LookupFlag(key, flagToEnvVar(key))
+}
+
+// LookupFlag returns the configuration value for a flag, checking environment variables
+// by envVar and config files by flag name or envVar.
+func (s *Store) LookupFlag(name, envVar string) (any, Source, bool) {
+	if envVar != "" {
+		if v, ok := s.lookupEnv(envVar); ok {
+			return v, Source{Kind: SourceEnv}, true
+		}
 	}
 	if s.local != nil {
-		if v, ok := s.local.values[key]; ok {
+		if v, ok := s.local.lookup(name, envVar); ok {
 			return v, Source{Kind: SourceLocalFile, Path: s.local.path}, true
 		}
 	}
 	if s.global != nil {
-		if v, ok := s.global.values[key]; ok {
+		if v, ok := s.global.lookup(name, envVar); ok {
 			return v, Source{Kind: SourceGlobalFile, Path: s.global.path}, true
 		}
 	}
-	return "", Source{}, false
+	return nil, Source{}, false
 }
 
 type loadedFile struct {
 	path   string
-	values map[string]string
+	values map[string]any
+}
+
+func (f *loadedFile) lookup(name, envVar string) (any, bool) {
+	if f == nil || f.values == nil {
+		return nil, false
+	}
+	if v, ok := f.values[name]; ok {
+		return v, true
+	}
+	if envVar != "" {
+		if v, ok := f.values[envVar]; ok {
+			return v, true
+		}
+	}
+	return nil, false
+}
+
+func toStringSlice(raw any) ([]string, bool) {
+	switch v := raw.(type) {
+	case []string:
+		return v, true
+	case []any:
+		parts := make([]string, len(v))
+		for i, item := range v {
+			parts[i] = fmt.Sprint(item)
+		}
+		return parts, true
+	default:
+		return nil, false
+	}
+}
+
+func formatValue(val any) string {
+	if val == nil {
+		return ""
+	}
+	if s, ok := val.(string); ok {
+		return s
+	}
+	if slice, ok := toStringSlice(val); ok {
+		return strings.Join(slice, ",")
+	}
+	return fmt.Sprint(val)
 }

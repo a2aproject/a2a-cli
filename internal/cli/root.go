@@ -159,7 +159,7 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 	pf.DurationVar(&cfg.timeout, "timeout", 30*time.Second, "Request timeout")
 	pf.BoolVarP(&cfg.verbose, "verbose", "v", false, "Verbose output to stderr")
 	pf.BoolVar(&cfg.insecureGRPC, "insecure", false, "Use insecure (plaintext) gRPC transport credentials")
-	pf.StringVar(&cfg.configPath, "config", "", "Load configuration from an explicit .env file in place of the local .env")
+	pf.StringVar(&cfg.configPath, "config", "", "Load configuration from an explicit file (.yaml, .json, or .env) in place of the local .env")
 
 	cmd.AddCommand(
 		newCardCmd(cfg),

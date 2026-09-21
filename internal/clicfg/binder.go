@@ -16,8 +16,11 @@ package clicfg
 
 import (
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/spf13/pflag"
 )
 
@@ -64,7 +67,7 @@ func Bind(flags *pflag.FlagSet, store *Store) ([]FlagBinding, error) {
 			return
 		}
 
-		value, source, ok := store.Lookup(binding.EnvVar)
+		value, source, ok := store.LookupFlag(binding.Name, binding.EnvVar)
 		if !ok {
 			binding.Source = "default"
 			binding.Value = flagValueString(f)
@@ -73,18 +76,32 @@ func Bind(flags *pflag.FlagSet, store *Store) ([]FlagBinding, error) {
 		}
 
 		if err := setFlagValue(f, value); err != nil {
-			errs = append(errs, err)
+			var msg string
+			if source.Path != "" {
+				msg = fmt.Sprintf("invalid value for --%s from config file %s: %v", f.Name, source.Path, err)
+			} else if source.Kind == SourceEnv {
+				msg = fmt.Sprintf("invalid value for --%s from environment variable %s: %v", f.Name, binding.EnvVar, err)
+			} else {
+				msg = fmt.Sprintf("invalid value for --%s from %s: %v", f.Name, source.String(), err)
+			}
+			errs = append(errs, clierr.Usage(msg))
 			return
 		}
 
 		f.Changed = true
 		binding.Source = source.String()
 		binding.Path = source.Path
-		binding.Value = value
+		binding.Value = formatValue(value)
 		bindings = append(bindings, binding)
 	})
 
-	return bindings, errors.Join(errs...)
+	if len(errs) == 1 {
+		return bindings, errs[0]
+	}
+	if len(errs) > 1 {
+		return bindings, clierr.Usage(errors.Join(errs...).Error())
+	}
+	return bindings, nil
 }
 
 func flagValueString(f *pflag.Flag) string {
@@ -94,17 +111,44 @@ func flagValueString(f *pflag.Flag) string {
 	return f.Value.String()
 }
 
-func setFlagValue(f *pflag.Flag, value string) error {
-	if sv, ok := f.Value.(pflag.SliceValue); ok {
-		parts := strings.Split(value, ",")
-		for i := range parts {
-			parts[i] = strings.TrimSpace(parts[i])
+func setFlagValue(f *pflag.Flag, raw any) error {
+	if slice, ok := toStringSlice(raw); ok {
+		if sv, ok := f.Value.(pflag.SliceValue); ok {
+			return sv.Replace(slice)
 		}
-		return sv.Replace(parts)
+		for _, item := range slice {
+			if err := f.Value.Set(item); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
-	return f.Value.Set(value)
+
+	switch v := raw.(type) {
+	case string:
+		if sv, ok := f.Value.(pflag.SliceValue); ok {
+			parts := strings.Split(v, ",")
+			for i := range parts {
+				parts[i] = strings.TrimSpace(parts[i])
+			}
+			return sv.Replace(parts)
+		}
+		return f.Value.Set(v)
+	case bool:
+		return f.Value.Set(strconv.FormatBool(v))
+	default:
+		return f.Value.Set(fmt.Sprint(v))
+	}
 }
 
 func flagToEnvVar(name string) string {
 	return envPrefix + strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
+}
+
+func envVarToFlag(envVar string) (string, bool) {
+	if !strings.HasPrefix(envVar, envPrefix) {
+		return "", false
+	}
+	trimmed := strings.TrimPrefix(envVar, envPrefix)
+	return strings.ToLower(strings.ReplaceAll(trimmed, "_", "-")), true
 }
