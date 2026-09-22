@@ -23,6 +23,11 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
 )
 
+// EnvironResolver allows to override transport plugin process environment.
+type EnvironResolver interface {
+	Environ() []string
+}
+
 // IsBuiltin returns true if protocol is supported by the SDK natively.
 func IsBuiltin(protocol a2a.TransportProtocol) bool {
 	switch protocol {
@@ -35,24 +40,24 @@ func IsBuiltin(protocol a2a.TransportProtocol) bool {
 
 // Load loads a transport plugin as client factory option or returns
 // an error if plugin is unavailable.
-func Load(protocol a2a.TransportProtocol) (a2aclient.FactoryOption, error) {
+func Load(protocol a2a.TransportProtocol, env EnvironResolver) (a2aclient.FactoryOption, error) {
 	binary, err := findPlugin(string(protocol))
 	if err != nil {
 		return nil, err
 	}
-	return a2aclient.WithTransport(protocol, newPluginTransportFactory(binary, nil)), nil
+	return a2aclient.WithTransport(protocol, newPluginTransportFactory(binary, env.Environ, nil)), nil
 }
 
 // LoadForCard loads transport plugin for every custom transport listed in the card if
-// a corresponding plugin can be found.
-func LoadForCard(card *a2a.AgentCard) ([]a2aclient.FactoryOption, error) {
+// a corresponding plugin can be found. env is forwarded to each plugin subprocess.
+func LoadForCard(card *a2a.AgentCard, env EnvironResolver) ([]a2aclient.FactoryOption, error) {
 	seen := map[a2a.TransportProtocol]bool{}
 	for _, iface := range card.SupportedInterfaces {
 		seen[iface.ProtocolBinding] = true
 	}
 	var opts []a2aclient.FactoryOption
 	for p := range seen {
-		opt, err := Load(p)
+		opt, err := Load(p, env)
 		if err != nil {
 			continue
 		}

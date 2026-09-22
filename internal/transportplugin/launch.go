@@ -35,9 +35,10 @@ type execLauncher struct{}
 
 var _ launcher = execLauncher{}
 
-func (execLauncher) launch(ctx context.Context, binary, endpoint string) (*session, error) {
+func (execLauncher) launch(ctx context.Context, binary, endpoint string, env []string) (*session, error) {
 	cmd := exec.Command(binary, clitransport.SubcommandServe, "--endpoint", endpoint)
 	cmd.Stderr = os.Stderr
+	cmd.Env = env
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

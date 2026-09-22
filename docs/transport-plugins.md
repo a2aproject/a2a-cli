@@ -215,3 +215,22 @@ the handshake, and builds a built-in transport pointed at the loopback address �
 pinning the handshake's `certPem` as the sole trusted root when the plugin serves
 TLS — with the token injected on every call. When the CLI is done, closing the
 client tears the subprocess down.
+
+## Plugin environment
+
+The plugin subprocess inherits the CLI's **resolved** environment: the host
+process environment plus every value the CLI loaded from configuration files (a
+local `.env`, the file named by `--config`, and the global
+`~/.config/a2a-cli/.env`). This lets a plugin read its own upstream settings —
+for example `SLIM_TOKEN` or `MY_UPSTREAM_URL` — straight from the same `.env`
+files that configure the CLI, without exporting them into your shell first.
+
+Precedence matches the CLI's own configuration resolution: a real environment
+variable wins over a value with the same name in a local file, which in turn
+wins over the global file. A key set in the real environment is passed through
+unchanged. This applies to the launched `serve` proxy; the `info` discovery
+query used by `a2a transport list` inherits only the host process environment.
+
+> **Trust:** the CLI does not filter the environment it passes to a plugin.
+> Config files can carry secrets, so treat a plugin as you would any process you
+> hand your credentials to — only install plugins you trust.

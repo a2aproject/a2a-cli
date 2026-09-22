@@ -45,15 +45,19 @@ func (s *session) close() error {
 }
 
 type launcher interface {
-	launch(ctx context.Context, binary, endpoint string) (*session, error)
+	launch(ctx context.Context, binary, endpoint string, env []string) (*session, error)
 }
 
-func newPluginTransportFactory(binary string, launcher launcher) a2aclient.TransportFactory {
+func newPluginTransportFactory(binary string, env func() []string, launcher launcher) a2aclient.TransportFactory {
 	if launcher == nil {
 		launcher = execLauncher{}
 	}
 	return a2aclient.TransportFactoryFn(func(ctx context.Context, _ *a2a.AgentCard, iface *a2a.AgentInterface) (a2aclient.Transport, error) {
-		session, err := launcher.launch(ctx, binary, iface.URL)
+		var procEnv []string
+		if env != nil {
+			procEnv = env()
+		}
+		session, err := launcher.launch(ctx, binary, iface.URL, procEnv)
 		if err != nil {
 			return nil, fmt.Errorf("launching transport plugin %q: %w", binary, err)
 		}
