@@ -25,6 +25,8 @@ import (
 
 // EnvironResolver allows to override transport plugin process environment.
 type EnvironResolver interface {
+	// Environ returns the environment for the transport plugin process,
+	// in the same "key=value" form as os.Environ.
 	Environ() []string
 }
 
