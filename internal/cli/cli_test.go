@@ -40,6 +40,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-cli/internal/polling"
 	"github.com/a2aproject/a2a-cli/internal/testutil"
+	"github.com/a2aproject/a2a-cli/skills"
 	a2acorev0 "github.com/a2aproject/a2a-go/a2a"
 	a2asrvv0 "github.com/a2aproject/a2a-go/a2asrv"
 	"github.com/a2aproject/a2a-go/a2asrv/eventqueue"
@@ -198,6 +199,26 @@ func TestVersion(t *testing.T) {
 		}
 		if info.GoVersion == "" {
 			t.Fatalf("a2a version info.GoVersion = %q, want non-empty", info.GoVersion)
+		}
+	})
+}
+
+func TestSkill(t *testing.T) {
+	t.Parallel()
+
+	t.Run("prints the embedded skill", func(t *testing.T) {
+		t.Parallel()
+		out := mustRunCMD(t, "skill")
+		want := strings.TrimRight(skills.A2ACLI, "\n")
+		if diff := cmp.Diff(want, strings.TrimRight(out, "\n")); diff != "" {
+			t.Fatalf("a2a skill output wrong result (-want +got) diff = %s", diff)
+		}
+	})
+
+	t.Run("rejects arguments", func(t *testing.T) {
+		t.Parallel()
+		if _, err := runCMD(t, "skill", "extra"); err == nil {
+			t.Fatal("a2a skill (with args) error = nil, want a usage error")
 		}
 	})
 }

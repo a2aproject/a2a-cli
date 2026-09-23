@@ -123,6 +123,9 @@ func TestUsage(t *testing.T) {
 	if got.Exit != 2 {
 		t.Errorf("Usage().Exit = %d, want 2", got.Exit)
 	}
+	if got.Hint != UsageHint {
+		t.Errorf("Usage().Hint = %q, want %q", got.Hint, UsageHint)
+	}
 }
 
 func TestCardResolution(t *testing.T) {

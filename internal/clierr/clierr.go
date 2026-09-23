@@ -72,9 +72,13 @@ func (e *Error) Error() string { return e.Message }
 // Unwrap returns the wrapped cause so errors.Is and errors.As can inspect it.
 func (e *Error) Unwrap() error { return e.err }
 
+// UsageHint is remediation advice attached to every usage error. It is aimed at
+// agents, whose bundled skill may lag the installed binary's commands and flags.
+const UsageHint = "if you are an agent, your a2a skill may be out of date — run `a2a skill` for the current commands and update your local copy"
+
 // Usage builds a usage error for invalid arguments, flags, or flag combinations.
 func Usage(msg string) *Error {
-	return &Error{Code: CodeUsage, Message: msg, Exit: 2}
+	return &Error{Code: CodeUsage, Message: msg, Hint: UsageHint, Exit: 2}
 }
 
 // CardResolution builds an error for a failure to resolve an --agent-card.

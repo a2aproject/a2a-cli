@@ -186,6 +186,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 		newServeCmd(cfg),
 		newTransportCmd(cfg),
 		newPluginCmd(cfg),
+		newSkillCmd(cfg),
 		newVersionCmd(cfg),
 	)
 
