@@ -32,6 +32,8 @@ type LoadOpts struct {
 	ConfigPath string
 	// WorkingDir is where the walk-up search for a local .env begins. Defaults to cwd.
 	WorkingDir string
+	// UserPath is the user-level YAML config location. Defaults to ~/.config/a2a-cli/config.yaml.
+	UserPath string
 	// GlobalPath is the global .env location. Defaults to ~/.config/a2a-cli/.env.
 	GlobalPath string
 	// LookupEnv reads an environment variable. Defaults to os.LookupEnv.
@@ -57,6 +59,12 @@ func Load(opts LoadOpts) (*Store, error) {
 	}
 	store.local = local
 
+	user, err := loadUser(opts)
+	if err != nil {
+		return nil, err
+	}
+	store.user = user
+
 	global, err := loadGlobal(opts)
 	if err != nil {
 		return nil, err
@@ -66,7 +74,10 @@ func Load(opts LoadOpts) (*Store, error) {
 	return store, nil
 }
 
-const configFileName = ".env"
+const (
+	configFileName     = ".env"
+	userConfigFileName = "config.yaml"
+)
 
 func loadLocal(opts LoadOpts) (*loadedFile, error) {
 	if opts.ConfigPath != "" {
@@ -111,6 +122,33 @@ func loadGlobal(opts LoadOpts) (*loadedFile, error) {
 		return nil, err
 	}
 	return &loadedFile{path: path, values: toStringAnyMap(values)}, nil
+}
+
+func loadUser(opts LoadOpts) (*loadedFile, error) {
+	path := opts.UserPath
+	if path == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, nil
+		}
+		path = filepath.Join(home, ".config", "a2a-cli", userConfigFileName)
+	}
+
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	values, err := loadYAML(path)
+	if err != nil {
+		return nil, err
+	}
+	if values == nil {
+		return nil, nil
+	}
+	return &loadedFile{path: path, values: values}, nil
 }
 
 func loadConfigFile(path string) (map[string]any, error) {

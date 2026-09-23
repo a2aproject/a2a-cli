@@ -33,6 +33,8 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/polling"
 )
 
+const pluginsEnabledKey = "plugins-enabled"
+
 type cfgLoaderFunc func(clicfg.LoadOpts) (*clicfg.Store, error)
 
 type deps struct {
@@ -61,6 +63,8 @@ type globalConfig struct {
 	verbose      bool
 	insecureGRPC bool
 	configPath   string
+
+	pluginsEnabled bool
 
 	bindings []clicfg.FlagBinding
 	store    *clicfg.Store
@@ -97,7 +101,10 @@ func Execute() int {
 		Printer:   &output.Printer{Out: os.Stdout},
 		svcParams: &flagparse.ServiceParams{},
 	}
-	root := newRootCmd(cfg, deps{})
+	root, err := newRootCmd(cfg, deps{})
+	if err != nil {
+		return cfg.renderError(err)
+	}
 	if err := root.Execute(); err != nil {
 		return cfg.renderError(err)
 	}
@@ -119,7 +126,7 @@ func (g *globalConfig) renderError(err error) int {
 	return ce.Exit
 }
 
-func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
+func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	deps.setDefaults()
 
 	cmd := &cobra.Command{
@@ -182,12 +189,19 @@ func newRootCmd(cfg *globalConfig, deps deps) *cobra.Command {
 		newVersionCmd(cfg),
 	)
 
-	addCommandPlugins(cmd)
+	preStore, err := deps.cfgLoader(clicfg.LoadOpts{})
+	if err != nil {
+		return nil, err
+	}
+	if preStore.LookupBool(pluginsEnabledKey) {
+		cfg.pluginsEnabled = true
+		addCommandPlugins(cmd)
+	}
 
 	cmd.SetUsageTemplate(rootUsageTemplate)
 	markUsageErrors(cmd)
 
-	return cmd
+	return cmd, nil
 }
 
 // addCommandPlugins discovers command plugin binaries on PATH and registers

@@ -81,12 +81,14 @@ winget:
     publisher: a2aproject
     publisher_url: "https://github.com/a2aproject"
     publisher_support_url: "https://github.com/a2aproject/a2a-cli/issues"
+    author: "The A2A Authors"
     homepage: "https://github.com/a2aproject/a2a-cli"
     short_description: "The official command-line interface for A2A-compatible agents."
     description: "The official command-line interface for A2A (Agent-to-Agent) compatible agents."
     license: "Apache-2.0"
     license_url: "https://github.com/a2aproject/a2a-cli/blob/{{ .Tag }}/LICENSE"
     copyright: "The A2A Authors"
+    release_notes_url: "https://github.com/a2aproject/a2a-cli/releases/tag/{{ .Tag }}"
     ids:
       - a2a
     tags:

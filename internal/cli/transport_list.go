@@ -15,12 +15,11 @@
 package cli
 
 import (
-	"fmt"
 	"io"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
+	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-cli/internal/transportplugin"
 )
 
@@ -44,7 +43,7 @@ func newTransportListCmd(cfg *globalConfig) *cobra.Command {
 			if cfg.IsJSON() {
 				return cfg.PrintJSON(entries)
 			}
-			return printTransportTable(cfg.Out, entries)
+			return printTransportTable(cfg.Printer, entries)
 		},
 	}
 	return cmd
@@ -68,26 +67,20 @@ func collectTransportEntries(cmd *cobra.Command) []transportEntry {
 	return entries
 }
 
-func printTransportTable(out io.Writer, entries []transportEntry) error {
+func printTransportTable(p *output.Printer, entries []transportEntry) error {
 	if len(entries) == 0 {
-		_, err := io.WriteString(out, "No transport plugins found on PATH.\nInstall one by placing an \"a2a-transport-<name>\" binary on your PATH.\n")
+		_, err := io.WriteString(p.Out, "No transport plugins found on PATH.\nInstall one by placing an \"a2a-transport-<name>\" binary on your PATH.\n")
 		return err
 	}
-
-	tw := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
-	if _, err := io.WriteString(tw, "NAME\tVERSION\tPROTOCOL\tDESCRIPTION\tPATH\n"); err != nil {
-		return err
-	}
+	rows := make([][]string, 0, len(entries))
 	for _, e := range entries {
 		desc := e.Description
 		if e.Error != "" {
 			desc = "(error: " + e.Error + ")"
 		}
-		if _, err := fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", e.Name, dashIfEmpty(e.Version), dashIfEmpty(e.Protocol), dashIfEmpty(desc), e.Path); err != nil {
-			return err
-		}
+		rows = append(rows, []string{e.Name, dashIfEmpty(e.Version), dashIfEmpty(e.Protocol), dashIfEmpty(desc), e.Path})
 	}
-	return tw.Flush()
+	return p.PrintTable([]string{"NAME", "VERSION", "PROTOCOL", "DESCRIPTION", "PATH"}, rows)
 }
 
 func dashIfEmpty(s string) string {

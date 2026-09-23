@@ -84,6 +84,20 @@ func (p *Printer) PrintJSON(v any) error {
 	return p.jsonEncoder().Encode(v)
 }
 
+// PrintTable writes rows as a column-aligned text table under headers.
+func (p *Printer) PrintTable(headers []string, rows [][]string) error {
+	tw := tabwriter.NewWriter(p.Out, 0, 4, 2, ' ', 0)
+	if _, err := io.WriteString(tw, strings.Join(headers, "\t")+"\n"); err != nil {
+		return err
+	}
+	for _, row := range rows {
+		if _, err := io.WriteString(tw, strings.Join(row, "\t")+"\n"); err != nil {
+			return err
+		}
+	}
+	return tw.Flush()
+}
+
 // PrintCard writes an agent card in the configured Mode.
 func (p *Printer) PrintCard(card *a2a.AgentCard) error {
 	if p.IsJSON() {
