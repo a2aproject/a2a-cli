@@ -46,7 +46,7 @@ These apply to every client-mode command. Each command selects the agent it talk
 
 ## Configuration
 
-Every global default can be set from the environment, an explicit configuration file (`.yaml`, `.json`), or a `.env` file. This keeps repeated invocations short.
+Every global default can be set from the environment, an explicit configuration file (`.yaml`, `.json`), a `.env` file, or a persistent user-level `config.yaml`. This keeps repeated invocations short.
 
 ### YAML and JSON Configuration
 
@@ -99,6 +99,15 @@ A2ACLI_TIMEOUT=60s
 A2ACLI_AUTH="Bearer <token>"
 ```
 
+### User-level config file
+
+A persistent user-level config lives at `~/.config/a2a-cli/config.yaml`. It uses the same kebab-case flag names and native YAML types as a `--config` file, but applies to every invocation without being passed explicitly. It is also where CLI-managed settings are stored — for example `plugins-enabled`, written by `a2a plugin set-enabled` (see [Command Plugins](#command-plugins)).
+
+```yaml
+plugins-enabled: true
+tenant: my-team
+```
+
 ### Precedence
 
 When the same setting is defined in multiple places, the first match wins:
@@ -106,8 +115,9 @@ When the same setting is defined in multiple places, the first match wins:
 1. an explicit command-line flag,
 2. a session environment variable (`A2ACLI_*`),
 3. a local configuration file (the file named by `--config`, or the nearest `.env` found by walking up from the working directory),
-4. the global `.env` at `$XDG_CONFIG_HOME/a2a-cli/.env` (default `~/.config/a2a-cli/.env`),
-5. the built-in flag default.
+4. the user-level `config.yaml` (default `~/.config/a2a-cli/config.yaml`),
+5. the global `.env` at `$XDG_CONFIG_HOME/a2a-cli/.env` (default `~/.config/a2a-cli/.env`),
+6. the built-in flag default.
 
 `--stream`, `--help`, `--version`, and `--config` are never read from configuration files or the environment and must be passed explicitly.
 
@@ -358,6 +368,29 @@ All commands support machine-readable output, emitting raw protocol objects:
 Text mode is the default, meant for reading in a terminal. The output format controls
 only presentation (indentation); `--stream` independently controls whether the command
 follows the agent's live events or waits for the terminal result.
+
+## Command Plugins
+
+The CLI can be extended with new top-level commands by installing an
+`a2a-<name>` binary on your `PATH`. Discovery is **opt-in** and disabled by
+default — plugins are only scanned and registered when command plugins are
+enabled, so an untrusted binary on your `PATH` is never exec'd implicitly.
+
+```console
+# Enable discovery (writes plugins-enabled: true to ~/.config/a2a-cli/config.yaml)
+$ a2a plugin set-enabled true
+
+# List discovered plugins along with the current enabled/disabled state
+$ a2a plugin list
+
+# Disable again
+$ a2a plugin set-enabled false
+```
+
+The `plugins-enabled` flag resolves through the same configuration chain as every
+other setting, so it can also be set through the environment `A2ACLI_PLUGINS_ENABLED=true`. 
+See the **[command plugin guide](./docs/command-plugins.md)** for the plugin contract and
+authoring details.
 
 ## Custom Transport Plugins
 

@@ -16,6 +16,7 @@ package clicfg
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -27,6 +28,8 @@ const (
 	SourceEnv SourceKind = "env"
 	// SourceLocalFile is the local .env (or the file named by --config).
 	SourceLocalFile = "local-file"
+	// SourceUserFile is the user-level config.yaml under ~/.config/a2a-cli.
+	SourceUserFile = "user-file"
 	// SourceGlobalFile is the global .env under ~/.config/a2a-cli.
 	SourceGlobalFile = "global-file"
 )
@@ -44,10 +47,11 @@ func (s Source) String() string {
 	return string(s.Kind)
 }
 
-// Store holds the configuration resolved from the environment and .env files.
+// Store holds the configuration resolved from the environment and config files.
 type Store struct {
 	lookupEnv func(string) (string, bool)
 	local     *loadedFile
+	user      *loadedFile
 	global    *loadedFile
 }
 
@@ -58,6 +62,17 @@ func (s *Store) Lookup(key string) (string, Source, bool) {
 		return "", Source{}, false
 	}
 	return formatValue(val), src, true
+}
+
+// LookupBool returns true is config has a value matching [strconv.ParseBool] accepted
+// truth literals and false otherwise.
+func (s *Store) LookupBool(key string) bool {
+	val, _, ok := s.lookupValue(key)
+	if !ok {
+		return false
+	}
+	enabled, err := strconv.ParseBool(strings.TrimSpace(formatValue(val)))
+	return err == nil && enabled
 }
 
 func (s *Store) lookupValue(key string) (any, Source, bool) {
@@ -78,6 +93,11 @@ func (s *Store) LookupFlag(name, envVar string) (any, Source, bool) {
 	if s.local != nil {
 		if v, ok := s.local.lookup(name, envVar); ok {
 			return v, Source{Kind: SourceLocalFile, Path: s.local.path}, true
+		}
+	}
+	if s.user != nil {
+		if v, ok := s.user.lookup(name, envVar); ok {
+			return v, Source{Kind: SourceUserFile, Path: s.user.path}, true
 		}
 	}
 	if s.global != nil {

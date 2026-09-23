@@ -14,7 +14,7 @@ compatibility: >-
 license: Apache-2.0
 metadata:
   source: https://github.com/a2aproject/a2a-cli
-  version: "2026.09.08"
+  version: "2026.09.22"
 ---
 
 # Driving A2A agents with the `a2a` CLI
@@ -137,7 +137,12 @@ Run `a2a <command> --help` for the full, current set. The load-bearing ones:
 
 ## Configuration
 
-Every setting can come from a flag, an `A2ACLI_*` environment variable, or a
-`.env` file (a local `.env`, or `~/.config/a2a-cli/.env`); precedence is
-flag > env var > file. Inspect the effective values and where each resolved from
-with `a2a config show` (secrets redacted).
+Every setting can come from a flag, an `A2ACLI_*` environment variable, a
+`.env` file (a local `.env`, or `~/.config/a2a-cli/.env`), or the persistent
+user-level `~/.config/a2a-cli/config.yaml`; precedence is flag > env var >
+local file > user `config.yaml` > global `.env`. Inspect the effective values
+and where each resolved from with `a2a config show` (secrets redacted).
+
+Command plugins — `a2a-<name>` binaries on `PATH` that add top-level commands —
+are opt-in and disabled by default. Enable discovery with `a2a plugin
+set-enabled true`.
