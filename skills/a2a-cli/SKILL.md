@@ -42,23 +42,32 @@ returned.
 
 ## Setup
 
-The skill needs the `a2a` binary on PATH — check with `a2a version`. If it is
-missing, install it with Homebrew (`brew tap a2aproject/a2a-cli
-https://github.com/a2aproject/a2a-cli && brew install a2a`), WinGet
-(`winget install a2aproject.a2acli`), a prebuilt binary from the
-[releases page](https://github.com/a2aproject/a2a-cli/releases/latest), or from
-source with a Go toolchain (re-run to update):
+The skill drives the `a2a` binary and does not install it. Confirm it is on your
+PATH with `a2a version`; if that fails, install it by the method that fits your
+platform:
 
-```bash
-go install github.com/a2aproject/a2a-cli@latest
+- **Homebrew (macOS / Linux):**
 
-# rename to a2a to match the docs
+  ```bash
+  brew tap a2aproject/a2a-cli https://github.com/a2aproject/a2a-cli
+  brew install a2a
+  ```
 
-mv "$(command -v a2a-cli)" "$(dirname "$(command -v a2a-cli)")/a2a"
-```
+- **WinGet (Windows):** `winget install a2aproject.a2acli`
+- **Prebuilt binary:** download the archive for your platform from the
+  [releases page](https://github.com/a2aproject/a2a-cli/releases/latest),
+  extract it, and put the `a2a` binary on your PATH.
+- **From source** (Go toolchain; re-run to update):
 
-The tool is under active development. Treat `a2a help` and `a2a <command>
---help` as the source of truth for the current commands and flags.
+  ```bash
+  go install github.com/a2aproject/a2a-cli@latest
+  # go install names the binary a2a-cli; rename it to a2a to match the docs
+  mv "$(command -v a2a-cli)" "$(dirname "$(command -v a2a-cli)")/a2a"
+  ```
+
+Treat `a2a help` and `a2a <command> --help` as the source of truth for the current commands and flags. If a command is rejected as unknown or a
+flag no longer exists, your SKILL.md copy is likely stale — run `a2a skill` and update
+your local `SKILL.md` from its output.
 
 ## Task lifecycle
 
