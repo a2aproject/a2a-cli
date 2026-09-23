@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/a2aproject/a2a-cli/internal/clicfg"
@@ -1069,6 +1070,15 @@ func mustRunCMD(t *testing.T, args ...string) string {
 	return r
 }
 
+func mustNewRoot(t *testing.T, cfg *globalConfig, deps deps) *cobra.Command {
+	t.Helper()
+	r, err := newRootCmd(cfg, deps)
+	if err != nil {
+		t.Fatalf("newRootCmd() error = %v", err)
+	}
+	return r
+}
+
 func runCMD(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 	return runCMDWithPoller(t, deps{poller: polling.Stream, cfgLoader: clicfg.LoadEmpty}, args...)
@@ -1086,7 +1096,7 @@ func runCMDWithConfig(t *testing.T, deps deps, args ...string) (string, error) {
 		Printer:   output.NewPrinter(&buf, output.ModeText),
 		svcParams: &flagparse.ServiceParams{},
 	}
-	root := newRootCmd(cfg, deps)
+	root := mustNewRoot(t, cfg, deps)
 	root.SetArgs(args)
 	err := root.Execute()
 	return buf.String(), err
@@ -1100,7 +1110,7 @@ func runCMDCapturingStderr(t *testing.T, args ...string) (stdout, stderr string,
 		svcParams: &flagparse.ServiceParams{},
 		errOut:    &errBuf,
 	}
-	root := newRootCmd(cfg, deps{poller: polling.Stream, cfgLoader: clicfg.LoadEmpty})
+	root := mustNewRoot(t, cfg, deps{poller: polling.Stream, cfgLoader: clicfg.LoadEmpty})
 	root.SetArgs(args)
 	err = root.Execute()
 	return out.String(), errBuf.String(), err

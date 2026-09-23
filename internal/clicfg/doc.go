@@ -12,6 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package clicfg resolves a2a-cli configuration from environment variables
-// and .env (dotenv) files.
+// Package clicfg resolves a2a-cli configuration from environment variables,
+// .env (dotenv) files, and a user-level YAML config file.
+//
+// Values are resolved with the following precedence (highest to lowest):
+// real environment variable, local .env or --config file, user-level
+// config.yaml (~/.config/a2a-cli/config.yaml), and global .env
+// (~/.config/a2a-cli/.env).
 package clicfg

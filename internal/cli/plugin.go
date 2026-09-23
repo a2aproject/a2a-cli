@@ -20,11 +20,13 @@ import (
 
 func newPluginCmd(cfg *globalConfig) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "plugin",
-		Short: "Work with command plugins",
+		Use:     "plugin",
+		Aliases: []string{"plugins"},
+		Short:   "Work with command plugins",
 	}
 	cmd.AddCommand(
 		newPluginListCmd(cfg),
+		newPluginSetEnabledCmd(cfg),
 	)
 	return cmd
 }

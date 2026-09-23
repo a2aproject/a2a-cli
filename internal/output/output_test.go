@@ -15,12 +15,56 @@
 package output
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 )
+
+func TestPrintTable(t *testing.T) {
+	t.Parallel()
+
+	headers := []string{"NAME", "VERSION", "PATH"}
+
+	tests := []struct {
+		name string
+		rows [][]string
+		want string
+	}{
+		{
+			name: "aligns headers and rows into columns",
+			rows: [][]string{
+				{"foo", "1.0.0", "/bin/foo"},
+				{"barbar", "-", "/usr/local/bin/barbar"},
+			},
+			want: "NAME    VERSION  PATH\n" +
+				"foo     1.0.0    /bin/foo\n" +
+				"barbar  -        /usr/local/bin/barbar\n",
+		},
+		{
+			name: "no rows writes only the header",
+			rows: nil,
+			want: "NAME  VERSION  PATH\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+			p := NewPrinter(&buf, ModeText)
+			if err := p.PrintTable(headers, tt.rows); err != nil {
+				t.Fatalf("PrintTable() error = %v, want nil", err)
+			}
+			if diff := cmp.Diff(tt.want, buf.String()); diff != "" {
+				t.Fatalf("PrintTable() wrong result (-want +got) diff = %s", diff)
+			}
+		})
+	}
+}
 
 func TestMessageTextFileParts(t *testing.T) {
 	t.Parallel()
