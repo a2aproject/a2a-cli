@@ -113,7 +113,7 @@ func Execute() int {
 
 func (g *globalConfig) renderError(err error) int {
 	ce := clierr.Classify(err)
-	if g.Mode == output.ModeJson {
+	if g.IsJSON() {
 		if perr := g.PrintJSON(ce); perr != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		}
