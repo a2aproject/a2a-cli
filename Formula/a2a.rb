@@ -5,21 +5,21 @@
 class A2a < Formula
   desc "The official command-line interface for A2A (Agent-to-Agent) compatible agents."
   homepage "https://github.com/a2aproject/a2a-cli"
-  version "0.2.0"
+  version "0.3.0"
   license "Apache-2.0"
 
   on_macos do
     if Hardware::CPU.intel?
-      url "https://github.com/a2aproject/a2a-cli/releases/download/v0.2.0/a2a_0.2.0_darwin_amd64.tar.gz"
-      sha256 "9ee353376f10a27c443e3ff0718d20277a0125e360b37077c269faa7151bcccf"
+      url "https://github.com/a2aproject/a2a-cli/releases/download/v0.3.0/a2a_0.3.0_darwin_amd64.tar.gz"
+      sha256 "0d70db7592d1ed55989a3ee6a64f8325145f95d431d3e885ff86a0717ae20126"
 
       define_method(:install) do
         bin.install "a2a"
       end
     end
     if Hardware::CPU.arm?
-      url "https://github.com/a2aproject/a2a-cli/releases/download/v0.2.0/a2a_0.2.0_darwin_arm64.tar.gz"
-      sha256 "3c6707a95498678ac23f938f5f7495e23de6d381d098577860ffba2da64de357"
+      url "https://github.com/a2aproject/a2a-cli/releases/download/v0.3.0/a2a_0.3.0_darwin_arm64.tar.gz"
+      sha256 "812f199cb1dbd29949c34d74c7a716394a10606ac62f342f86ba07e67b46936a"
 
       define_method(:install) do
         bin.install "a2a"
@@ -29,15 +29,15 @@ class A2a < Formula
 
   on_linux do
     if Hardware::CPU.intel? && Hardware::CPU.is_64_bit?
-      url "https://github.com/a2aproject/a2a-cli/releases/download/v0.2.0/a2a_0.2.0_linux_amd64.tar.gz"
-      sha256 "78ab1a096ad76d631f41018eae7dec00a59fdbf121bb917c7b65623f09f83988"
+      url "https://github.com/a2aproject/a2a-cli/releases/download/v0.3.0/a2a_0.3.0_linux_amd64.tar.gz"
+      sha256 "faccdeac8ca30c6727cfd626681f6b38b7833c417aac45c6092a73ed8c481037"
       define_method(:install) do
         bin.install "a2a"
       end
     end
     if Hardware::CPU.arm? && Hardware::CPU.is_64_bit?
-      url "https://github.com/a2aproject/a2a-cli/releases/download/v0.2.0/a2a_0.2.0_linux_arm64.tar.gz"
-      sha256 "1b1dcc44704de56af070c7028014c43d7b03db924abb6e18a8e5dbc66124ec64"
+      url "https://github.com/a2aproject/a2a-cli/releases/download/v0.3.0/a2a_0.3.0_linux_arm64.tar.gz"
+      sha256 "6c93900fdb91ad061846447d9bd6981a7aa0b0ab0d506c8a4243b0f25b070112"
       define_method(:install) do
         bin.install "a2a"
       end
