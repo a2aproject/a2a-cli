@@ -27,6 +27,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/testutil"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestFactoryProxiesThroughPlugin(t *testing.T) {
@@ -45,7 +46,7 @@ func TestFactoryProxiesThroughPlugin(t *testing.T) {
 				stopServer()
 				return nil
 			}}
-			factory := newPluginTransportFactory("a2a-transport-fake", fakeLauncher{session: session})
+			factory := newPluginTransportFactory("a2a-transport-fake", nil, &fakeLauncher{session: session})
 
 			transport, err := factory.Create(t.Context(), nil, a2a.NewAgentInterface("fake://upstream", binding))
 			if err != nil {
@@ -79,6 +80,40 @@ func TestFactoryProxiesThroughPlugin(t *testing.T) {
 				t.Fatal("transport.Destroy() did not close the plugin session")
 			}
 		})
+	}
+}
+
+func TestFactoryForwardsEnvToLauncher(t *testing.T) {
+	t.Parallel()
+
+	upstream := &echoUpstream{}
+	hs, stopServer := startDevkitServer(t, a2a.TransportProtocolJSONRPC, upstream)
+	session := &session{handshake: hs, closeFunc: func() error { stopServer(); return nil }}
+	launcher := &fakeLauncher{session: session}
+
+	wantEnv := []string{"A2ACLI_TENANT=acme", "SLIM_TOKEN=secret"}
+	resolved := false
+	env := func() []string {
+		resolved = true
+		return wantEnv
+	}
+	factory := newPluginTransportFactory("a2a-transport-fake", env, launcher)
+
+	if resolved {
+		t.Fatal("env resolved before a transport was constructed, want lazy")
+	}
+
+	transport, err := factory.Create(t.Context(), nil, a2a.NewAgentInterface("fake://upstream", a2a.TransportProtocolJSONRPC))
+	if err != nil {
+		t.Fatalf("factory.Create() error = %v", err)
+	}
+	t.Cleanup(func() { _ = transport.Destroy() })
+
+	if !resolved {
+		t.Fatal("env not resolved when the transport was constructed")
+	}
+	if diff := cmp.Diff(wantEnv, launcher.gotEnv); diff != "" {
+		t.Fatalf("launcher received env wrong result (-want +got) diff = %s", diff)
 	}
 }
 
@@ -172,9 +207,11 @@ func startDevkitServer(t *testing.T, binding a2a.TransportProtocol, upstream a2a
 
 type fakeLauncher struct {
 	session *session
+	gotEnv  []string
 }
 
-func (l fakeLauncher) launch(context.Context, string, string) (*session, error) {
+func (l *fakeLauncher) launch(_ context.Context, _, _ string, env []string) (*session, error) {
+	l.gotEnv = env
 	return l.session, nil
 }
 

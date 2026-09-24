@@ -67,6 +67,7 @@ type globalConfig struct {
 	pluginsEnabled bool
 
 	bindings []clicfg.FlagBinding
+	store    *clicfg.Store
 	errOut   io.Writer
 
 	handlers []handleEventFunc
@@ -84,6 +85,14 @@ func (g *globalConfig) logf(format string, args ...any) {
 	if g.verbose {
 		_, _ = fmt.Fprintf(g.stderr(), "# "+format+"\n", args...)
 	}
+}
+
+// Environ implements [transportplugin.EnvironResolver].
+func (g *globalConfig) Environ() []string {
+	if g.store == nil {
+		return nil
+	}
+	return g.store.Environ(os.Environ())
 }
 
 // Execute runs the CLI and returns the exit code.
@@ -143,6 +152,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 				return err
 			}
 			cfg.bindings = bindings
+			cfg.store = store
 
 			switch output.Mode(cfg.output) {
 			case output.ModeText, output.ModeJson, output.ModeJSONL:

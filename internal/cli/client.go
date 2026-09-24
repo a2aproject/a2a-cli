@@ -84,7 +84,7 @@ func newClientFromEndpoint(ctx context.Context, cfg *globalConfig, ref string, e
 
 	factoryOpts := append(clientFactoryOpts(cfg), extraOpts...)
 	if !transportplugin.IsBuiltin(protocol) {
-		pluginOpt, err := transportplugin.Load(protocol)
+		pluginOpt, err := transportplugin.Load(protocol, cfg)
 		if err != nil {
 			return nil, err
 		}
@@ -113,7 +113,7 @@ func newClientFromCard(ctx context.Context, cfg *globalConfig, ref string, extra
 	}
 
 	factoryOpts := append(clientFactoryOpts(cfg), extraOpts...)
-	pluginOpts, err := transportplugin.LoadForCard(card)
+	pluginOpts, err := transportplugin.LoadForCard(card, cfg)
 	if err != nil {
 		return nil, err
 	}
