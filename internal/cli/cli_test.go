@@ -821,6 +821,30 @@ func TestUsageErrors(t *testing.T) {
 	}
 }
 
+func TestRenderErrorJSONModes(t *testing.T) {
+	t.Parallel()
+
+	for _, mode := range []output.Mode{output.ModeJson, output.ModeJSONL} {
+		t.Run(string(mode), func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+			g := &globalConfig{Printer: output.NewPrinter(&buf, mode)}
+
+			g.renderError(errors.New("boom"))
+
+			var got struct {
+				Error clierr.Error `json:"error"`
+			}
+			if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+				t.Fatalf("renderError() in %s mode wrote %q, want a JSON error object: %v", mode, buf.String(), err)
+			}
+			if got.Error.Code != clierr.CodeInternal {
+				t.Errorf("renderError() in %s mode code = %q, want %q", mode, got.Error.Code, clierr.CodeInternal)
+			}
+		})
+	}
+}
+
 func TestGetTaskWait_Timeout(t *testing.T) {
 	t.Parallel()
 	url := startTestServerWith(t, a2a.AgentCapabilities{Streaming: false},
