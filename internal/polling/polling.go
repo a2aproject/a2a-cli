@@ -110,7 +110,7 @@ func Stream(ctx context.Context, client *a2aclient.Client, original *a2a.SendMes
 			if err != nil {
 				successiveFailures++
 				if successiveFailures >= maxSuccessiveFailures {
-					yield(nil, fmt.Errorf("successive polling failure threshold exceeded for task %q", tid))
+					yield(nil, fmt.Errorf("successive polling failure threshold exceeded for task %q: %w", tid, err))
 					return
 				}
 				continue
