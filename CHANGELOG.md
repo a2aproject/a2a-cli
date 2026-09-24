@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.3.0](https://github.com/a2aproject/a2a-cli/compare/v0.2.0...v0.3.0) (2026-09-24)
+
+
+### Features
+
+* --save-fileparts flag for get, send and subscribe ([ed5d983](https://github.com/a2aproject/a2a-cli/commit/ed5d983c5df2635052b7a3fdcd8a87c776fbe981)), closes [#41](https://github.com/a2aproject/a2a-cli/issues/41)
+* a2a skill command ([#72](https://github.com/a2aproject/a2a-cli/issues/72)) ([d459480](https://github.com/a2aproject/a2a-cli/commit/d4594803b74ae17e7f16ee2a3f49d547a66c9483))
+* add command plugin framework for extending a2a CLI ([#58](https://github.com/a2aproject/a2a-cli/issues/58)) ([f255bb2](https://github.com/a2aproject/a2a-cli/commit/f255bb24188fa4a288a63ad5917b823f994e7600)), closes [#57](https://github.com/a2aproject/a2a-cli/issues/57)
+* add support for setting global flags with config files ([#67](https://github.com/a2aproject/a2a-cli/issues/67)) ([4ee9f74](https://github.com/a2aproject/a2a-cli/commit/4ee9f74a2367502f3eb85489b65273963ece7fe4)), closes [#66](https://github.com/a2aproject/a2a-cli/issues/66)
+
+
+### Bug Fixes
+
+* disable command plugins by default ([#71](https://github.com/a2aproject/a2a-cli/issues/71)) ([6823186](https://github.com/a2aproject/a2a-cli/commit/682318625122dff30288ad4046823a5d9db76d12)), closes [#57](https://github.com/a2aproject/a2a-cli/issues/57)
+* pass values from configs to transport plugin ([#73](https://github.com/a2aproject/a2a-cli/issues/73)) ([6745b8b](https://github.com/a2aproject/a2a-cli/commit/6745b8b77f0e61d817bd457a072c38c4d433870b)), closes [#20](https://github.com/a2aproject/a2a-cli/issues/20)
+* report --stream inactivity timeouts as a timeout ([#75](https://github.com/a2aproject/a2a-cli/issues/75)) ([9465221](https://github.com/a2aproject/a2a-cli/commit/946522173f7a4e65644334b56fbfe8cf9ff7cdf1)), closes [#74](https://github.com/a2aproject/a2a-cli/issues/74)
+* send --svc-param headers on the agent card request ([#63](https://github.com/a2aproject/a2a-cli/issues/63)) ([d8d9493](https://github.com/a2aproject/a2a-cli/commit/d8d94933d5c98113301d9fc809e899d34a060eca)), closes [#56](https://github.com/a2aproject/a2a-cli/issues/56)
+
 ## 0.2.0 (2026-09-09)
 
 
