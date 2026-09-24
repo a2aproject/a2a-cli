@@ -170,6 +170,17 @@ func TestHandlePolling(t *testing.T) {
 			wantEvents: []a2a.Event{&a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateSubmitted}}},
 			wantErr:    "successive polling failure threshold exceeded",
 		},
+		{
+			name:       "threshold error keeps the last failure",
+			sendResult: &a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateSubmitted}},
+			getResponses: []getTaskResponse{
+				{err: errors.New("temporary 1")},
+				{err: errors.New("temporary 2")},
+				{err: errors.New("temporary 3")},
+			},
+			wantEvents: []a2a.Event{&a2a.Task{Status: a2a.TaskStatus{State: a2a.TaskStateSubmitted}}},
+			wantErr:    "temporary 3",
+		},
 	}
 
 	for _, tt := range tests {
