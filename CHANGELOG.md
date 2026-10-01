@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/a2aproject/a2a-cli/compare/v0.3.0...v0.3.1) (2026-10-01)
+
+
+### Bug Fixes
+
+* keep the polling error cause in the --stream fallback ([#80](https://github.com/a2aproject/a2a-cli/issues/80)) ([4e9651c](https://github.com/a2aproject/a2a-cli/commit/4e9651c02ff35ce6105f39bb6958db094c960b77)), closes [#78](https://github.com/a2aproject/a2a-cli/issues/78)
+* print structured errors in -o jsonl mode ([#79](https://github.com/a2aproject/a2a-cli/issues/79)) ([a7f7bff](https://github.com/a2aproject/a2a-cli/commit/a7f7bff99c4b428e438c8b30f360cf664f96d139)), closes [#77](https://github.com/a2aproject/a2a-cli/issues/77)
+
 ## [0.3.0](https://github.com/a2aproject/a2a-cli/compare/v0.2.0...v0.3.0) (2026-09-24)
 
 
