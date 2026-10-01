@@ -8,6 +8,8 @@ The simplest is `--echo`, which sends your message straight back. It is a "ping"
 
 > `--echo` and `--exec` are built for learning, demos, and testing, not for production use.
 
+![Split-screen demo: an A2A server built from a script on the left, the a2a CLI discovering and talking to it on the right](../../docs/demo/demo2.gif)
+
 ## What you'll learn
 
 - How to start the simplest server with `--echo`

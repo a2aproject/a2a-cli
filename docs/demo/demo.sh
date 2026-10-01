@@ -21,6 +21,11 @@
 
 set -euo pipefail
 
+# Drive the demo from the repo root so the relative example-script paths below
+# resolve no matter which directory the recording is launched from. Relative
+# paths also keep the agent card's "Wraps command:" line clean in the GIF.
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+
 EX="examples/01-exec-demo"
 STYLE="${STYLE:-agnoster}"
 

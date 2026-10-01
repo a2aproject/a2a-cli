@@ -30,6 +30,8 @@ STYLE="${STYLE:-agnoster}"
 THEME="${THEME:-kanagawa}"
 COLS="${COLS:-92}"
 ROWS="${ROWS:-26}"
+DEMO="${DEMO:-$DEMO_DIR/demo.sh}"
+GIF="${GIF:-$DEMO_DIR/a2a-demo.gif}"
 
 mkdir -p "$CACHE/bin" "$CACHE/fonts"
 
@@ -94,17 +96,29 @@ export PATH="$BIN_DIR:$PATH"
 
 # The cast is a throwaway intermediate; only the GIF is kept in the repo.
 CAST="$BIN_DIR/a2a-demo.cast"
-GIF="$DEMO_DIR/a2a-demo.gif"
 
-echo "==> recording (STYLE=$STYLE, ${COLS}x${ROWS})"
+echo "==> recording $(basename "$DEMO") (STYLE=$STYLE, ${COLS}x${ROWS})"
 STYLE="$STYLE" asciinema rec --cols "$COLS" --rows "$ROWS" --overwrite \
   --title "a2a CLI — build a server from a script and talk to it" \
-  --command "bash $DEMO_DIR/demo.sh" \
+  --command "bash $DEMO" \
   "$CAST"
 
 echo "==> rendering GIF (theme=$THEME)"
 agg --theme "$THEME" --bold-is-bright --font-size 16 --line-height 1.35 \
   --idle-time-limit 2.5 "${font_args[@]}" \
   "$CAST" "$GIF"
+
+# Optionally drop trailing frames so the GIF rests on the finished demo instead
+# of, e.g., a tmux teardown frame. Off by default; needs ImageMagick 'convert'.
+# Trailing frames carry no later dependents, so this needs no coalesce; it is
+# written to a temp file so a failure cannot clobber the rendered GIF.
+if [[ "${TRIM_TAIL:-0}" -gt 0 ]]; then
+  command -v convert >/dev/null 2>&1 \
+    || { echo "error: TRIM_TAIL needs ImageMagick 'convert' on PATH" >&2; exit 1; }
+  total="$(identify "$GIF" | wc -l)"
+  echo "==> trimming $TRIM_TAIL trailing frame(s) of $total"
+  convert "$GIF" -delete "$(( total - TRIM_TAIL ))--1" "$GIF.tmp.gif"
+  mv "$GIF.tmp.gif" "$GIF"
+fi
 
 echo "==> done: $GIF"
