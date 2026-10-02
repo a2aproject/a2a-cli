@@ -38,8 +38,9 @@ const pluginsEnabledKey = "plugins-enabled"
 type cfgLoaderFunc func(clicfg.LoadOpts) (*clicfg.Store, error)
 
 type deps struct {
-	poller    pollerFunc
-	cfgLoader cfgLoaderFunc
+	poller     pollerFunc
+	cfgLoader  cfgLoaderFunc
+	isTerminal func() bool
 }
 
 func (d *deps) setDefaults() {
@@ -48,6 +49,9 @@ func (d *deps) setDefaults() {
 	}
 	if d.cfgLoader == nil {
 		d.cfgLoader = clicfg.Load
+	}
+	if d.isTerminal == nil {
+		d.isTerminal = stdioIsTerminal
 	}
 }
 
@@ -181,6 +185,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	cmd.AddCommand(
 		newCardCmd(cfg),
 		newSendCmd(cfg, deps.poller),
+		newChatCmd(cfg, deps.isTerminal),
 		newTaskCmd(cfg),
 		newConfigCmd(cfg),
 		newServeCmd(cfg),

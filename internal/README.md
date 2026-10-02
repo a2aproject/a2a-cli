@@ -205,6 +205,23 @@ a2a send -a <url> --context-id <context-id> "Related question"
 | `--context-id <id>` | Group this turn under an existing context (new task). |
 | `--history <n>` | Request `n` history messages in the response. |
 
+### `chat` - Chat with an Agent
+
+Hold a back-and-forth conversation with one agent. Each message continues the
+same conversation: the context id is carried across turns, and a task waiting on
+`INPUT_REQUIRED` is continued with your next message. An `AUTH_REQUIRED` task ends
+the session with an explanation. Type `/quit` or press Ctrl-D to exit; the context
+and task ids are printed so you can resume with `send`.
+
+```bash
+a2a chat -a <url>
+a2a chat -a <url> "Hello, what can you do?"
+```
+
+`chat` is interactive only. When standard input or output is not a terminal, it
+sends the positional message once, like `send`, and reads no input. Without a
+message it is a usage error.
+
 ### `task get` - Get Task Details
 
 ```bash
