@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -69,6 +70,8 @@ type globalConfig struct {
 	bindings []clicfg.FlagBinding
 	store    *clicfg.Store
 	errOut   io.Writer
+
+	httpTransport http.RoundTripper
 
 	handlers []handleEventFunc
 	*output.Printer

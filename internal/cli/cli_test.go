@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -311,6 +312,72 @@ func TestSend(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestSend_TimeoutBoundsHTTPRequests(t *testing.T) {
+	t.Parallel()
+	url := startTestServer(t)
+	legacyURL := startLegacyTestServer(t)
+
+	tests := []struct {
+		name string
+		url  string
+		args []string
+	}{
+		{name: "v1", url: url},
+		{name: "v1 stream", url: url, args: []string{"--stream"}},
+		{name: "v0", url: legacyURL},
+		{name: "v0 stream", url: legacyURL, args: []string{"--stream"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			recorder := &deadlineRecorder{}
+			cfg := &globalConfig{
+				Printer:       output.NewPrinter(&bytes.Buffer{}, output.ModeText),
+				svcParams:     &flagparse.ServiceParams{},
+				httpTransport: recorder,
+			}
+			root := mustNewRoot(t, cfg, deps{poller: polling.Stream, cfgLoader: clicfg.LoadEmpty})
+			args := append([]string{"send", "-a", tt.url, "--timeout", "25m"}, tt.args...)
+			root.SetArgs(append(args, "hello"))
+
+			start := time.Now()
+			if err := root.Execute(); err != nil {
+				t.Fatalf("root.Execute(%q) error = %v", strings.Join(args, " "), err)
+			}
+
+			deadlines := recorder.get()
+			if len(deadlines) == 0 {
+				t.Fatal("send did not issue any request through the configured HTTP transport")
+			}
+			for _, d := range deadlines {
+				if !d.IsZero() && d.Before(start.Add(20*time.Minute)) {
+					t.Fatalf("request deadline = %v after start, want no deadline or the 25m --timeout", d.Sub(start))
+				}
+			}
+		})
+	}
+}
+
+type deadlineRecorder struct {
+	mu        sync.Mutex
+	deadlines []time.Time
+}
+
+func (r *deadlineRecorder) RoundTrip(req *http.Request) (*http.Response, error) {
+	d, _ := req.Context().Deadline()
+	r.mu.Lock()
+	r.deadlines = append(r.deadlines, d)
+	r.mu.Unlock()
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+func (r *deadlineRecorder) get() []time.Time {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]time.Time(nil), r.deadlines...)
 }
 
 func TestSend_AgentCardFromFile(t *testing.T) {

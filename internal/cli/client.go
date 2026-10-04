@@ -156,20 +156,23 @@ func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
 	if cfg.insecureGRPC {
 		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
+	// The a2a-go default HTTP client caps every request at 3 minutes. Use one without a
+	// total timeout so the --timeout context deadline is what bounds a request.
+	httpClient := &http.Client{Transport: cfg.httpTransport}
 	opts := []a2aclient.FactoryOption{a2aclient.WithDefaultsDisabled()}
 	if cfg.a2aVersion == "" || cfg.a2aVersion == "1.0" {
 		opts = append(
 			opts,
-			a2aclient.WithRESTTransport(nil),
-			a2aclient.WithJSONRPCTransport(nil),
+			a2aclient.WithRESTTransport(httpClient),
+			a2aclient.WithJSONRPCTransport(httpClient),
 			a2agrpc.WithGRPCTransport(grpcOpts...),
 		)
 	}
 	if cfg.a2aVersion == "" || cfg.a2aVersion == "0.3" {
 		opts = append(
 			opts,
-			a2av0.WithRESTTransport(a2av0.RESTTransportConfig{}),
-			a2av0.WithJSONRPCTransport(a2av0.JSONRPCTransportConfig{}),
+			a2av0.WithRESTTransport(a2av0.RESTTransportConfig{Client: httpClient}),
+			a2av0.WithJSONRPCTransport(a2av0.JSONRPCTransportConfig{Client: httpClient}),
 			a2agrpcv0.WithGRPCTransport(grpcOpts...),
 		)
 	}
