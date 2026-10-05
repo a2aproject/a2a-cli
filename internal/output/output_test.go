@@ -16,6 +16,7 @@ package output
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -109,5 +110,23 @@ func TestMessageTextFileParts(t *testing.T) {
 				t.Fatalf("MessageText() wrong result (-want +got) diff = %s", diff)
 			}
 		})
+	}
+}
+
+func TestFormatCard_InterfacesIncludeProtocolVersion(t *testing.T) {
+	card := &a2a.AgentCard{
+		Name:    "ADEXTO Launchpad",
+		Version: "1.0.0",
+		SupportedInterfaces: []*a2a.AgentInterface{
+			{URL: "https://adexto.xyz/api/a2a/v03", ProtocolBinding: a2a.TransportProtocolJSONRPC, ProtocolVersion: "0.3"},
+			{URL: "https://adexto.xyz/api/a2a", ProtocolBinding: a2a.TransportProtocolJSONRPC, ProtocolVersion: a2a.Version},
+		},
+	}
+	out := formatCard(card)
+	if !strings.Contains(out, "JSONRPC") || !strings.Contains(out, "0.3") || !strings.Contains(out, "1.0") {
+		t.Fatalf("Interfaces output missing protocol versions:\n%s", out)
+	}
+	if !strings.Contains(out, "https://adexto.xyz/api/a2a/v03") {
+		t.Fatalf("missing interface URL:\n%s", out)
 	}
 }

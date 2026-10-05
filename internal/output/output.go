@@ -219,7 +219,13 @@ func formatCard(card *a2a.AgentCard) string {
 	if len(card.SupportedInterfaces) > 0 {
 		sb.WriteString("Interfaces:\n")
 		for _, iface := range card.SupportedInterfaces {
-			fmt.Fprintf(&sb, "  %-12s %s\n", iface.ProtocolBinding, iface.URL)
+			// Include protocol version so cards that expose more than one
+			// (e.g. 0.3 and 1.0 JSONRPC) are distinguishable (#88).
+			if iface.ProtocolVersion != "" {
+				fmt.Fprintf(&sb, "  %-12s %-6s %s\n", iface.ProtocolBinding, iface.ProtocolVersion, iface.URL)
+			} else {
+				fmt.Fprintf(&sb, "  %-12s %s\n", iface.ProtocolBinding, iface.URL)
+			}
 		}
 	}
 
