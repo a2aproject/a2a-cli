@@ -115,7 +115,7 @@ func TestMessageTextFileParts(t *testing.T) {
 
 func TestFormatCard_InterfacesIncludeProtocolVersion(t *testing.T) {
 	card := &a2a.AgentCard{
-		Name:    "ADEXTO Launchpad",
+		Name:    "Example Agent",
 		Version: "1.0.0",
 		SupportedInterfaces: []*a2a.AgentInterface{
 			{URL: "https://example.com/a2a/v03", ProtocolBinding: a2a.TransportProtocolJSONRPC, ProtocolVersion: "0.3"},
