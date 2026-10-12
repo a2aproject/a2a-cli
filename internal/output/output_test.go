@@ -118,15 +118,15 @@ func TestFormatCard_InterfacesIncludeProtocolVersion(t *testing.T) {
 		Name:    "ADEXTO Launchpad",
 		Version: "1.0.0",
 		SupportedInterfaces: []*a2a.AgentInterface{
-			{URL: "https://adexto.xyz/api/a2a/v03", ProtocolBinding: a2a.TransportProtocolJSONRPC, ProtocolVersion: "0.3"},
-			{URL: "https://adexto.xyz/api/a2a", ProtocolBinding: a2a.TransportProtocolJSONRPC, ProtocolVersion: a2a.Version},
+			{URL: "https://example.com/a2a/v03", ProtocolBinding: a2a.TransportProtocolJSONRPC, ProtocolVersion: "0.3"},
+			{URL: "https://example.com/a2a", ProtocolBinding: a2a.TransportProtocolJSONRPC, ProtocolVersion: a2a.Version},
 		},
 	}
 	out := formatCard(card)
 	if !strings.Contains(out, "JSONRPC") || !strings.Contains(out, "0.3") || !strings.Contains(out, "1.0") {
 		t.Fatalf("Interfaces output missing protocol versions:\n%s", out)
 	}
-	if !strings.Contains(out, "https://adexto.xyz/api/a2a/v03") {
+	if !strings.Contains(out, "https://example.com/a2a/v03") {
 		t.Fatalf("missing interface URL:\n%s", out)
 	}
 }
