@@ -54,6 +54,12 @@ var taskStateNames = map[a2a.TaskState]string{
 type Printer struct {
 	Out  io.Writer
 	Mode Mode
+
+	// openArtifact is the artifact whose streamed text is being written inline
+	// in text mode; its line is not terminated yet.
+	openArtifact a2a.ArtifactID
+	// atLineStart reports whether the inline text written so far ends with a newline.
+	atLineStart bool
 }
 
 // NewPrinter returns a Printer that writes to out using the given Mode.
@@ -115,6 +121,13 @@ func (p *Printer) PrintEvent(event a2a.Event) error {
 		return p.jsonEncoder().Encode(a2a.StreamResponse{Event: event})
 	}
 
+	if e, ok := event.(*a2a.TaskArtifactUpdateEvent); ok {
+		return p.printArtifactChunk(e)
+	}
+	if err := p.Flush(); err != nil {
+		return err
+	}
+
 	var s string
 	switch e := event.(type) {
 	case *a2a.TaskStatusUpdateEvent:
@@ -124,13 +137,6 @@ func (p *Printer) PrintEvent(event a2a.Event) error {
 		} else {
 			s = fmt.Sprintf("[status] %s\n", state)
 		}
-	case *a2a.TaskArtifactUpdateEvent:
-		text := partsText(e.Artifact.Parts)
-		if e.Append {
-			s = fmt.Sprintf("[artifact+] %s\n", text)
-		} else {
-			s = fmt.Sprintf("[artifact] %s\n", text)
-		}
 	case *a2a.Task:
 		s = formatTask(e) + formatResumeHint(e)
 	case *a2a.Message:
@@ -139,6 +145,49 @@ func (p *Printer) PrintEvent(event a2a.Event) error {
 		return nil
 	}
 	_, err := io.WriteString(p.Out, s)
+	return err
+}
+
+// printArtifactChunk writes streamed artifact text inline: a new artifact
+// starts a "[artifact] " line, and chunks appended to it continue that line
+// until the last chunk or another event arrives.
+func (p *Printer) printArtifactChunk(e *a2a.TaskArtifactUpdateEvent) error {
+	text := artifactText(e.Artifact.Parts)
+	continues := e.Append && e.Artifact.ID == p.openArtifact
+	if !continues {
+		if err := p.Flush(); err != nil {
+			return err
+		}
+		prefix := "[artifact] "
+		if e.Append {
+			prefix = "[artifact+] "
+		}
+		text = prefix + text
+	}
+	if _, err := io.WriteString(p.Out, text); err != nil {
+		return err
+	}
+	p.openArtifact = e.Artifact.ID
+	if text != "" {
+		p.atLineStart = strings.HasSuffix(text, "\n")
+	}
+	if e.LastChunk {
+		return p.Flush()
+	}
+	return nil
+}
+
+// Flush terminates the line of an artifact streamed inline in text mode, if
+// any. Call it when a stream of events ends.
+func (p *Printer) Flush() error {
+	if p.openArtifact == "" {
+		return nil
+	}
+	p.openArtifact = ""
+	if p.atLineStart {
+		return nil
+	}
+	_, err := io.WriteString(p.Out, "\n")
 	return err
 }
 
@@ -257,7 +306,7 @@ func formatTask(task *a2a.Task) string {
 			if art.Name != "" {
 				label = art.Name
 			}
-			fmt.Fprintf(&sb, "  [%s] %s\n", label, partsText(art.Parts))
+			fmt.Fprintf(&sb, "  [%s] %s\n", label, artifactText(art.Parts))
 		}
 	}
 
@@ -313,31 +362,48 @@ func MessageText(msg *a2a.Message) string {
 	return partsText(msg.Parts)
 }
 
+// partsText renders parts separated by spaces.
 func partsText(parts a2a.ContentParts) string {
+	return joinParts(parts, false)
+}
+
+// artifactText renders artifact parts. Adjacent text parts are concatenated
+// as is, because streamed chunks appended to an artifact are pieces of one text.
+func artifactText(parts a2a.ContentParts) string {
+	return joinParts(parts, true)
+}
+
+func joinParts(parts a2a.ContentParts, concatText bool) string {
 	var sb strings.Builder
 	for i, p := range parts {
-		if i > 0 {
+		if i > 0 && !(concatText && isText(parts[i-1]) && isText(p)) {
 			sb.WriteString(" ")
 		}
-		if t := p.Text(); t != "" {
-			sb.WriteString(t)
-			continue
-		}
-		if p.URL() != "" || p.Raw() != nil {
-			sb.WriteString(filePartText(p))
-			continue
-		}
-		if p.Data() != nil {
-			b, err := json.Marshal(p.Data())
-			if err != nil {
-				fmt.Fprintf(&sb, "[data: %v]", err)
-				continue
-			}
-			sb.WriteString(string(b))
-			continue
-		}
+		sb.WriteString(partText(p))
 	}
 	return sb.String()
+}
+
+func isText(p *a2a.Part) bool {
+	_, ok := p.Content.(a2a.Text)
+	return ok
+}
+
+func partText(p *a2a.Part) string {
+	if t := p.Text(); t != "" {
+		return t
+	}
+	if p.URL() != "" || p.Raw() != nil {
+		return filePartText(p)
+	}
+	if p.Data() != nil {
+		b, err := json.Marshal(p.Data())
+		if err != nil {
+			return fmt.Sprintf("[data: %v]", err)
+		}
+		return string(b)
+	}
+	return ""
 }
 
 // filePartText renders a file part by name, media type and size or URL.

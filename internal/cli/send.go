@@ -72,6 +72,7 @@ func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 			defer destroyClient(cfg, client)
 
 			if flags.stream {
+				defer func() { _ = cfg.Printer.Flush() }()
 				ctx, debounceTimeout := utils.WithInactivityTimeout(baseCtx, cfg.timeout)
 
 				err = handleStreaming(ctx, cfg, client, req, debounceTimeout)
