@@ -176,6 +176,43 @@ func TestCardGet(t *testing.T) {
 	})
 }
 
+// TestCardGet_ProtoJSONSecurityScopes resolves a card whose securityRequirements use the
+// ProtoJSON StringList form from a2a.proto ({"list": [...]}), the form used by the Agent Card
+// example in the specification and emitted by protobuf-based SDKs.
+func TestCardGet_ProtoJSONSecurityScopes(t *testing.T) {
+	t.Parallel()
+	const card = `{
+		"name": "Scoped Agent",
+		"description": "An agent whose card requires OAuth scopes.",
+		"version": "1.0.0",
+		"supportedInterfaces": [{"url": "https://agent.example.com/a2a", "protocolBinding": "JSONRPC", "protocolVersion": "1.0"}],
+		"capabilities": {"streaming": true},
+		"defaultInputModes": ["text/plain"],
+		"defaultOutputModes": ["text/plain"],
+		"skills": [{"id": "echo", "name": "Echo", "description": "Echoes the input.", "tags": ["echo"]}],
+		"securitySchemes": {"oauth2": {"oauth2SecurityScheme": {"flows": {"authorizationCode": {
+			"authorizationUrl": "https://agent.example.com/oauth/authorize",
+			"tokenUrl": "https://agent.example.com/oauth/token",
+			"scopes": {"read": "Read", "write": "Write"}}}}}},
+		"securityRequirements": [{"schemes": {"oauth2": {"list": ["read", "write"]}}}]
+	}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(card))
+	}))
+	t.Cleanup(server.Close)
+
+	out := mustRunCMD(t, "card", "get", "-a", server.URL, "-o", "json")
+	var got a2a.AgentCard
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("json.Unmarshal(card get output) error = %v", err)
+	}
+	want := a2a.SecurityRequirementsOptions{{"oauth2": {"read", "write"}}}
+	if diff := cmp.Diff(want, got.SecurityRequirements); diff != "" {
+		t.Fatalf("a2a card get securityRequirements wrong result (-want +got) diff = %s", diff)
+	}
+}
+
 func TestVersion(t *testing.T) {
 	t.Parallel()
 
