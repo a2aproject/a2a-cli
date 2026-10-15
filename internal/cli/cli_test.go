@@ -1345,6 +1345,46 @@ another_flag: 123
 			},
 		},
 		{
+			name:     "svc-param Authorization values are redacted",
+			filename: "creds.yaml",
+			content:  "svc-param:\n  - \"Authorization=Bearer SECRET123\"\n  - \"X-Trace=abc\"\n",
+			wantVals: map[string]string{
+				"svc-param": "Authorization=<redacted>,X-Trace=abc",
+			},
+		},
+		{
+			name:     "svc-param Authorization value containing a comma is fully redacted",
+			filename: "creds-comma.yaml",
+			content:  "svc-param:\n  - \"Authorization=Basic abc,def\"\n",
+			wantVals: map[string]string{
+				"svc-param": "Authorization=<redacted>",
+			},
+		},
+		{
+			name:     "svc-param Authorization key is matched case-insensitively with colon separator",
+			filename: "creds-colon.yaml",
+			content:  "svc-param:\n  - \"authorization:Bearer SECRET123\"\n",
+			wantVals: map[string]string{
+				"svc-param": "authorization:<redacted>",
+			},
+		},
+		{
+			name:     "svc-param key with Authorization prefix is not redacted",
+			filename: "creds-prefix.yaml",
+			content:  "svc-param:\n  - \"Authorization-Hint=visible\"\n",
+			wantVals: map[string]string{
+				"svc-param": "Authorization-Hint=visible",
+			},
+		},
+		{
+			name:     "svc-param scalar Authorization value is redacted",
+			filename: "creds-scalar.yaml",
+			content:  "svc-param: \"Authorization=Bearer a,b\"\n",
+			wantVals: map[string]string{
+				"svc-param": "Authorization=<redacted>",
+			},
+		},
+		{
 			name:     "json config with additional properties ignored",
 			filename: "extra.json",
 			content: `{
