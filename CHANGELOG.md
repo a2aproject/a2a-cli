@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.1](https://github.com/a2aproject/a2a-cli/compare/v0.3.0...v0.3.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* keep the polling error cause in the --stream fallback ([#80](https://github.com/a2aproject/a2a-cli/issues/80)) ([4e9651c](https://github.com/a2aproject/a2a-cli/commit/4e9651c02ff35ce6105f39bb6958db094c960b77)), closes [#78](https://github.com/a2aproject/a2a-cli/issues/78)
+* let --timeout bound HTTP transport requests ([#87](https://github.com/a2aproject/a2a-cli/issues/87)) ([f902547](https://github.com/a2aproject/a2a-cli/commit/f9025472336290f71448190c7ce8ba29b618885e)), closes [#84](https://github.com/a2aproject/a2a-cli/issues/84)
+* **output:** show protocol version in card Interfaces ([#89](https://github.com/a2aproject/a2a-cli/issues/89)) ([1e1c175](https://github.com/a2aproject/a2a-cli/commit/1e1c175229ba4c0a11724caad4bfb08b21ae7517))
+* print structured errors in -o jsonl mode ([#79](https://github.com/a2aproject/a2a-cli/issues/79)) ([a7f7bff](https://github.com/a2aproject/a2a-cli/commit/a7f7bff99c4b428e438c8b30f360cf664f96d139)), closes [#77](https://github.com/a2aproject/a2a-cli/issues/77)
+* printing artifact text in streaming mode ([#90](https://github.com/a2aproject/a2a-cli/issues/90)) ([2252d75](https://github.com/a2aproject/a2a-cli/commit/2252d75ce86a6f27afed2d7412957cf404da2082))
+* redact --svc-param values in config show ([#83](https://github.com/a2aproject/a2a-cli/issues/83)) ([4277703](https://github.com/a2aproject/a2a-cli/commit/42777034785e9e23ea5e9f5ba7a6350de4789208))
+
 ## [0.3.0](https://github.com/a2aproject/a2a-cli/compare/v0.2.0...v0.3.0) (2026-09-24)
 
 
