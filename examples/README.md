@@ -14,7 +14,7 @@ To get started you need only the `a2a` CLI installed. Every lesson starts its ow
 
 The `a2a` CLI is a client for A2A servers. It sends messages, tracks task progress, and fetches results. So first you need a server to talk to.
 
-Learn how to stand up a simple demo server. You will turn an ordinary script into a working A2A server with `--exec`, then send it a message and read the reply. No A2A-specific code required.
+Learn how to stand up a simple demo server. You will turn an ordinary script into a working A2A server with `a2a server exec`, then send it a message and read the reply. No A2A-specific code required.
 
 ### 2. Discover and talk to an agent — [`02-card-and-send/`](02-card-and-send/)
 

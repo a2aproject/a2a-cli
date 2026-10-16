@@ -20,7 +20,7 @@ The `a2a` CLI installed (see the [repo README](../../README.md)). This lesson re
 Run the agent in **terminal A**:
 
 ```bash
-a2a server --exec "python3 -u ../01-exec-demo/a2a_unaware_agent.py" --name "Word Numberer" --port 8080
+a2a server exec "python3 -u ../01-exec-demo/a2a_unaware_agent.py" --name "Word Numberer" --port 8080
 ```
 
 Set the card once in **terminal B** so the commands below stay short:
@@ -82,7 +82,7 @@ a2a task subscribe <task-id>               # follow it until it finishes
 a2a task cancel <task-id>                  # cancel it
 ```
 
-> These commands need a server that **keeps** its tasks. The demo `--exec` server runs each request synchronously and does not store them, so against it the send commands above work but `task get`/`list`/`subscribe`/`cancel` return an error. Point them at a task-backed A2A server to see them in action.
+> These commands need a server that **keeps** its tasks. The demo exec server runs each request synchronously and does not store them, so against it the send commands above work but `task get`/`list`/`subscribe`/`cancel` return an error. Point them at a task-backed A2A server to see them in action.
 
 ## Run the whole lesson
 

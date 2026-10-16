@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """An A2A-unaware agent.
 
-`a2a server --exec` pipes the incoming message text to stdin and turns
+`a2a server exec` pipes the incoming message text to stdin and turns
 stdout into the response artifact. Exit 0 => completed, non-zero => failed.
 stderr is logged by the CLI (and attached to the failure status on error).
 
-Run streaming chunks with:  a2a server --exec "python3 -u a2a_unaware_agent.py" --chunk=$'\n'
+Run streaming chunks with:  a2a server exec "python3 -u a2a_unaware_agent.py" --chunk=$'\n'
 Use `python3 -u` so stdout is unbuffered and chunks stream promptly.
 """
 

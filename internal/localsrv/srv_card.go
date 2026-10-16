@@ -31,6 +31,7 @@ type CardParams struct {
 	AgentDesc        string
 	AdvertiseAddress string
 	Transport        a2a.TransportProtocol
+	Skills           []a2a.AgentSkill
 }
 
 func createAgentCard(cfg CardParams) (*a2a.AgentCard, error) {
@@ -51,6 +52,10 @@ func createAgentCard(cfg CardParams) (*a2a.AgentCard, error) {
 		name = cfg.AgentName
 	}
 
+	skills := cfg.Skills
+	if skills == nil {
+		skills = []a2a.AgentSkill{}
+	}
 	return &a2a.AgentCard{
 		Name:                name,
 		Description:         cfg.AgentDesc,
@@ -60,7 +65,7 @@ func createAgentCard(cfg CardParams) (*a2a.AgentCard, error) {
 		// defaultInputModes, defaultOutputModes and skills are REQUIRED in the proto.
 		DefaultInputModes:  []string{"text"},
 		DefaultOutputModes: []string{"text"},
-		Skills:             []a2a.AgentSkill{},
+		Skills:             skills,
 	}, nil
 }
 

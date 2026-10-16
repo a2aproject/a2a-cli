@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Smoke-test the demo scripts without starting a server.
-# --exec just pipes stdin -> stdout and checks the exit code, so testing the
+# `a2a server exec` just pipes stdin -> stdout and checks the exit code, so testing the
 # scripts on a plain pipe tests exactly what the server would run.
 set -uo pipefail
 cd "$(dirname "$0")"

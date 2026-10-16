@@ -79,10 +79,17 @@ See the **[full command reference](./internal/README.md)** for all commands, fla
 
 Learn the CLI by example. The **[cookbook](./examples/)** is a short, hands-on course — each lesson is a small folder you can run on its own, building from your first A2A server up to streaming, configuration, and the full message and task lifecycle:
 
-1. **[Build a quick A2A server](./examples/01-exec-demo/)** — turn an ordinary script into an A2A server with `--exec`, then send it a message.
+1. **[Build a quick A2A server](./examples/01-exec-demo/)** — turn an ordinary script into an A2A server with `a2a server exec`, then send it a message.
 2. **[Discover and talk to an agent](./examples/02-card-and-send/)** — read an agent's card, save it, and send a text message.
 3. **[Configure the CLI](./examples/03-config/)** — flags, environment variables, and `.env` files, and how to tell which one won.
 4. **[Messages and tasks](./examples/04-messages-and-tasks/)** — build multi-part messages, stream replies, and follow a task through its lifecycle.
+
+## Prototype: relay and harness servers
+
+> [!WARNING]
+> Prototype. Commands and formats may change or be removed without notice.
+
+The **[relay and harness servers](./docs/relay/README.md)** prototype connects agents that can't be A2A servers on their own. `a2a server relay` gives an agent with no public address, such as a Grok Bot routine woken by a webhook, a public A2A URL. `a2a server opencode` and `a2a server claude` serve a coding agent harness as an A2A agent. Deployment scripts are in [`deploy/relay`](./deploy/relay/README.md).
 
 ## Agent Skill
 

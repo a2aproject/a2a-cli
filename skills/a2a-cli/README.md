@@ -59,7 +59,7 @@ task.
 
 > Using the a2a-cli skill, start a local echo A2A agent in the background on port 9090.
 
-Your agent should run `a2a server --echo --port 9090 &`. Confirm it is up:
+Your agent should run `a2a server echo --port 9090 &`. Confirm it is up:
 
 ```bash
 a2a card get http://localhost:9090
@@ -80,7 +80,7 @@ cat .a2a-cli-logs/tasks.jsonl
 Stop the background agent when done:
 
 ```bash
-pkill -f "a2a server --echo"
+pkill -f "a2a server echo"
 ```
 
 ## Usage

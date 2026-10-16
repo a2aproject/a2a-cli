@@ -263,9 +263,11 @@ Streams events to stdout until the task reaches a terminal state. Output format 
 
 ## Server Mode
 
-`a2a server` starts an A2A-compliant server backed by one of three modes.
+`a2a server <mode>` starts an A2A-compliant server. `echo`, `proxy` and `exec` are covered below. `opencode` and `claude` serve a coding agent harness, and `relay` runs or uses a relay for agents without a public address; these three are prototypes, documented in [docs/relay](../docs/relay/README.md).
 
 ### Common Server Flags
+
+These apply to `echo`, `proxy`, `exec`, `opencode` and `claude`.
 
 | Flag | Description |
 |---|---|
@@ -281,39 +283,39 @@ Streams events to stdout until the task reaches a terminal state. Output format 
 | `--card-compat` | Serve the agent card in a dual v0.3/v1.0 format so both old and new clients can discover the agent. |
 | `--quiet` | Suppress traffic logging to stderr. |
 
-### `--echo` - Echo Mode
+### `echo` - Echo Mode
 
 ```bash
-a2a server --echo
-a2a server --echo --port 9090 --name "Echo Agent"
+a2a server echo
+a2a server echo --port 9090 --name "Echo Agent"
 ```
 Returns the user's message text as the agent response. A "ping" for agents — useful for connectivity testing and client development.
 
-### `--proxy` - Proxy Mode
+### `proxy` - Proxy Mode
 
-Forward all requests to an upstream A2A agent. Logs traffic to stderr. Useful for debugging agent interactions, injecting service parameters, or acting as an authenticated gateway. `--proxy` is a boolean flag; the upstream agent is selected with the global `-a, --agent-card` or `-e, --endpoint` flags.
+Forward all requests to an upstream A2A agent. Logs traffic to stderr. Useful for debugging agent interactions, injecting service parameters, or acting as an authenticated gateway. The upstream agent is selected with the global `-a, --agent-card` or `-e, --endpoint` flags.
 
 ```bash
 # Basic proxy with traffic logging
-a2a server --proxy -a https://upstream-agent.com
+a2a server proxy -a https://upstream-agent.com
 
 # Inject auth for an upstream that requires it
-a2a server --proxy -a https://upstream-agent.com --auth "<token>"
+a2a server proxy -a https://upstream-agent.com --auth "<token>"
 
 # Add tracing headers
-a2a server --proxy -a https://upstream-agent.com \
+a2a server proxy -a https://upstream-agent.com \
   --svc-param "X-Request-Source=a2a-proxy" \
   --svc-param "X-Trace-ID=debug-session-1"
 ```
 
 The proxy creates an `a2aclient.Client` for the upstream agent and forwards each A2A operation. It injects any `--svc-param` service parameters into every forwarded request via `a2aclient.AttachServiceParams`, and derives its own agent card from the upstream card, substituting the local interface address.
 
-### `--exec` - Exec Mode
+### `exec` - Exec Mode
 
 Run any command as an A2A agent. Message text goes to stdin, stdout becomes the response artifact. The subprocess does not need to know anything about A2A.
 ```bash
-a2a server --exec "python -u a2a_unaware_agent.py"
-a2a server --exec "./content-generator.sh"
+a2a server exec "python -u a2a_unaware_agent.py"
+a2a server exec "./content-generator.sh"
 ```
 
 #### Subprocess Interface
@@ -337,13 +339,13 @@ Status: working → [process runs] → Artifact (full output) → Status: comple
 
 ```bash
 # Emit 3 chunks with 500ms delay - useful for verifying client streaming
-a2a server --exec "for i in 1 2 3; do echo \$i; sleep 0.5; done" --chunk=$'\n'
+a2a server exec "for i in 1 2 3; do echo \$i; sleep 0.5; done" --chunk=$'\n'
 
 # Space-delimited chunks
-a2a server --exec "echo 'alpha beta gamma'" --chunk=' '
+a2a server exec "echo 'alpha beta gamma'" --chunk=' '
 
 # Paragraph-level chunks
-a2a server --exec "cat essay.txt" --chunk=$'\n\n'
+a2a server exec "cat essay.txt" --chunk=$'\n\n'
 ```
 
 The event sequence with `--chunk`:

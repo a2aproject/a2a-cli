@@ -2,7 +2,7 @@
 #
 # Drives the terminal recording for the README demo GIF.
 #
-# It stands up two throwaway A2A servers from ordinary scripts (--exec), then
+# It stands up two throwaway A2A servers from ordinary scripts (a2a server exec), then
 # discovers and talks to them with the a2a CLI. Nothing here is A2A-specific
 # code; that is the point of the demo.
 #
@@ -92,10 +92,10 @@ note "The a2a CLI: one command surface for any A2A agent."
 run "a2a version"
 
 note "Turn an ordinary script into a demo A2A server -- no A2A code."
-note "see cookbook lesson 01 to learn about --echo & --exec options"
-a2a server --exec "bash $EX/content-generator.sh" --port 8080 >/tmp/a2a-demo-a.log 2>&1 &
+note "see cookbook lesson 01 to learn about the echo & exec server modes"
+a2a server exec "bash $EX/content-generator.sh" --port 8080 >/tmp/a2a-demo-a.log 2>&1 &
 SRV_A=$!
-a2a server --exec "python3 -u $EX/a2a_unaware_agent.py" --chunk=$'\n' --port 8081 >/tmp/a2a-demo-b.log 2>&1 &
+a2a server exec "python3 -u $EX/a2a_unaware_agent.py" --chunk=$'\n' --port 8081 >/tmp/a2a-demo-b.log 2>&1 &
 SRV_B=$!
 sleep 2.5
 

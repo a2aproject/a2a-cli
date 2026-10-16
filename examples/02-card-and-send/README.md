@@ -20,7 +20,7 @@ The `a2a` CLI installed (see the [repo README](../../README.md)). This lesson us
 The echo server sends your message straight back — a simple partner for learning the client:
 
 ```bash
-a2a server --echo --port 8090 --name "Echo Agent"
+a2a server echo --port 8090 --name "Echo Agent"
 ```
 
 Leave it running. Do everything below in **terminal B**.

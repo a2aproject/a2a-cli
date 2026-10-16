@@ -936,15 +936,17 @@ func TestGetTaskWait_Timeout(t *testing.T) {
 	}
 }
 
-func TestServe_ModeValidation(t *testing.T) {
+func TestServer_ModeValidation(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
 		name           string
 		args           []string
 		wantErrContain string
 	}{
-		{"no mode", []string{"server"}, "specify --echo, --proxy <url>, or --exec"},
-		{"multiple modes", []string{"server", "--echo", "--exec", "cat"}, "mutually exclusive"},
+		{"no mode", []string{"server"}, "specify a server mode"},
+		{"unknown mode", []string{"server", "nope"}, `unknown server mode "nope"`},
+		{"exec without command", []string{"server", "exec"}, "accepts 1 arg"},
+		{"bad approve policy", []string{"server", "claude", "--approve", "maybe"}, "--approve must be ask, allow or deny"},
 	} {
 		t.Run(tt.name+" fails", func(t *testing.T) {
 			t.Parallel()

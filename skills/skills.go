@@ -22,3 +22,10 @@ import _ "embed"
 //
 //go:embed a2a-cli/SKILL.md
 var A2ACLI string
+
+// A2ARelay is the contents of the a2a-relay SKILL.md, teaching an agent woken
+// by an A2A relay how to pair, handle wakes and reply. {{BASE}} stands for the
+// relay URL.
+//
+//go:embed a2a-relay/SKILL.md
+var A2ARelay string

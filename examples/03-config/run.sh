@@ -12,7 +12,7 @@ PORT=8090
 URL="http://localhost:$PORT"
 
 # Start a throwaway echo server in the background; stop it on exit.
-a2a server --echo --port "$PORT" --quiet &
+a2a server echo --port "$PORT" --quiet &
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null; rm -f .env' EXIT
 

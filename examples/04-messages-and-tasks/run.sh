@@ -13,7 +13,7 @@ URL="http://localhost:$PORT"
 export A2ACLI_AGENT_CARD="$URL"   # so the client commands can skip -a
 
 # Start the lesson 1 script as a server in the background; stop it on exit.
-a2a server --exec "python3 -u ../01-exec-demo/a2a_unaware_agent.py" --name "Word Numberer" --port "$PORT" --quiet &
+a2a server exec "python3 -u ../01-exec-demo/a2a_unaware_agent.py" --name "Word Numberer" --port "$PORT" --quiet &
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null' EXIT
 
@@ -38,5 +38,5 @@ echo; echo "== async: returns a task id =="
 a2a send --async "one two three four five"
 
 # The `task get`/`list`/`subscribe`/`cancel` commands need a server that keeps
-# its tasks. This demo `--exec` server runs synchronously and does not store
+# its tasks. This demo `a2a server exec` server runs synchronously and does not store
 # them, so those commands are covered in the README rather than run here.

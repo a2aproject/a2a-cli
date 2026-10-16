@@ -3,7 +3,7 @@
 # Drives the SPLIT-SCREEN terminal recording for the README demo GIF.
 #
 # Two tmux panes, side by side:
-#   left  -- stand up an A2A server from an ordinary script (--exec)
+#   left  -- stand up an A2A server from an ordinary script (a2a server exec)
 #   right -- discover and talk to it with the a2a CLI
 #
 # The point of the split is that you watch one side become a server while the
@@ -51,7 +51,7 @@ AFTER_NOTE=1.2     # pause to read a comment
 # example dir below, so the script name (and the card's "Wraps command:" line)
 # stays short; the default port 8080 is omitted for the same reason. $'\n' must
 # reach the pane's shell literally, so keep it backslash-escaped.
-SERVER_CMD="a2a server --exec \"python3 -u a2a_unaware_agent.py\" --chunk=\$'\\n'"
+SERVER_CMD="a2a server exec \"python3 -u a2a_unaware_agent.py\" --chunk=\$'\\n'"
 
 cleanup() { "${TM[@]}" kill-server 2>/dev/null || true; }
 trap cleanup EXIT
