@@ -16,7 +16,6 @@ package output
 
 import (
 	"bytes"
-	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -113,20 +112,61 @@ func TestMessageTextFileParts(t *testing.T) {
 	}
 }
 
-func TestFormatCard_InterfacesIncludeProtocolVersion(t *testing.T) {
-	card := &a2a.AgentCard{
-		Name:    "Example Agent",
-		Version: "1.0.0",
-		SupportedInterfaces: []*a2a.AgentInterface{
-			{URL: "https://example.com/a2a/v03", ProtocolBinding: a2a.TransportProtocolJSONRPC, ProtocolVersion: "0.3"},
-			{URL: "https://example.com/a2a", ProtocolBinding: a2a.TransportProtocolJSONRPC, ProtocolVersion: a2a.Version},
+func TestPrintCardInterfaces(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		interfaces []*a2a.AgentInterface
+		want       string
+	}{
+		{
+			name: "same binding at different protocol versions",
+			interfaces: []*a2a.AgentInterface{
+				{URL: "https://example.com/a2a/v03", ProtocolBinding: a2a.TransportProtocolJSONRPC, ProtocolVersion: "0.3"},
+				{URL: "https://example.com/a2a", ProtocolBinding: a2a.TransportProtocolJSONRPC, ProtocolVersion: "1.0"},
+			},
+			want: "Interfaces:\n" +
+				"  JSONRPC (A2A v0.3)     https://example.com/a2a/v03\n" +
+				"  JSONRPC (A2A v1.0)     https://example.com/a2a\n",
+		},
+		{
+			name: "interface without protocol version",
+			interfaces: []*a2a.AgentInterface{
+				{URL: "https://example.com/rest", ProtocolBinding: a2a.TransportProtocolHTTPJSON},
+			},
+			want: "Interfaces:\n" +
+				"  HTTP+JSON              https://example.com/rest\n",
+		},
+		{
+			name: "interfaces with and without tenant",
+			interfaces: []*a2a.AgentInterface{
+				{URL: "https://example.com/a2a", ProtocolBinding: a2a.TransportProtocolJSONRPC, ProtocolVersion: "1.0", Tenant: "acme"},
+				{URL: "https://example.com/rest", ProtocolBinding: a2a.TransportProtocolHTTPJSON, ProtocolVersion: "1.0"},
+			},
+			want: "Interfaces:\n" +
+				"  JSONRPC (A2A v1.0)     https://example.com/a2a  (tenant: acme)\n" +
+				"  HTTP+JSON (A2A v1.0)   https://example.com/rest\n",
 		},
 	}
-	out := formatCard(card)
-	if !strings.Contains(out, "JSONRPC") || !strings.Contains(out, "0.3") || !strings.Contains(out, "1.0") {
-		t.Fatalf("Interfaces output missing protocol versions:\n%s", out)
-	}
-	if !strings.Contains(out, "https://example.com/a2a/v03") {
-		t.Fatalf("missing interface URL:\n%s", out)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+			p := NewPrinter(&buf, ModeText)
+			card := &a2a.AgentCard{Name: "Example Agent", Version: "1.0.0", SupportedInterfaces: tt.interfaces}
+			if err := p.PrintCard(card); err != nil {
+				t.Fatalf("PrintCard() error = %v, want nil", err)
+			}
+			want := "Name:         Example Agent\n" +
+				"Version:      1.0.0\n" +
+				tt.want +
+				"Streaming:    false\n"
+			if diff := cmp.Diff(want, buf.String()); diff != "" {
+				t.Fatalf("PrintCard() wrong result (-want +got) diff = %s", diff)
+			}
+		})
 	}
 }
