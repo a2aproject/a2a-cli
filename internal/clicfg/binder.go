@@ -50,7 +50,7 @@ func Bind(flags *pflag.FlagSet, store *Store) ([]FlagBinding, error) {
 
 		sensitive := false
 		switch f.Name {
-		case "auth", "bearer", "api-key":
+		case "auth":
 			sensitive = true
 		}
 
@@ -91,6 +91,9 @@ func Bind(flags *pflag.FlagSet, store *Store) ([]FlagBinding, error) {
 		f.Changed = true
 		binding.Source = source.String()
 		binding.Path = source.Path
+		if f.Name == "svc-param" {
+			value = redactServiceParams(value)
+		}
 		binding.Value = formatValue(value)
 		bindings = append(bindings, binding)
 	})
@@ -102,6 +105,33 @@ func Bind(flags *pflag.FlagSet, store *Store) ([]FlagBinding, error) {
 		return bindings, clierr.Usage(errors.Join(errs...).Error())
 	}
 	return bindings, nil
+}
+
+// redactServiceParams hides the value of each Authorization service parameter.
+// Entries are redacted before joining so commas inside values cannot split a
+// credential across entries.
+func redactServiceParams(value any) any {
+	entries, ok := toStringSlice(value)
+	if !ok {
+		s, ok := value.(string)
+		if !ok {
+			return value
+		}
+		entries = []string{s}
+	}
+	redacted := make([]string, len(entries))
+	for i, entry := range entries {
+		redacted[i] = redactServiceParam(entry)
+	}
+	return redacted
+}
+
+func redactServiceParam(entry string) string {
+	sep := strings.IndexAny(entry, ":=")
+	if sep < 0 || !strings.EqualFold(strings.TrimSpace(entry[:sep]), "Authorization") {
+		return entry
+	}
+	return entry[:sep+1] + "<redacted>"
 }
 
 func flagValueString(f *pflag.Flag) string {

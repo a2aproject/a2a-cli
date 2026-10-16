@@ -40,6 +40,7 @@ func newTaskSubscribeCmd(cfg *globalConfig) *cobra.Command {
 			defer destroyClient(cfg, client)
 
 			cfg.logf("subscribing to task %s", args[0])
+			defer func() { _ = cfg.Printer.Flush() }()
 
 			for event, err := range client.SubscribeToTask(ctx, &a2a.SubscribeToTaskRequest{
 				ID:     a2a.TaskID(args[0]),
