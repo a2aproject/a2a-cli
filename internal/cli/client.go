@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -35,12 +34,6 @@ import (
 	a2agrpcv0 "github.com/a2aproject/a2a-go/v2/a2agrpc/v0"
 	a2agrpc "github.com/a2aproject/a2a-go/v2/a2agrpc/v1"
 )
-
-var compatCardResolver = func() *agentcard.Resolver {
-	resolver := agentcard.NewResolver(&http.Client{Timeout: 30 * time.Second})
-	resolver.CardParser = a2av0.NewAgentCardParser()
-	return resolver
-}()
 
 const insecureCredentialWarning = "warning: sending a credential with TLS verification disabled (--insecure); the token may be exposed."
 
@@ -136,11 +129,17 @@ func resolveCard(ctx context.Context, cfg *globalConfig, ref string) (*a2a.Agent
 		opts = append(opts, agentcard.WithRequestHeader(k, strings.Join(vals, ", ")))
 	}
 	cfg.logf("resolving agent card from %s", ref)
-	card, err := compatCardResolver.Resolve(ctx, ref, opts...)
+	card, err := cardResolver(cfg).Resolve(ctx, ref, opts...)
 	if err != nil {
 		return nil, clierr.CardResolution(err)
 	}
 	return card, nil
+}
+
+func cardResolver(cfg *globalConfig) *agentcard.Resolver {
+	resolver := agentcard.NewResolver(&http.Client{Transport: cfg.httpTransport})
+	resolver.CardParser = a2av0.NewAgentCardParser()
+	return resolver
 }
 
 // hintInsecure wraps gRPC "no transport security set" errors with a user-friendly suggestion to pass --insecure.

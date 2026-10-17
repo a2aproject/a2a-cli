@@ -71,6 +71,10 @@ a2a send -a https://agent.example.com "Hello, what can you do?"
 
 # Stream events as they arrive
 a2a send -a https://agent.example.com --stream "Summarize this document"
+
+# Send asynchronously and poll until completion
+a2a send -a https://agent.example.com --async "Analyze this dataset"
+a2a task get -a https://agent.example.com <task-id> --wait --timeout 60s
 ```
 
 See the **[full command reference](./internal/README.md)** for all commands, flags, configuration, and server mode.

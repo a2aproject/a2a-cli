@@ -48,6 +48,12 @@ func TestClassify(t *testing.T) {
 			wantExit: 4,
 		},
 		{
+			name:     "card resolution deadline exceeded is a timeout",
+			err:      CardResolution(context.DeadlineExceeded),
+			wantCode: CodeTimeout,
+			wantExit: 5,
+		},
+		{
 			name:     "deadline exceeded is a timeout",
 			err:      fmt.Errorf("waiting: %w", context.DeadlineExceeded),
 			wantCode: CodeTimeout,
