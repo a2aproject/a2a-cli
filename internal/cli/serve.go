@@ -110,7 +110,9 @@ func newServeCmd(cfg *globalConfig) *cobra.Command {
 				if !quiet {
 					proxyOpts = append(proxyOpts, localsrv.ProxyLogInterceptorOption())
 				}
-				client, err := newAgentClient(ctx, cfg, proxyOpts...)
+				clientCtx, clientCancel := context.WithTimeout(ctx, cfg.timeout)
+				client, err := newAgentClient(clientCtx, cfg, proxyOpts...)
+				clientCancel()
 				if err != nil {
 					return fmt.Errorf("creating upstream client: %w", err)
 				}
