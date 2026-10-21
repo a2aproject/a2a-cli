@@ -76,6 +76,8 @@ Once you have a task id, the `task` commands inspect and manage it:
 
 ```bash
 a2a task get <task-id>                     # inspect one task
+a2a task get <task-id> --wait              # poll until the task finishes
+a2a task get <task-id> --wait --poll-interval 1s --timeout 60s
 a2a task get <task-id> --history 10 -o json
 a2a task list --status completed --limit 20  # list recent tasks
 a2a task subscribe <task-id>               # follow it until it finishes

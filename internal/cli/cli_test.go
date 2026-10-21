@@ -177,6 +177,61 @@ func TestCardGet(t *testing.T) {
 	})
 }
 
+func TestCardGet_Timeout(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(100 * time.Millisecond)
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := runCMD(t, "card", "get", server.URL, "--timeout", "10ms")
+	if err == nil {
+		t.Fatal("a2a card get should time out")
+	}
+	var classified *clierr.Error
+	if !errors.As(err, &classified) {
+		t.Fatalf("runCMD(card get) error = %T, want *clierr.Error", err)
+	}
+	if classified.Code != clierr.CodeTimeout {
+		t.Fatalf("runCMD(card get) Code = %q, want %q", classified.Code, clierr.CodeTimeout)
+	}
+	if classified.Exit != 5 {
+		t.Fatalf("runCMD(card get) Exit = %d, want 5", classified.Exit)
+	}
+	if classified.Hint != "increase --timeout" {
+		t.Fatalf("runCMD(card get) Hint = %q, want %q", classified.Hint, "increase --timeout")
+	}
+}
+
+func TestCardGet_TimeoutBoundsHTTPRequests(t *testing.T) {
+	t.Parallel()
+	url := startTestServer(t)
+
+	recorder := &deadlineRecorder{}
+	cfg := &globalConfig{
+		Printer:       output.NewPrinter(&bytes.Buffer{}, output.ModeText),
+		svcParams:     &flagparse.ServiceParams{},
+		httpTransport: recorder,
+	}
+	root := mustNewRoot(t, cfg, deps{poller: polling.Stream, cfgLoader: clicfg.LoadEmpty})
+	root.SetArgs([]string{"card", "get", url, "--timeout", "25m"})
+
+	start := time.Now()
+	if err := root.Execute(); err != nil {
+		t.Fatalf("root.Execute(card get) error = %v", err)
+	}
+
+	deadlines := recorder.get()
+	if len(deadlines) == 0 {
+		t.Fatal("card get did not issue any request through the configured HTTP transport")
+	}
+	for _, d := range deadlines {
+		if !d.IsZero() && d.Before(start.Add(20*time.Minute)) {
+			t.Fatalf("request deadline = %v after start, want no deadline or the 25m --timeout", d.Sub(start))
+		}
+	}
+}
+
 func TestVersion(t *testing.T) {
 	t.Parallel()
 
@@ -956,6 +1011,32 @@ func TestServe_ModeValidation(t *testing.T) {
 				t.Fatalf("runCMD(%v) error = %v, want error containing %q", tt.args, err, tt.wantErrContain)
 			}
 		})
+	}
+}
+
+func TestServeProxy_Timeout(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(100 * time.Millisecond)
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := runCMD(t, "server", "--proxy", "-a", server.URL, "--timeout", "10ms")
+	if err == nil {
+		t.Fatal("a2a server --proxy should time out resolving upstream card")
+	}
+	var classified *clierr.Error
+	if !errors.As(err, &classified) {
+		t.Fatalf("runCMD(server --proxy) error = %T, want *clierr.Error", err)
+	}
+	if classified.Code != clierr.CodeTimeout {
+		t.Fatalf("runCMD(server --proxy) Code = %q, want %q", classified.Code, clierr.CodeTimeout)
+	}
+	if classified.Exit != 5 {
+		t.Fatalf("runCMD(server --proxy) Exit = %d, want 5", classified.Exit)
+	}
+	if classified.Hint != "increase --timeout" {
+		t.Fatalf("runCMD(server --proxy) Hint = %q, want %q", classified.Hint, "increase --timeout")
 	}
 }
 
