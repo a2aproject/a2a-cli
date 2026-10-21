@@ -16,10 +16,13 @@ package clicfg
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 )
 
 func TestLoadStore(t *testing.T) {
@@ -214,6 +217,16 @@ func TestLoadStoreErrors(t *testing.T) {
 				t.Fatalf("Load() error = %v, want to contain %q", err, tc.wantErrContains)
 			}
 		})
+	}
+}
+
+func TestLoadMissingConfigIsUsageError(t *testing.T) {
+	t.Parallel()
+
+	_, err := Load(LoadOpts{ConfigPath: filepath.Join(t.TempDir(), "missing.yaml")})
+	var ce *clierr.Error
+	if !errors.As(err, &ce) || ce.Code != clierr.CodeUsage {
+		t.Fatalf("Load() error = %v, want a usage error", err)
 	}
 }
 
