@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -34,7 +35,9 @@ import (
 	a2agrpc "github.com/a2aproject/a2a-go/v2/a2agrpc/v1"
 
 	"github.com/a2aproject/a2a-cli/internal/clierr"
+	"github.com/a2aproject/a2a-cli/internal/credstore"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
+	"github.com/a2aproject/a2a-cli/internal/relayapi"
 	"github.com/a2aproject/a2a-cli/internal/transportplugin"
 )
 
@@ -71,7 +74,8 @@ func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclie
 }
 
 // attachStoredToken uses the token saved by `a2a pair add` for the target
-// agent, unless the request already carries a credential.
+// agent, or the node token in $A2A_RELAY_TOKEN of a node it hosts, unless
+// the request already carries a credential.
 func attachStoredToken(cfg *globalConfig) {
 	target := cfg.url
 	if target == "" && cfg.agentCard.IsSet() {
@@ -92,6 +96,11 @@ func attachStoredToken(cfg *globalConfig) {
 	}
 	if ok {
 		cfg.logf("using the token from `a2a pair add` for %s", c.URL)
+		cfg.svcParams.SetDefaultAuth("Bearer " + c.Token)
+		return
+	}
+	if c, ok := credstore.NodeCredential(os.Getenv(relayapi.EnvNodeToken), target); ok {
+		cfg.logf("using the node token from $%s for %s", relayapi.EnvNodeToken, c.URL)
 		cfg.svcParams.SetDefaultAuth("Bearer " + c.Token)
 	}
 }

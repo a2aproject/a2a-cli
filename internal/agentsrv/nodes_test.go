@@ -146,6 +146,26 @@ func TestWebhookNodeAnswersAgent(t *testing.T) {
 	}
 }
 
+func TestNodeTokenCallsAgent(t *testing.T) {
+	t.Parallel()
+	ts := startServer(t, serverOpts{name: "assistant"})
+	node := addNode(t, ts, "grok", 0)
+	node.mu.Lock()
+	token := node.client.Token
+	node.mu.Unlock()
+
+	c := ts.client(token)
+	task := send(t, c, userText("hello", "", ""))
+	wantResult(t, task, a2a.TaskStateCompleted, "Hello from fakeacp.")
+
+	if _, err := controlapi.NewClient(ts.dir).Revoke(context.Background(), "grok"); err != nil {
+		t.Fatalf("Revoke() error = %v", err)
+	}
+	if _, err := c.SendMessage(context.Background(), &a2a.SendMessageRequest{Message: userText("hello", "", "")}); err == nil {
+		t.Fatalf("SendMessage() with the token of a removed node error = nil, want error")
+	}
+}
+
 func TestContactRejectsNodeCode(t *testing.T) {
 	t.Parallel()
 	coder := startServer(t, serverOpts{name: "coder"})

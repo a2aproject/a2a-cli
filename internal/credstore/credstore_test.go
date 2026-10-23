@@ -27,6 +27,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/a2aproject/a2a-cli/internal/pairapi"
+	"github.com/a2aproject/a2a-cli/internal/relayapi"
 )
 
 func TestLookup(t *testing.T) {
@@ -68,6 +69,77 @@ func TestLookup(t *testing.T) {
 	}
 	if ok, err := s.Delete("https://assistant.tail1234.ts.net/n/grok/"); err != nil || !ok {
 		t.Fatalf("Delete() = %v, %v, want true, nil", ok, err)
+	}
+}
+
+func TestLookupNodeToken(t *testing.T) {
+	t.Parallel()
+	nodeToken := relayapi.NewNodeToken("https://assistant.example.com/relay", "grok", "secret")
+	node := Credential{URL: "https://assistant.example.com/n/grok", Kind: KindNode, Token: nodeToken}
+	caller := Credential{URL: "https://assistant.example.com", Token: "a2p_caller"}
+	tests := []struct {
+		name   string
+		stored []Credential
+		target string
+		want   string
+	}{
+		{name: "agent hosting the node", stored: []Credential{node}, target: "https://assistant.example.com", want: nodeToken},
+		{name: "card of the agent hosting the node", stored: []Credential{node}, target: "https://assistant.example.com/.well-known/agent-card.json", want: nodeToken},
+		{name: "caller token wins", stored: []Credential{node, caller}, target: "https://assistant.example.com", want: "a2p_caller"},
+		{name: "other agent", stored: []Credential{node}, target: "https://other.example.com", want: ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := &Store{Path: filepath.Join(t.TempDir(), "credentials.json")}
+			for _, c := range tc.stored {
+				if err := s.Put(c); err != nil {
+					t.Fatalf("Put() error = %v", err)
+				}
+			}
+			got, _, err := s.Lookup(tc.target)
+			if err != nil {
+				t.Fatalf("Lookup() error = %v", err)
+			}
+			if got.Token != tc.want {
+				t.Fatalf("Lookup(%q) = %q, want %q", tc.target, got.Token, tc.want)
+			}
+		})
+	}
+}
+
+func TestNodeCredential(t *testing.T) {
+	t.Parallel()
+	nodeToken := relayapi.NewNodeToken("https://assistant.example.com/relay", "grok", "secret")
+	tests := []struct {
+		name   string
+		token  string
+		target string
+		want   Credential
+		wantOK bool
+	}{
+		{
+			name:   "agent hosting the node",
+			token:  nodeToken,
+			target: "https://assistant.example.com/",
+			want:   Credential{URL: "https://assistant.example.com", Kind: KindNode, Token: nodeToken},
+			wantOK: true,
+		},
+		{name: "other agent", token: nodeToken, target: "https://other.example.com"},
+		{name: "not a node token", token: "a2p_caller", target: "https://assistant.example.com"},
+		{name: "no token", target: "https://assistant.example.com"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := NodeCredential(tc.token, tc.target)
+			if ok != tc.wantOK {
+				t.Fatalf("NodeCredential() ok = %v, want %v", ok, tc.wantOK)
+			}
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Fatalf("NodeCredential() wrong result (-want +got) diff = %s", diff)
+			}
+		})
 	}
 }
 

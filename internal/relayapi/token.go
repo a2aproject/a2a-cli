@@ -67,6 +67,15 @@ func NewNodeToken(apiBase, nodeID, secret string) string {
 	return nodeTokenPrefix + base64.RawURLEncoding.EncodeToString([]byte(apiBase)) + "." + nodeID + "." + secret
 }
 
+// AgentURL returns the URL of the agent server hosting the node of token.
+func AgentURL(token string) (string, bool) {
+	base, _, ok := ParseNodeToken(token)
+	if !ok {
+		return "", false
+	}
+	return strings.TrimSuffix(base, "/relay"), true
+}
+
 // ParseNodeToken returns the node API base and node ID embedded in a node token.
 func ParseNodeToken(token string) (apiBase, nodeID string, ok bool) {
 	rest, ok := strings.CutPrefix(token, nodeTokenPrefix)

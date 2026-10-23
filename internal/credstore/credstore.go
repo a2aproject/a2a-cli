@@ -32,6 +32,7 @@ import (
 
 	"github.com/a2aproject/a2a-cli/internal/fsutil"
 	"github.com/a2aproject/a2a-cli/internal/pairapi"
+	"github.com/a2aproject/a2a-cli/internal/relayapi"
 )
 
 // KindNode marks the token of a webhook node; other credentials are caller tokens.
@@ -132,22 +133,49 @@ func (s *Store) Delete(u string) (bool, error) {
 
 // Lookup returns the caller credential whose URL is target or the longest
 // prefix of it, so a token for an agent also covers its card and endpoints.
+// Without one, it returns a node token of the agent at target, so a webhook
+// node can call the agent hosting it.
 func (s *Store) Lookup(target string) (Credential, bool, error) {
 	creds, err := s.List()
 	if err != nil {
 		return Credential{}, false, err
 	}
 	t := Normalize(target)
-	var best Credential
+	var best, node Credential
 	for _, c := range creds {
 		if c.Kind == KindNode {
+			if nc, ok := NodeCredential(c.Token, t); ok && node.URL == "" {
+				node = nc
+			}
 			continue
 		}
-		if (t == c.URL || strings.HasPrefix(t, c.URL+"/")) && len(c.URL) > len(best.URL) {
+		if covers(c.URL, t) && len(c.URL) > len(best.URL) {
 			best = c
 		}
 	}
+	if best.URL == "" {
+		best = node
+	}
 	return best, best.URL != "", nil
+}
+
+// NodeCredential returns a credential for token if it is the node token of
+// a node hosted by the agent at target.
+func NodeCredential(token, target string) (Credential, bool) {
+	agent, ok := relayapi.AgentURL(token)
+	if !ok {
+		return Credential{}, false
+	}
+	agent = Normalize(agent)
+	if !covers(agent, Normalize(target)) {
+		return Credential{}, false
+	}
+	return Credential{URL: agent, Kind: KindNode, Token: token}, true
+}
+
+// covers reports whether the normalized target is base or under it.
+func covers(base, target string) bool {
+	return target == base || strings.HasPrefix(target, base+"/")
 }
 
 // Node returns the only saved node token. A machine hosting several nodes

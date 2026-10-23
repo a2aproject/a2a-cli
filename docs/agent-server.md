@@ -153,6 +153,7 @@ Answer with a message on the same task: the option ID or label, `approve`,
 | Your machines on the tailnet | Tailscale `WhoIs`: the same user as the agent | `user:owner` |
 | Other tailnet users | `network.identities` in `config.yaml`, or the `a2aproject.org/cap/a2a` app capability | `user:<login>` |
 | Anyone else, on any listener | Bearer token from pairing | `pair:<name>` |
+| [Webhook nodes](#webhook-nodes) | Their node token, as members | `node:<name>` |
 
 ```sh
 a2a server pair --name grok                 # member: can talk to the agent
@@ -283,6 +284,11 @@ wakes it with a POST signed with
 answers with `a2a relay reply <task> --final "…"`. A task with no event
 for 10 minutes fails. The node's instructions are served at
 `<agent-url>/relay/skill.md`.
+
+The node token also authenticates A2A calls to the agent, as the member
+`node:grok`, so the node can send the agent tasks of its own:
+`a2a send -a <agent-url> "…"` attaches the token saved by `a2a pair add`, or
+`$A2A_RELAY_TOKEN`. `pair rm grok` revokes both directions.
 
 ## HTTP routes
 

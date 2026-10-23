@@ -67,7 +67,8 @@ func printNodePaired(cfg *globalConfig, c credstore.Credential, saved string) er
 	if cfg.IsJSON() {
 		return cfg.PrintJSON(map[string]string{"url": c.URL, "node": c.Agent, "principal": c.Principal, "token": c.Token, "saved": saved})
 	}
-	_, err := fmt.Fprintf(cfg.Out, "✓ paired as node %s at %s; token saved to %s\n\n  Node token: %s\n\nKeep the token as the secret %s if the node runs elsewhere; it is shown only once and includes the agent's URL.\n",
-		c.Agent, c.URL, saved, c.Token, relayapi.EnvNodeToken)
+	agent, _ := relayapi.AgentURL(c.Token)
+	_, err := fmt.Fprintf(cfg.Out, "✓ paired as node %s at %s; token saved to %s\n\n  Node token: %s\n\nKeep the token as the secret %s if the node runs elsewhere; it includes the agent's URL.\nThe node calls the agent with: a2a send -a %s \"…\"\n",
+		c.Agent, c.URL, saved, c.Token, relayapi.EnvNodeToken, agent)
 	return err
 }

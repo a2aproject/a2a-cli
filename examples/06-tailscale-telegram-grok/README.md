@@ -175,6 +175,13 @@ wakes. Each wake is a JSON body with `kind`, `taskId`, `text` and
 a2a relay reply <taskId> --final "Here is what I found: ..."
 ```
 
+The same token lets the bot call your agent, as a member, for example from a
+scheduled routine:
+
+```bash
+a2a send -a https://coder.your-tailnet.ts.net "Summarize today's commits"
+```
+
 Check that the node is paired:
 
 ```bash

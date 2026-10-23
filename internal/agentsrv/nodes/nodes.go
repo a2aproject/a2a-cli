@@ -20,7 +20,6 @@ package nodes
 import (
 	"bytes"
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -295,7 +294,7 @@ func (n *Host) Pair(w http.ResponseWriter, r *http.Request, baseURL, id string) 
 	}
 	slog.Info("node paired", "node", node.ID)
 	jsonhttp.Write(w, http.StatusOK, pairapi.Response{
-		Kind: pairapi.KindNode, Token: token, Principal: "node:" + node.ID, Agent: node.Name, URL: trimSlash(baseURL) + "/n/" + node.ID,
+		Kind: pairapi.KindNode, Token: token, Principal: auth.NodePrincipal(node.ID), Agent: node.Name, URL: trimSlash(baseURL) + "/n/" + node.ID,
 	})
 }
 
@@ -310,13 +309,16 @@ func (n *Host) wireInfo(baseURL string, node store.Node) relayapi.NodeInfo {
 func (n *Host) nodeAPI(base func(*http.Request) string, h func(http.ResponseWriter, *http.Request, string, store.Node)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tok, _ := auth.BearerToken(r.Header.Get("Authorization"))
-		_, id, ok := relayapi.ParseNodeToken(tok)
-		if !ok {
+		if _, _, ok := relayapi.ParseNodeToken(tok); !ok {
 			jsonhttp.Error(w, http.StatusUnauthorized, "node token required")
 			return
 		}
-		node, err := n.cfg.Store.Node(r.Context(), id)
-		if err != nil || node.TokenHash == "" || subtle.ConstantTimeCompare([]byte(node.TokenHash), []byte(cryptoutil.Hash(tok))) != 1 {
+		node, ok, err := auth.NodeOfToken(r.Context(), n.cfg.Store, tok)
+		if err != nil {
+			jsonhttp.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if !ok {
 			jsonhttp.Error(w, http.StatusUnauthorized, "invalid node token")
 			return
 		}

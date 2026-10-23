@@ -18,6 +18,7 @@ package auth
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,6 +32,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/channel"
 	"github.com/a2aproject/a2a-cli/internal/cryptoutil"
 	"github.com/a2aproject/a2a-cli/internal/network"
+	"github.com/a2aproject/a2a-cli/internal/relayapi"
 	"github.com/a2aproject/a2a-cli/internal/store"
 )
 
@@ -136,7 +138,11 @@ func (a *Chain) Authenticate(ctx context.Context, r Request) (Principal, bool, e
 			return p, ok, err
 		}
 	}
-	if tok, ok := BearerToken(r.Header.Get("Authorization")); ok && strings.HasPrefix(tok, TokenPrefix) {
+	tok, ok := BearerToken(r.Header.Get("Authorization"))
+	if !ok {
+		return Principal{}, false, nil
+	}
+	if strings.HasPrefix(tok, TokenPrefix) {
 		t, err := a.Store.LookupToken(ctx, tok)
 		if errors.Is(err, store.ErrNotFound) {
 			return Principal{}, false, nil
@@ -146,7 +152,34 @@ func (a *Chain) Authenticate(ctx context.Context, r Request) (Principal, bool, e
 		}
 		return Principal{ID: t.Principal, Roles: t.Roles, Hops: hops(r.Header)}, true, nil
 	}
-	return Principal{}, false, nil
+	node, ok, err := NodeOfToken(ctx, a.Store, tok)
+	if err != nil || !ok {
+		return Principal{}, false, err
+	}
+	return Principal{ID: NodePrincipal(node.ID), Roles: []string{RoleMember}, Hops: hops(r.Header)}, true, nil
+}
+
+// NodePrincipal is the principal of the webhook node id.
+func NodePrincipal(id string) string { return "node:" + id }
+
+// NodeOfToken returns the webhook node which token belongs to, or false if
+// it isn't the current token of a node.
+func NodeOfToken(ctx context.Context, s *store.Store, token string) (store.Node, bool, error) {
+	_, id, ok := relayapi.ParseNodeToken(token)
+	if !ok {
+		return store.Node{}, false, nil
+	}
+	node, err := s.Node(ctx, id)
+	if errors.Is(err, store.ErrNotFound) {
+		return store.Node{}, false, nil
+	}
+	if err != nil {
+		return store.Node{}, false, err
+	}
+	if node.TokenHash == "" || subtle.ConstantTimeCompare([]byte(node.TokenHash), []byte(cryptoutil.Hash(token))) != 1 {
+		return store.Node{}, false, nil
+	}
+	return node, true, nil
 }
 
 func (a *Chain) channelPrincipal(ctx context.Context, in *channel.Inbound) (Principal, bool, error) {

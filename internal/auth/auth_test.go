@@ -25,7 +25,9 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/a2aproject/a2a-cli/internal/channel"
+	"github.com/a2aproject/a2a-cli/internal/cryptoutil"
 	"github.com/a2aproject/a2a-cli/internal/network"
+	"github.com/a2aproject/a2a-cli/internal/relayapi"
 	"github.com/a2aproject/a2a-cli/internal/store"
 )
 
@@ -78,6 +80,10 @@ func TestChainAuthenticate(t *testing.T) {
 	token, _, err := IssueToken(ctx, s, c, "https://agent")
 	if err != nil {
 		t.Fatalf("IssueToken() error = %v", err)
+	}
+	nodeToken := relayapi.NewNodeToken("https://agent/relay", "grok-node", "secret")
+	if err := s.PutNode(ctx, store.Node{ID: "grok-node", Name: "Grok", TokenHash: cryptoutil.Hash(nodeToken)}); err != nil {
+		t.Fatalf("PutNode() error = %v", err)
 	}
 
 	chain := &Chain{
@@ -149,6 +155,20 @@ func TestChainAuthenticate(t *testing.T) {
 		{
 			name: "unknown token",
 			req:  Request{Listener: network.ListenerLocal, Header: http.Header{"Authorization": {"Bearer a2p_nope"}}},
+		},
+		{
+			name:   "node token",
+			req:    Request{Listener: network.ListenerPublic, Header: header("Authorization", "Bearer "+nodeToken, HeaderOnBehalfOf, "user:owner", HeaderHops, "1")},
+			want:   Principal{ID: "node:grok-node", Roles: []string{RoleMember}, Hops: 1},
+			wantOK: true,
+		},
+		{
+			name: "node token with a wrong secret",
+			req:  Request{Listener: network.ListenerPublic, Header: header("Authorization", "Bearer "+relayapi.NewNodeToken("https://agent/relay", "grok-node", "stale"))},
+		},
+		{
+			name: "token of an unknown node",
+			req:  Request{Listener: network.ListenerPublic, Header: header("Authorization", "Bearer "+relayapi.NewNodeToken("https://agent/relay", "nobody", "secret"))},
 		},
 	}
 	for _, tc := range tests {

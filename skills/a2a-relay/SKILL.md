@@ -1,6 +1,6 @@
 ---
 name: a2a-relay
-description: Receive and answer A2A tasks as a webhook node hosted by an `a2a server` agent. Use when a webhook wakes you with JSON that has kind, taskId and replyUrl fields, when asked to pair as a relay node using a code, or to reply to, check or list A2A tasks.
+description: Receive and answer A2A tasks as a webhook node hosted by an `a2a server` agent, and send tasks to that agent. Use when a webhook wakes you with JSON that has kind, taskId and replyUrl fields, when asked to pair as a relay node using a code, to reply to, check or list A2A tasks, or to ask the hosting agent for something.
 ---
 
 # A2A webhook node
@@ -11,12 +11,28 @@ wakes you by POSTing a JSON envelope to your webhook. You answer later with
 the `a2a` CLI or plain HTTPS. The agent keeps all task state, so you don't
 need to remember anything between wakes: every wake carries its task ID.
 
+The same node token also lets you call the agent: send it a task with
+`a2a send` whenever you need it (see "Call the agent").
+
 ## Install
 
-    curl -fsSL -o a2a {{BASE}}/download/a2a && chmod +x a2a
+The agent serves its own `a2a` binary:
 
-If you can't run it, every command below has an HTTP equivalent (see
-"Without the CLI").
+    curl -fsSL -o a2a {{BASE}}/download/a2a && chmod +x a2a && ./a2a version
+
+It only runs on the agent's OS and CPU. If `./a2a version` fails, install
+the CLI another way, then use `a2a` instead of `./a2a` below:
+
+- Prebuilt binary: download the archive for your OS and CPU from
+  https://github.com/a2aproject/a2a-cli/releases/latest, extract it and put
+  `a2a` on your PATH.
+- Homebrew: `brew tap a2aproject/a2a-cli https://github.com/a2aproject/a2a-cli && brew install a2a`
+- Go: `go install github.com/a2aproject/a2a-cli@latest` (the binary is named
+  `a2a-cli`).
+
+The CLI needs the `relay` and `pair` commands: check with `a2a relay --help`.
+If you can't run any of these, every command below has an HTTP equivalent
+(see "Without the CLI").
 
 ## Pair (once)
 
@@ -75,11 +91,16 @@ history with `./a2a relay task <taskId>`.
 
 ## Call the agent
 
-To send tasks to the agent itself, pair again with a caller code from its
-owner (`a2a server pair --name <you>` on their side):
+Your node token also works as an A2A token for the agent, as a member: you
+can send it tasks, but not approve its tool calls. `a2a send` attaches the
+token saved by `a2a pair add`, or $A2A_RELAY_TOKEN:
 
-    ./a2a pair add {{BASE}} <code>
     ./a2a send -a {{BASE}} "Summarize what changed today"
+    ./a2a send -a {{BASE}} --async "Run the test suite"   # returns the task ID at once
+    ./a2a task get -a {{BASE}} <taskId>
+
+You can do this during a wake or on your own schedule. Don't call the agent
+to answer a task it sent you: reply to that task instead.
 
 ## Without the CLI
 
@@ -90,6 +111,12 @@ Send the header Authorization: Bearer $A2A_RELAY_TOKEN and JSON bodies.
     GET  {{BASE}}/relay/api/tasks/<id>
     GET  {{BASE}}/relay/api/inbox[?all=1]
     GET  {{BASE}}/relay/api/node
+
+To call the agent, POST A2A JSON-RPC to {{BASE}}/ with the same token and the
+header A2A-Version: 1.0:
+
+    {"jsonrpc": "2.0", "id": 1, "method": "SendMessage",
+     "params": {"message": {"messageId": "<unique>", "role": "ROLE_USER", "parts": [{"text": "…"}]}}}
 
 Event states: working, input-required, completed, failed, rejected. Events can
 also carry "parts" (A2A parts for the status message) and "artifacts".

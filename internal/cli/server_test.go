@@ -31,6 +31,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-cli/internal/polling"
+	"github.com/a2aproject/a2a-cli/internal/relayapi"
 )
 
 var (
@@ -178,6 +179,36 @@ func TestServerPairAndSend(t *testing.T) {
 		}
 	case <-time.After(30 * time.Second):
 		t.Fatalf("agent did not stop")
+	}
+}
+
+func TestNodeTokenAttached(t *testing.T) {
+	t.Parallel()
+	url, headers := startTestServerRecordingCardHeaders(t)
+	nodeToken := relayapi.NewNodeToken(relayapi.APIBase(url), "grok", "secret")
+	creds := &credstore.Store{Path: filepath.Join(t.TempDir(), "credentials.json")}
+	if err := creds.Put(credstore.Credential{URL: url + "/n/grok", Kind: credstore.KindNode, Token: nodeToken}); err != nil {
+		t.Fatalf("credstore.Put() error = %v", err)
+	}
+	if _, err := runCMDWithCreds(t, creds, "send", "-a", url, "hello"); err != nil {
+		t.Fatalf("a2a send error = %v", err)
+	}
+	if got, want := headers.Get("Authorization"), "Bearer "+nodeToken; got != want {
+		t.Fatalf("a2a send Authorization = %q, want %q", got, want)
+	}
+}
+
+// TestNodeTokenFromEnvAttached can't run in parallel because of t.Setenv.
+func TestNodeTokenFromEnvAttached(t *testing.T) {
+	url, headers := startTestServerRecordingCardHeaders(t)
+	nodeToken := relayapi.NewNodeToken(relayapi.APIBase(url), "grok", "secret")
+	t.Setenv(relayapi.EnvNodeToken, nodeToken)
+	creds := &credstore.Store{Path: filepath.Join(t.TempDir(), "credentials.json")}
+	if _, err := runCMDWithCreds(t, creds, "send", "-a", url, "hello"); err != nil {
+		t.Fatalf("a2a send error = %v", err)
+	}
+	if got, want := headers.Get("Authorization"), "Bearer "+nodeToken; got != want {
+		t.Fatalf("a2a send Authorization = %q, want %q", got, want)
 	}
 }
 
