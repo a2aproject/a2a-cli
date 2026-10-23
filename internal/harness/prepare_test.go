@@ -62,6 +62,43 @@ func TestPrepareLocal(t *testing.T) {
 	}
 }
 
+func TestPrepareCLITimeout(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		env  []string
+		want string
+	}{
+		{name: "default", want: EnvTimeout + "=5m0s"},
+		{name: "configured", env: []string{EnvTimeout + "=1h"}, want: EnvTimeout + "=1h"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ws := t.TempDir()
+			p, err := Prepare(context.Background(), Spec{
+				Profile: claude{},
+				Sandbox: SandboxLocal,
+				Mounts:  []agentdir.Mount{{Src: ws, Dst: ws}},
+				Home:    t.TempDir(),
+				Env:     tc.env,
+			})
+			if err != nil {
+				t.Fatalf("Prepare() error = %v", err)
+			}
+			var got []string
+			for _, kv := range p.Env {
+				if strings.HasPrefix(kv, EnvTimeout+"=") {
+					got = append(got, kv)
+				}
+			}
+			if diff := cmp.Diff([]string{tc.want}, got); diff != "" {
+				t.Fatalf("Prepare() wrong result (-want +got) diff = %s", diff)
+			}
+		})
+	}
+}
+
 func TestDockerCLIMount(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

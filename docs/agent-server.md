@@ -128,7 +128,9 @@ Docker Desktop (macOS) can't mount it, so there the harness connects over TCP
 with a key the server writes into the harness's `a2a` credentials for that URL
 only. The harness images also install `a2a`, for macOS; a custom `--image`
 needs it too. With `--sandbox local` the server's directory is put first on
-the harness's `PATH`.
+the harness's `PATH`. The harness's `a2a` waits up to 5 minutes for a reply
+(`A2ACLI_TIMEOUT=5m`, instead of the CLI's 30s default); set
+`--env A2ACLI_TIMEOUT=<duration>` to change it.
 
 Not in this version: an egress proxy and credential injection. The container
 can reach the network, and API keys passed with `--secret` are visible inside it.

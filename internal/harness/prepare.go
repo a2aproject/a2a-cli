@@ -22,6 +22,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
+	"time"
 
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
 )
@@ -35,6 +37,13 @@ const (
 // EnvUnixSocket tells the a2a CLI to send requests for one host through a
 // Unix socket: <host>=<path>.
 const EnvUnixSocket = "A2ACLI_UNIX_SOCKET"
+
+// EnvTimeout sets the request timeout of the a2a CLI. Harnesses get
+// CLITimeout by default, since the agents they call can take minutes to reply.
+const EnvTimeout = "A2ACLI_TIMEOUT"
+
+// CLITimeout is the default request timeout of the a2a CLI in harnesses.
+const CLITimeout = 5 * time.Minute
 
 // Spec describes a harness to run for an agent.
 type Spec struct {
@@ -125,7 +134,7 @@ func prepareDocker(ctx context.Context, spec Spec, ws Workspace) (*Prepared, err
 		Mounts:   slices.Clone(spec.Mounts),
 		Hidden:   spec.Hidden,
 		Home:     spec.Home,
-		Env:      slices.Clone(spec.Env),
+		Env:      cliEnv(spec.Env),
 		Limits:   spec.Limits,
 		Labels:   spec.Labels,
 		Rootless: rootless,
@@ -142,6 +151,14 @@ func prepareDocker(ctx context.Context, spec Spec, ws Workspace) (*Prepared, err
 	return &Prepared{Args: cmd.Args, Env: cmd.Env, Dir: cmd.Dir, Summary: "docker: " + what, Stop: dr.Stop}, nil
 }
 
+// cliEnv returns env with the a2a CLI timeout added unless env sets it.
+func cliEnv(env []string) []string {
+	if slices.ContainsFunc(env, func(kv string) bool { return strings.HasPrefix(kv, EnvTimeout+"=") }) {
+		return slices.Clone(env)
+	}
+	return append([]string{EnvTimeout + "=" + CLITimeout.String()}, env...)
+}
+
 // dockerCLIMount mounts the server's binary over the image's a2a CLI. Only
 // a Linux host's binary runs in the container; elsewhere the image's own
 // build, made for the server's commit, is used.
@@ -154,7 +171,7 @@ func dockerCLIMount(cli, goos string) []agentdir.Mount {
 
 func prepareLocal(ctx context.Context, spec Spec, ws Workspace) (*Prepared, error) {
 	c := spec.Profile.Command(ws)
-	c.Env = append(c.Env, spec.Env...)
+	c.Env = append(c.Env, cliEnv(spec.Env)...)
 	if spec.CLI != "" {
 		c.Env = append(c.Env, "PATH="+filepath.Dir(spec.CLI)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	}
