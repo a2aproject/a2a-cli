@@ -88,3 +88,36 @@ func TestLANListensOnAdvertisedAddress(t *testing.T) {
 		t.Fatalf("ListenPrivate() listens on %v, want %v", got, want)
 	}
 }
+
+func TestLoginPromptShow(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		urls []string
+		want []bool
+	}{
+		{
+			name: "repeated link every 10th time",
+			urls: []string{"a", "a", "a", "a", "a", "a", "a", "a", "a", "a", "a"},
+			want: []bool{true, false, false, false, false, false, false, false, false, false, true},
+		},
+		{
+			name: "new link at once",
+			urls: []string{"a", "a", "b", "b", "a"},
+			want: []bool{true, false, true, false, true},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var p loginPrompt
+			var got []bool
+			for _, u := range tc.urls {
+				got = append(got, p.show(u))
+			}
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Fatalf("loginPrompt.show() wrong result (-want +got) diff = %s", diff)
+			}
+		})
+	}
+}

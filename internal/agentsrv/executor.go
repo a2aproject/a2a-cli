@@ -45,7 +45,7 @@ const harnessSocketName = "a2a.sock"
 
 // newExecutor starts the harness as an ACP agent in its sandbox. close stops
 // the harness and cleans up its sandbox.
-func (s *Server) newExecutor(ctx context.Context, harnessLog io.Writer) (exec a2asrv.AgentExecutor, close func(context.Context) error, err error) {
+func (s *Server) newExecutor(ctx context.Context, harnessLog, imageProgress io.Writer) (exec a2asrv.AgentExecutor, close func(context.Context) error, err error) {
 	cfg := s.config()
 	profile, err := harness.Lookup(cfg.Harness, cfg.Command)
 	if err != nil {
@@ -76,7 +76,7 @@ func (s *Server) newExecutor(ctx context.Context, harnessLog io.Writer) (exec a2
 		Labels:     map[string]string{"a2a.agent": cfg.Name, "a2a.dir": s.dir.Root},
 		Socket:     s.bridge.socket,
 		SocketHost: harnessHost,
-		Progress:   harnessLog,
+		Progress:   imageProgress,
 	}
 	if exe, err := os.Executable(); err == nil {
 		spec.CLI = exe

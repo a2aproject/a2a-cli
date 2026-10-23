@@ -52,6 +52,9 @@ type Options struct {
 	Out io.Writer
 	// HarnessLog receives the harness's stderr. Discarded if nil.
 	HarnessLog io.Writer
+	// ImageProgress receives the output of pulling or building the harness
+	// image. HarnessLog if nil.
+	ImageProgress io.Writer
 	// Executor replaces the ACP executor, for tests.
 	Executor a2asrv.AgentExecutor
 	// Channels replace the channels from the config, for tests.
@@ -256,7 +259,11 @@ func (s *Server) build(ctx context.Context, closers *stack, opts Options) error 
 	s.refreshInstructions(ctx)
 	exec := opts.Executor
 	if exec == nil {
-		acp, closeACP, err := s.newExecutor(ctx, opts.HarnessLog)
+		progress := opts.ImageProgress
+		if progress == nil {
+			progress = opts.HarnessLog
+		}
+		acp, closeACP, err := s.newExecutor(ctx, opts.HarnessLog, progress)
 		if err != nil {
 			return err
 		}

@@ -104,7 +104,7 @@ git finds a repository, or take --dir.
 	fl.BoolVar(&f.cardCompat, "card-compat", false, "Serve the agent card in a dual v0.3/v1.0 format (test servers)")
 	fl.StringVar(&f.protocol, "protocol", "latest", `Protocol version: "latest" or "0.3" (test servers)`)
 	fl.StringVar(&f.serveTransport, "serve-transport", "rest", "Transport to serve: rest, jsonrpc, grpc (test servers)")
-	fl.BoolVar(&f.quiet, "quiet", false, "Suppress traffic logging to stderr (test servers)")
+	fl.BoolVar(&f.quiet, "quiet", false, "Keep the harness image pull and build output in the log; for test servers, suppress traffic logging to stderr")
 	fl.BoolVar(&f.echo, "echo", false, "Echo mode: return the user's message as a response")
 	fl.BoolVar(&f.proxy, "proxy", false, "Proxy mode: forward requests to the agent specified using --agent-card or --endpoint")
 	fl.StringVar(&f.execCmd, "exec", "", "Exec mode: run a command as an A2A agent")
@@ -168,7 +168,7 @@ func runConfiguredAgent(cmd *cobra.Command, cfg *globalConfig, f *serverFlags) e
 	if err != nil {
 		return err
 	}
-	return runAgent(cmd.Context(), cfg, d, f.detach, f.service)
+	return runAgent(cmd.Context(), cfg, d, runMode{detach: f.detach, service: f.service, quiet: f.quiet})
 }
 
 func runWizard(cmd *cobra.Command, cfg *globalConfig) error {
@@ -187,7 +187,7 @@ func runWizard(cmd *cobra.Command, cfg *globalConfig) error {
 	if err := saveSettings(d, res.Settings); err != nil {
 		return err
 	}
-	return runAgent(cmd.Context(), cfg, d, res.Mode == wizard.ModeDetach, res.Mode == wizard.ModeService)
+	return runAgent(cmd.Context(), cfg, d, runMode{detach: res.Mode == wizard.ModeDetach, service: res.Mode == wizard.ModeService})
 }
 
 // saveSettings saves start flags, reporting invalid ones as usage errors.
@@ -200,14 +200,19 @@ func saveSettings(d agentdir.Dir, s agentdir.Settings) error {
 	return err
 }
 
+// runMode is how runAgent starts the agent.
+type runMode struct {
+	detach, service, quiet bool
+}
+
 // runAgent runs the agent in the foreground, or starts it in the background.
-func runAgent(ctx context.Context, cfg *globalConfig, d agentdir.Dir, detach, service bool) error {
-	if detach || service {
-		return launch.Background(ctx, d, service, cfg.Out)
+func runAgent(ctx context.Context, cfg *globalConfig, d agentdir.Dir, m runMode) error {
+	if m.detach || m.service {
+		return launch.Background(ctx, d, m.service, m.quiet, cfg.Out)
 	}
 	ctx, stop := signalContext(ctx)
 	defer stop()
-	return launch.Foreground(ctx, d, cfg.Out, cfg.verbose, func() {
+	return launch.Foreground(ctx, d, cfg.Out, cfg.verbose, m.quiet, func() {
 		if _, err := fmt.Fprintln(cfg.Out, "  (running in the foreground; Ctrl-C to stop, or start with --detach)"); err != nil {
 			slog.Debug("writing progress", "error", err)
 		}
@@ -236,7 +241,7 @@ func runLocalServer(ctx context.Context, cfg *globalConfig, f *serverFlags) erro
 }
 
 // testServerFlags only apply to the echo, proxy and exec test servers.
-var testServerFlags = []string{"port", "host", "name", "description", "card", "card-compat", "protocol", "serve-transport", "quiet", "chunk", "advertise-address"}
+var testServerFlags = []string{"port", "host", "name", "description", "card", "card-compat", "protocol", "serve-transport", "chunk", "advertise-address"}
 
 // checkTestServerFlags rejects test server flags without a test server mode,
 // rather than ignoring them.

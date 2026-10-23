@@ -36,10 +36,12 @@ import (
 // maxLogSize is the size at which the server log is rotated on start.
 const maxLogSize = 10 << 20
 
-// Foreground runs the agent of dir until ctx ends. Progress goes to out;
-// logs and the harness's stderr go to state/server.log, and also to stderr
-// when verbose. ready, if set, is called once the agent serves.
-func Foreground(ctx context.Context, dir agentdir.Dir, out io.Writer, verbose bool, ready func()) error {
+// Foreground runs the agent of dir until ctx ends. Progress, including the
+// output of pulling or building the harness image, goes to out; logs and the
+// harness's stderr go to state/server.log, and also to stderr when verbose.
+// quiet keeps the image output in the log only. ready, if set, is called once
+// the agent serves.
+func Foreground(ctx context.Context, dir agentdir.Dir, out io.Writer, verbose, quiet bool, ready func()) error {
 	cfg, err := dir.LoadConfig()
 	if err != nil {
 		return err
@@ -68,7 +70,12 @@ func Foreground(ctx context.Context, dir agentdir.Dir, out io.Writer, verbose bo
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(logOut, &slog.HandlerOptions{Level: level})))
 	slog.Info("starting agent server", "name", cfg.Name, "harness", cfg.Harness, "dir", dir.Root)
-	opts := agentsrv.Options{Dir: dir, Config: cfg, Secrets: secrets, Out: out, HarnessLog: logOut}
+	opts := agentsrv.Options{Dir: dir, Config: cfg, Secrets: secrets, Out: out, HarnessLog: logOut, ImageProgress: out}
+	if quiet {
+		lw := &logLines{msg: "harness image"}
+		defer lw.flush()
+		opts.ImageProgress = lw
+	}
 	if ready != nil {
 		opts.Ready = func(*agentsrv.Server) { ready() }
 	}
@@ -95,7 +102,8 @@ func ServiceName(dir agentdir.Dir, cfg *agentdir.Config) string {
 
 // Background starts the agent detached from the terminal, or as a user
 // service when asService, and relays its progress to out until it serves.
-func Background(ctx context.Context, dir agentdir.Dir, asService bool, out io.Writer) error {
+// quiet keeps the output of pulling or building the harness image out of it.
+func Background(ctx context.Context, dir agentdir.Dir, asService, quiet bool, out io.Writer) error {
 	cfg, err := dir.LoadConfig()
 	if err != nil {
 		return err
@@ -114,11 +122,15 @@ func Background(ctx context.Context, dir agentdir.Dir, asService bool, out io.Wr
 	if info, err := os.Stat(dir.LogPath()); err == nil {
 		offset = info.Size()
 	}
+	args := []string{"server", "--dir", dir.Root}
+	if quiet {
+		args = append(args, "--quiet")
+	}
 	u := service.Unit{
 		Name:        ServiceName(dir, cfg),
 		Description: fmt.Sprintf("a2a server %s (%s)", cfg.Name, dir.Root),
 		Exe:         exe,
-		Args:        []string{"server", "--dir", dir.Root},
+		Args:        args,
 		Dir:         dir.Root,
 		LogPath:     dir.LogPath(),
 		Env:         []string{"PATH=" + os.Getenv("PATH")},

@@ -27,6 +27,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"tailscale.com/ipn"
 	"tailscale.com/tsnet"
@@ -74,6 +75,7 @@ func (t *Tailscale) start(ctx context.Context) error {
 	if logf == nil {
 		logf = func(string, ...any) {}
 	}
+	var login loginPrompt
 	srv := &tsnet.Server{
 		Hostname:   t.Hostname,
 		Dir:        t.StateDir,
@@ -82,7 +84,9 @@ func (t *Tailscale) start(ctx context.Context) error {
 		UserLogf: func(format string, args ...any) {
 			msg := fmt.Sprintf(format, args...)
 			if strings.Contains(msg, "login.") || strings.Contains(msg, "/a/") || strings.Contains(msg, "AuthURL") {
-				logf("tailscale: open %s to add %q to your tailnet", extractURL(msg), t.Hostname)
+				if u := extractURL(msg); login.show(u) {
+					logf("tailscale: open %s to add %q to your tailnet", u, t.Hostname)
+				}
 				return
 			}
 			slog.Debug("tailscale", "msg", msg)
@@ -101,7 +105,29 @@ func (t *Tailscale) start(ctx context.Context) error {
 	t.url = &url.URL{Scheme: "https", Host: domains[0]}
 	slog.Info("joined tailnet", "host", domains[0], "ip", st.TailscaleIPs)
 	t.started.Store(true)
+	go t.fetchCert(ctx, domains[0], logf)
 	return nil
+}
+
+// fetchCert gets the TLS certificate at startup: tsnet otherwise requests it
+// on the first handshake, which delays the first request and hides issuance
+// errors until then.
+func (t *Tailscale) fetchCert(ctx context.Context, domain string, logf func(string, ...any)) {
+	lc, err := t.srv.LocalClient()
+	if err != nil {
+		logf("! tailscale: getting the certificate for %s: %v", domain, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
+	if _, _, err := lc.CertPair(ctx, domain); err != nil {
+		if ctx.Err() != nil && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return
+		}
+		logf("! tailscale: getting the certificate for %s: %v", domain, err)
+		return
+	}
+	slog.Info("tailscale certificate ready", "domain", domain)
 }
 
 // ListenPrivate implements [Provider].
@@ -252,6 +278,28 @@ func (t *Tailscale) Close() error {
 		errs = append(errs, t.srv.Close())
 	}
 	return errors.Join(errs...)
+}
+
+// loginRepeat is how often tsnet's repeated login link is shown again.
+const loginRepeat = 10
+
+// loginPrompt throttles the login link, which tsnet logs on every status poll
+// until the machine is approved: a new link is shown at once, a repeated one
+// every loginRepeat times.
+type loginPrompt struct {
+	mu    sync.Mutex
+	url   string
+	count int
+}
+
+func (p *loginPrompt) show(link string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if link != p.url {
+		p.url, p.count = link, 0
+	}
+	p.count++
+	return p.count%loginRepeat == 1
 }
 
 func extractURL(msg string) string {

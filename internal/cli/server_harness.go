@@ -34,8 +34,7 @@ func newServerHarnessCmd(cfg *globalConfig, sf *serverFlags, name string) *cobra
 		s       agentdir.Settings
 		email   agentdir.EmailSettings
 		command string
-		detach  bool
-		service bool
+		mode    runMode
 	)
 	short := fmt.Sprintf("Start a %s agent in this directory", name)
 	if name == "acp" {
@@ -70,7 +69,7 @@ func newServerHarnessCmd(cfg *globalConfig, sf *serverFlags, name string) *cobra
 			if err := saveSettings(d, s); err != nil {
 				return err
 			}
-			return runAgent(cmd.Context(), cfg, d, detach, service)
+			return runAgent(cmd.Context(), cfg, d, mode)
 		},
 	}
 	f := cmd.Flags()
@@ -101,8 +100,9 @@ func newServerHarnessCmd(cfg *globalConfig, sf *serverFlags, name string) *cobra
 	f.StringVar(&s.TailscaleAuthKey, "tailscale-authkey", "", "Tailscale auth key, env:VAR or the key, to join without the login link")
 	f.StringVar(&s.NgrokURL, "ngrok-url", "", "Reserved ngrok domain, such as https://coder.ngrok.app")
 	f.StringVar(&s.NgrokAuthToken, "ngrok-authtoken", "", "ngrok authtoken, env:VAR or the token")
-	f.BoolVar(&detach, "detach", false, "Run the agent in the background")
-	f.BoolVar(&service, "service", false, "Install and start the agent as a launchd or systemd user service")
+	f.BoolVar(&mode.detach, "detach", false, "Run the agent in the background")
+	f.BoolVar(&mode.service, "service", false, "Install and start the agent as a launchd or systemd user service")
+	f.BoolVar(&mode.quiet, "quiet", false, "Keep the harness image pull and build output in the log instead of printing it")
 	return cmd
 }
 
