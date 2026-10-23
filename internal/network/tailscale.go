@@ -106,7 +106,52 @@ func (t *Tailscale) start(ctx context.Context) error {
 	slog.Info("joined tailnet", "host", domains[0], "ip", st.TailscaleIPs)
 	t.started.Store(true)
 	go t.fetchCert(ctx, domains[0], logf)
+	if slog.Default().Enabled(ctx, slog.LevelDebug) {
+		go t.logFilterRules(ctx)
+	}
 	return nil
+}
+
+// logFilterRules logs the packet filter control sends to the node whenever it
+// changes. Funnel only works when it grants the ingress capability to the
+// Funnel relays.
+func (t *Tailscale) logFilterRules(ctx context.Context) {
+	lc, err := t.srv.LocalClient()
+	if err != nil {
+		slog.Debug("tailscale packet filter", "error", err)
+		return
+	}
+	watcher, err := lc.WatchIPNBus(ctx, ipn.NotifyInitialNetMap|ipn.NotifyRateLimit)
+	if err != nil {
+		slog.Debug("tailscale packet filter", "error", err)
+		return
+	}
+	defer func() {
+		if err := watcher.Close(); err != nil {
+			slog.Debug("closing the tailscale bus watcher", "error", err)
+		}
+	}()
+	var last string
+	for {
+		n, err := watcher.Next()
+		if err != nil {
+			return
+		}
+		if n.NetMap == nil {
+			continue
+		}
+		rules, err := lc.DebugPacketFilterRules(ctx)
+		if err != nil {
+			slog.Debug("tailscale packet filter", "error", err)
+			continue
+		}
+		b, err := json.Marshal(rules)
+		if err != nil || string(b) == last {
+			continue
+		}
+		last = string(b)
+		slog.Debug("tailscale packet filter", "rules", last)
+	}
 }
 
 // fetchCert gets the TLS certificate at startup: tsnet otherwise requests it
