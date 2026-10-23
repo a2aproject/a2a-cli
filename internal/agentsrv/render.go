@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 
@@ -206,12 +207,15 @@ func (rd *renderer) flush(ctx context.Context, force bool) {
 // when the text outgrows the channel's limit.
 func (rd *renderer) showLocked(ctx context.Context, progress string) {
 	text := rd.text()
-	limit := rd.caps.MaxText - 200
+	limit := max(rd.caps.MaxText-200, rd.caps.MaxText/2, 1)
 	for len(text)-rd.segStart > limit {
 		seg := text[rd.segStart:]
 		cut := strings.LastIndex(seg[:limit], "\n")
 		if cut < limit/2 {
 			cut = len(channel.Truncate(seg, limit))
+		}
+		if cut == 0 {
+			_, cut = utf8.DecodeRuneInString(seg)
 		}
 		rd.showSegmentLocked(ctx, seg[:cut])
 		rd.segStart += cut

@@ -141,6 +141,12 @@ func TestChainAuthenticate(t *testing.T) {
 			wantOK: true,
 		},
 		{
+			name:   "pairing token counts hops",
+			req:    Request{Listener: network.ListenerPublic, Header: header("Authorization", "Bearer "+token, HeaderHops, "2")},
+			want:   Principal{ID: "pair:grok", Roles: []string{RoleMember}, Hops: 2},
+			wantOK: true,
+		},
+		{
 			name: "unknown token",
 			req:  Request{Listener: network.ListenerLocal, Header: http.Header{"Authorization": {"Bearer a2p_nope"}}},
 		},

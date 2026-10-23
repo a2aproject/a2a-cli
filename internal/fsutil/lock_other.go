@@ -21,4 +21,6 @@ import "os"
 // Without flock, concurrent writers may still lose updates; writes stay atomic.
 func lock(*os.File) error { return nil }
 
+func tryLock(*os.File) error { return nil }
+
 func unlock(*os.File) error { return nil }

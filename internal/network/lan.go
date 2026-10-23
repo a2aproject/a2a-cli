@@ -16,7 +16,6 @@ package network
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	stdlog "log"
@@ -55,15 +54,15 @@ func (l *LAN) Name() string { return "lan" }
 // ListenPrivate implements [Provider]. Traffic is plain HTTP, so bearer
 // tokens are only as private as the network.
 func (l *LAN) ListenPrivate(context.Context) (net.Listener, *url.URL, error) {
-	ln, err := net.Listen("tcp", net.JoinHostPort("0.0.0.0", strconv.Itoa(l.Port)))
+	ip, err := lanIP()
+	if err != nil {
+		return nil, nil, err
+	}
+	ln, err := net.Listen("tcp", net.JoinHostPort(ip.String(), strconv.Itoa(l.Port)))
 	if err != nil {
 		return nil, nil, fmt.Errorf("lan: %w", err)
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
-	ip, err := lanIP()
-	if err != nil {
-		return nil, nil, errors.Join(err, ln.Close())
-	}
 	l.mu.Lock()
 	l.port = port
 	l.mu.Unlock()

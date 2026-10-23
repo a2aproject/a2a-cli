@@ -124,3 +124,25 @@ func TestWithLockSerializesUpdates(t *testing.T) {
 		t.Fatalf("counter = %s, want %d", got, n)
 	}
 }
+
+func TestTryLock(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "server.lock")
+	release, err := TryLock(path)
+	if err != nil {
+		t.Fatalf("TryLock() error = %v", err)
+	}
+	if _, err := TryLock(path); !errors.Is(err, ErrLocked) {
+		t.Fatalf("TryLock() error = %v, want %v", err, ErrLocked)
+	}
+	if err := release(); err != nil {
+		t.Fatalf("release() error = %v", err)
+	}
+	release, err = TryLock(path)
+	if err != nil {
+		t.Fatalf("TryLock() after release error = %v", err)
+	}
+	if err := release(); err != nil {
+		t.Fatalf("release() error = %v", err)
+	}
+}

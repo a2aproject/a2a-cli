@@ -608,7 +608,10 @@ func (n *Nodes) deliver(ctx context.Context, entry *relayapi.InboxEntry) {
 }
 
 // SignatureHeader carries the HMAC-SHA256 of a wake: t=<unix time>,v1=<hex of HMAC(secret, "<t>.<body>")>.
-const SignatureHeader = "X-A2A-Signature"
+const SignatureHeader = "X-A2A-Serve-Signature"
+
+// WakeHeader carries the ID of a wake, the same for every retry of it.
+const WakeHeader = "X-A2A-Serve-Relay-Wake"
 
 // Sign returns the signature header value of a wake body.
 func Sign(secret string, t time.Time, body []byte) string {
@@ -628,7 +631,7 @@ func postWebhook(ctx context.Context, node store.Node, wakeID string, body []byt
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "a2a-server")
-	req.Header.Set("X-A2A-Relay-Wake", wakeID)
+	req.Header.Set(WakeHeader, wakeID)
 	req.Header.Set(SignatureHeader, Sign(node.Secret, time.Now(), body))
 	for k, v := range node.Headers {
 		req.Header.Set(k, v)

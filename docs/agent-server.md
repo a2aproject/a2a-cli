@@ -96,6 +96,8 @@ By default the harness runs in Docker:
 
 - the workspace is mounted at its own path, and more directories with
   `--mount src[:dst][:ro]` (repeatable; the first one is the workspace);
+- `.a2a` shows up as an empty read-only directory, so the harness can't read
+  the secrets, tokens or config of its own server;
 - `state/home` is mounted as `/home/agent`;
 - the container runs as your user (as container root under rootless Docker,
   which maps to you), with all capabilities dropped, `no-new-privileges`,
@@ -248,10 +250,10 @@ a2a server contact rm coder
   once, and the server watches the task. When it finishes, its result is
   posted into the originating conversation as a new turn, so the agent
   continues and tells the user.
-- Calls carry `X-A2A-On-Behalf-Of` and a hop count (at most 3). The callee
-  counts hops from any caller it identified on the private network, but
-  honors `X-A2A-On-Behalf-Of` only from your own agents (the same tailnet
-  login), since the user it names belongs to the caller.
+- Calls carry `X-A2A-Serve-On-Behalf-Of` and a hop count (at most 3), which
+  stops agents from calling each other in a loop. The callee counts hops from
+  every caller, but honors `X-A2A-Serve-On-Behalf-Of` only from your own agents
+  (the same tailnet login), since the user it names belongs to the caller.
 - When a called agent needs an approval, the calling agent relays it to the
   user in the chat they are already in: "coder wants to run git push",
   with buttons. The answer goes back to the remote task, and its result is
@@ -277,7 +279,7 @@ previous token stops working.
 The agent calls the node as `grok` (`a2a send -a http://a2a/<handle>/grok`), and it is at
 `<agent-url>/n/grok` for the owner. The server keeps its tasks in SQLite and
 wakes it with a POST signed with
-`X-A2A-Signature: t=<unix time>,v1=<hex HMAC-SHA256 of "<t>.<body>">`. The node
+`X-A2A-Serve-Signature: t=<unix time>,v1=<hex HMAC-SHA256 of "<t>.<body>">`. The node
 answers with `a2a relay reply <task> --final "…"`. A task with no event
 for 10 minutes fails. The node's instructions are served at
 `<agent-url>/relay/skill.md`.

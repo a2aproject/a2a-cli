@@ -36,6 +36,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
 	"github.com/a2aproject/a2a-cli/internal/auth"
 	"github.com/a2aproject/a2a-cli/internal/channel"
+	"github.com/a2aproject/a2a-cli/internal/fsutil"
 	"github.com/a2aproject/a2a-cli/internal/network"
 	"github.com/a2aproject/a2a-cli/internal/store"
 )
@@ -129,6 +130,14 @@ func Run(ctx context.Context, opts Options) error {
 	if err := s.dir.Init(); err != nil {
 		return err
 	}
+	release, err := fsutil.TryLock(s.dir.LockPath())
+	if errors.Is(err, fsutil.ErrLocked) {
+		return fmt.Errorf("an agent server is already running in %s (a2a server status)", s.dir.Root)
+	}
+	if err != nil {
+		return fmt.Errorf("locking the agent directory: %w", err)
+	}
+	s.closers = append(s.closers, func(context.Context) error { return release() })
 	st, err := store.Open(s.dir.DBPath())
 	if err != nil {
 		return err

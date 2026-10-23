@@ -46,8 +46,8 @@ const OwnerID = "user:owner"
 
 // Headers set by agent servers calling each other.
 const (
-	HeaderOnBehalfOf = "X-A2A-On-Behalf-Of"
-	HeaderHops       = "X-A2A-Hops"
+	HeaderOnBehalfOf = "X-A2A-Serve-On-Behalf-Of"
+	HeaderHops       = "X-A2A-Serve-Hops"
 )
 
 // MaxHops limits chains of agents calling agents.
@@ -143,7 +143,7 @@ func (a *Chain) Authenticate(ctx context.Context, r Request) (Principal, bool, e
 		if err != nil {
 			return Principal{}, false, err
 		}
-		return Principal{ID: t.Principal, Roles: t.Roles}, true, nil
+		return Principal{ID: t.Principal, Roles: t.Roles, Hops: hops(r.Header)}, true, nil
 	}
 	return Principal{}, false, nil
 }
@@ -193,10 +193,18 @@ func (a *Chain) networkPrincipal(ctx context.Context, r Request) (Principal, boo
 	if peer.Self {
 		p.OnBehalfOf = r.Header.Get(HeaderOnBehalfOf)
 	}
-	if h, err := strconv.Atoi(r.Header.Get(HeaderHops)); err == nil && h > 0 {
-		p.Hops = h
-	}
+	p.Hops = hops(r.Header)
 	return p, true, nil
+}
+
+// hops returns the hop count the caller sent. It only guards against loops
+// of agents calling each other, so callers are trusted with it.
+func hops(h http.Header) int {
+	n, err := strconv.Atoi(h.Get(HeaderHops))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
 }
 
 func capRole(values []json.RawMessage) string {

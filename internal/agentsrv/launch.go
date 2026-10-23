@@ -126,11 +126,18 @@ func Background(ctx context.Context, dir agentdir.Dir, asService bool, out io.Wr
 			return err
 		}
 	} else {
-		pid, err := service.Detach(u)
+		exited, err := service.Detach(u)
 		if err != nil {
 			return err
 		}
-		alive = func() bool { return processAlive(pid) }
+		alive = func() bool {
+			select {
+			case <-exited:
+				return false
+			default:
+				return true
+			}
+		}
 	}
 	if err := waitReady(ctx, dir, offset, alive, out); err != nil {
 		return err

@@ -126,9 +126,9 @@ makes the call trustworthy happens in the server:
   maps to the A2A context, the user the turn is for and the hop count. A
   handle is not a secret: only the harness reaches the listener.
 - **Making the call.** For a contact, the server resolves its card and calls
-  it with its stored token or over tsnet, adding `X-A2A-On-Behalf-Of` and
-  `X-A2A-Hops` (at most 3). The callee counts hops from callers it identified
-  on the private network, and honors `X-A2A-On-Behalf-Of` only from agents of
+  it with its stored token or over tsnet, adding `X-A2A-Serve-On-Behalf-Of` and
+  `X-A2A-Serve-Hops` (at most 3). The callee counts hops from every caller, and
+  honors `X-A2A-Serve-On-Behalf-Of` only from agents of
   its own owner, because the user it names is in the caller's namespace. A
   node is called in-process.
 - **Approvals.** If the called agent asks for an approval, the server relays
@@ -143,7 +143,7 @@ makes the call trustworthy happens in the server:
   `~/.config/opencode/AGENTS.md` and `~/.claude/CLAUDE.md` in `state/home`.
 
 Webhook nodes are the other direction: the server wakes the node with a POST
-signed with `X-A2A-Signature: t=<time>,v1=<HMAC-SHA256 of "<t>.<body>">`, and
+signed with `X-A2A-Serve-Signature: t=<time>,v1=<HMAC-SHA256 of "<t>.<body>">`, and
 the node answers with `a2a relay reply`, which posts events to the task. A
 task with no event for 10 minutes fails.
 

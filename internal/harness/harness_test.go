@@ -72,6 +72,59 @@ func TestDockerRunnerCommand(t *testing.T) {
 	}
 }
 
+func TestDockerRunnerHidden(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		mounts []agentdir.Mount
+		hidden []string
+		want   []string
+	}{
+		{
+			name:   "inside the workspace",
+			mounts: []agentdir.Mount{{Src: "/src/app", Dst: "/src/app"}},
+			hidden: []string{"/src/app/.a2a"},
+			want:   []string{"type=tmpfs,dst=/src/app/.a2a,readonly"},
+		},
+		{
+			name:   "under a mount with another destination",
+			mounts: []agentdir.Mount{{Src: "/src/app", Dst: "/src/app"}, {Src: "/home/u", Dst: "/u", ReadOnly: true}},
+			hidden: []string{"/home/u/proj/.a2a"},
+			want:   []string{"type=tmpfs,dst=/u/proj/.a2a,readonly"},
+		},
+		{
+			name:   "the mount itself",
+			mounts: []agentdir.Mount{{Src: "/src/app/.a2a", Dst: "/cfg"}},
+			hidden: []string{"/src/app/.a2a"},
+			want:   []string{"type=tmpfs,dst=/cfg,readonly"},
+		},
+		{
+			name:   "outside every mount",
+			mounts: []agentdir.Mount{{Src: "/src/app", Dst: "/src/app"}},
+			hidden: []string{"/src/application/.a2a", "/other/.a2a"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			r := &DockerRunner{Name: "n", Image: "img", Mounts: tc.mounts, Hidden: tc.hidden}
+			cmd, err := r.Command(context.Background(), Command{Path: "opencode"})
+			if err != nil {
+				t.Fatalf("Command() error = %v", err)
+			}
+			var got []string
+			for i, a := range cmd.Args {
+				if a == "--mount" {
+					got = append(got, cmd.Args[i+1])
+				}
+			}
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Fatalf("Command() wrong result (-want +got) diff = %s", diff)
+			}
+		})
+	}
+}
+
 func TestLookup(t *testing.T) {
 	t.Parallel()
 	ws := Workspace{Dir: "/w", Home: "/h"}

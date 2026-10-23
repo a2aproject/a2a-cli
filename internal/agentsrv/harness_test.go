@@ -253,6 +253,7 @@ func wantResult(t *testing.T, task *a2a.Task, state a2a.TaskState, text string) 
 type fakeChannel struct {
 	name    string
 	buttons bool
+	maxText int
 	// failures is how many times Run fails before it connects.
 	failures int
 
@@ -271,7 +272,11 @@ func newFakeChannel(name string) *fakeChannel {
 func (f *fakeChannel) Name() string { return f.name }
 
 func (f *fakeChannel) Caps() channel.Caps {
-	return channel.Caps{Edit: true, Buttons: f.buttons, MaxText: 4000, Stream: true}
+	maxText := f.maxText
+	if maxText == 0 {
+		maxText = 4000
+	}
+	return channel.Caps{Edit: true, Buttons: f.buttons, MaxText: maxText, Stream: true}
 }
 
 func (f *fakeChannel) Describe() string { return "@fake_bot" }

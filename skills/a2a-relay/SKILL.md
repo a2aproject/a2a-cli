@@ -35,7 +35,7 @@ only setting you need. Never share it.
 ## Handle a wake
 
 Every wake has the same JSON shape, signed with the header
-`X-A2A-Signature: t=<unix time>,v1=<hex HMAC-SHA256 of "<t>.<body>">`:
+`X-A2A-Serve-Signature: t=<unix time>,v1=<hex HMAC-SHA256 of "<t>.<body>">`:
 
     {"id": "wake_…", "kind": "task", "node": "…", "taskId": "…", "contextId": "…",
      "sender": {"kind": "agent", "name": "assistant", "onBehalfOf": "user:owner"},

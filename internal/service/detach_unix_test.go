@@ -12,8 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build !unix
+//go:build unix
 
-package agentsrv
+package service
 
-func processAlive(int) bool { return true }
+import (
+	"path/filepath"
+	"testing"
+	"time"
+)
+
+func TestDetachReportsExit(t *testing.T) {
+	t.Parallel()
+	exited, err := Detach(Unit{Exe: "sh", Args: []string{"-c", "exit 3"}, LogPath: filepath.Join(t.TempDir(), "log")})
+	if err != nil {
+		t.Fatalf("Detach() error = %v", err)
+	}
+	select {
+	case <-exited:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("Detach() exited channel not closed after the process exited")
+	}
+}

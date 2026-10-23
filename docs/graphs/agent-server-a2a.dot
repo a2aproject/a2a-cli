@@ -32,7 +32,7 @@ digraph agent_server_a2a {
     { rank=same;
       Watch   [label="watch\npolls the task, posts the result\ninto the conversation as a new turn"];
       NodeH   [label="node handler (in-process,\nas agent:A)\ntasks in SQLite"];
-      Client  [label="contact client\nBearer <contact token> or tsnet,\nX-A2A-On-Behalf-Of, X-A2A-Hops (max 3)"];
+      Client  [label="contact client\nBearer <contact token> or tsnet,\nX-A2A-Serve-On-Behalf-Of, X-A2A-Serve-Hops (max 3)"];
     }
   }
 
@@ -61,7 +61,7 @@ digraph agent_server_a2a {
   Router -> Client [label="answer sent\nas the user", color="#2e7d32", fontcolor="#2e7d32"];
   Client -> AuthB [label="5a. A2A over tsnet or HTTPS"];
   AuthB -> TaskB;
-  NodeH -> Webhook [label="5b. signed POST wake\nX-A2A-Signature"];
+  NodeH -> Webhook [label="5b. signed POST wake\nX-A2A-Serve-Signature"];
   Webhook -> NodeH [label="a2a relay reply\n(node token, /relay/api)", style=dashed];
   Harness -> Watch [label="7. \"[coder finished task ...]\"\nas a new turn", style=bold, color="#2e7d32", fontcolor="#2e7d32", dir=back];
 }

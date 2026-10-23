@@ -22,6 +22,7 @@ import (
 	"maps"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
@@ -71,6 +72,9 @@ type DockerRunner struct {
 	Name   string
 	Image  string
 	Mounts []agentdir.Mount
+	// Hidden are host paths which appear as empty read-only directories
+	// wherever a mount exposes them, such as the agent's .a2a directory.
+	Hidden []string
 	// Home is the host directory mounted at /home/agent.
 	Home string
 	// Env holds NAME=value pairs passed into the container. Values are passed
@@ -145,6 +149,9 @@ func (r *DockerRunner) runArgs(c Command) ([]string, []string) {
 		}
 		args = append(args, "-v", spec)
 	}
+	for _, dst := range hiddenDsts(r.Mounts, r.Hidden) {
+		args = append(args, "--mount", "type=tmpfs,dst="+dst+",readonly")
+	}
 	if r.Home != "" {
 		args = append(args, "-v", r.Home+":"+ContainerHome)
 	}
@@ -163,6 +170,25 @@ func (r *DockerRunner) runArgs(c Command) ([]string, []string) {
 	}
 	args = append(args, r.Image, c.Path)
 	return append(args, c.Args...), env
+}
+
+// hiddenDsts returns the container paths at which mounts expose the hidden
+// host paths.
+func hiddenDsts(mounts []agentdir.Mount, hidden []string) []string {
+	var out []string
+	for _, h := range hidden {
+		for _, m := range mounts {
+			rel, err := filepath.Rel(m.Src, h)
+			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				continue
+			}
+			dst := filepath.Join(m.Dst, rel)
+			if !slices.Contains(out, dst) {
+				out = append(out, dst)
+			}
+		}
+	}
+	return out
 }
 
 // HostAddr implements [Runner]. Docker Desktop forwards host.docker.internal

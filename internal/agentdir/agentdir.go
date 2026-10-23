@@ -93,6 +93,9 @@ func (d Dir) HomeDir() string { return filepath.Join(d.StateDir(), "home") }
 // LogPath returns the path of the server log.
 func (d Dir) LogPath() string { return filepath.Join(d.StateDir(), "server.log") }
 
+// LockPath returns the path of the file the running server holds locked.
+func (d Dir) LockPath() string { return filepath.Join(d.StateDir(), "server.lock") }
+
 // PIDPath returns the path of the file holding the PID of the running server.
 func (d Dir) PIDPath() string { return filepath.Join(d.StateDir(), "server.pid") }
 

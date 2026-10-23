@@ -162,7 +162,7 @@ On its first run, the bot pairs with `a2a pair add` and gets a node token.
 Store that token where the bot keeps secrets, as `A2A_RELAY_TOKEN`: it
 includes the agent's URL, so it is the only setting the bot needs on later
 wakes. Each wake is a JSON body with `kind`, `taskId`, `text` and
-`instructions`, signed with `X-A2A-Signature`, and the bot answers with:
+`instructions`, signed with `X-A2A-Serve-Signature`, and the bot answers with:
 
 ```bash
 a2a relay reply <taskId> --final "Here is what I found: ..."

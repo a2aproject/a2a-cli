@@ -95,6 +95,7 @@ func (s *Server) newExecutor(ctx context.Context, harnessLog io.Writer) (a2asrv.
 			Name:     "a2a-" + cfg.Name + "-" + s.dir.ID(),
 			Image:    image,
 			Mounts:   mounts,
+			Hidden:   []string{s.dir.Path()},
 			Home:     s.dir.HomeDir(),
 			Env:      env,
 			Limits:   harness.Limits{Memory: cfg.Limits.Memory, CPUs: cfg.Limits.CPUs, PIDs: cfg.Limits.PIDs},

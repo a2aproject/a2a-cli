@@ -18,10 +18,12 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 
+	"github.com/a2aproject/a2a-cli/internal/agentdir"
 	"github.com/a2aproject/a2a-cli/internal/auth"
 )
 
@@ -124,6 +126,28 @@ func TestConformanceRestartAndResume(t *testing.T) {
 
 	ts2 := startServer(t, serverOpts{dir: root})
 	wantResult(t, send(t, ts2.client(token), userText("recall", "", first.ContextID)), a2a.TaskStateCompleted, "You said: green")
+}
+
+func TestSecondServerInSameDirFailsWithoutSideEffects(t *testing.T) {
+	t.Parallel()
+	ts := startServer(t, serverOpts{})
+	c := ts.client(ts.pair("me", auth.RoleOwner))
+	task := send(t, c, userText("ask", "", ""))
+	if task.Status.State != a2a.TaskStateInputRequired {
+		t.Fatalf("task state = %s, want input-required", task.Status.State)
+	}
+
+	cfg, err := ts.dir.LoadConfig()
+	if err != nil {
+		t.Fatalf("LoadConfig() error = %v", err)
+	}
+	err = Run(context.Background(), Options{Dir: ts.dir, Config: cfg, Secrets: agentdir.Secrets{}})
+	if err == nil || !strings.Contains(err.Error(), "already running") {
+		t.Fatalf("Run() error = %v, want an already running error", err)
+	}
+
+	got := waitState(t, c, task.ID, a2a.TaskStateInputRequired)
+	wantResult(t, send(t, c, userText("approve", string(got.ID), got.ContextID)), a2a.TaskStateCompleted, "Pushed (allow).")
 }
 
 func TestConformanceCrashRestartsAgent(t *testing.T) {

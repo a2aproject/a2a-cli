@@ -65,6 +65,22 @@ func WithLock(path string, fn func() error) (err error) {
 	return fn()
 }
 
+// ErrLocked is returned by TryLock when another holder has the lock.
+var ErrLocked = errors.New("locked by another process")
+
+// TryLock takes an exclusive advisory lock on path without waiting, and
+// returns the function that releases it.
+func TryLock(path string) (release func() error, err error) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := tryLock(f); err != nil {
+		return nil, errors.Join(err, f.Close())
+	}
+	return func() error { return errors.Join(unlock(f), f.Close()) }, nil
+}
+
 func removeIfExists(path string) error {
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
