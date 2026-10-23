@@ -1,6 +1,6 @@
 module github.com/a2aproject/a2a-cli
 
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/a2aproject/a2a-go v0.3.15
@@ -21,7 +21,7 @@ require (
 	google.golang.org/grpc v1.84.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.61.0
-	tailscale.com v1.102.0
+	tailscale.com v1.102.5
 )
 
 require (
