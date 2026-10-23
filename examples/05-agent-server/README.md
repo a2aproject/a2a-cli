@@ -9,7 +9,7 @@ agent, opencode or Claude Code, from its project directory with
 ## What you'll learn
 
 - How to start a coding agent as an A2A server, and where it keeps its state
-- How pairing gives you a token for it
+- How you get a token for it, and how pairing gives one to others
 - How the agent asks before a tool call, and how you approve it
 - How one agent calls another
 
@@ -59,29 +59,23 @@ coder (opencode) running for 12s, pid 41233
   local    http://127.0.0.1:46757
 ```
 
-## 3. Pair with it
+## 3. Point the CLI at it
 
-Every A2A request needs a token. Mint a one-time code as the owner, then
-exchange it:
-
-```bash
-a2a server pair --name me --role owner
-```
+Every A2A request needs a token. On start, the server saves an owner token
+for its local URL in your `~/.config/a2a-cli/credentials.json`, so commands
+you run on this machine attach it without pairing. Terminal A shows:
 
 ```
-→ code K7Q2-9XF4 (15 min, single use)
-  caller: a2a pair add http://127.0.0.1:46757 K7Q2-9XF4
+→ call it from this machine: a2a send -a http://127.0.0.1:46757 "…"
 ```
 
-Run the printed command:
+Other people and other machines need an invitation:
+`a2a server pair invite <name>` prints a one-time code, which they redeem
+with `a2a pair add <agent-url> <code>`. Step 7 does the same for another
+agent.
 
-```bash
-a2a pair add http://127.0.0.1:46757 K7Q2-9XF4
-```
-
-The token is saved in `~/.config/a2a-cli/credentials.json`, and every later
-command for this URL attaches it. Set the agent card once so the commands
-below stay short, and give the agent time to think:
+Set the agent card once so the commands below stay short, and give the agent
+time to think:
 
 ```bash
 cat > .env <<'EOF'
@@ -142,7 +136,7 @@ and redeem it as a contact on coder's side.
 ```bash
 cd ~/a2a-lesson5/reviewer
 a2a server status                  # note reviewer's local URL
-a2a server pair --name coder       # prints a code
+a2a server pair invite coder       # prints a code
 
 cd ~/a2a-lesson5/coder
 a2a server contact add reviewer --url <reviewer-url> --code <code>
@@ -163,7 +157,7 @@ the sandbox. If reviewer needs an approval, the request reaches you, not coder.
 ```bash
 cd ~/a2a-lesson5/coder && a2a server stop
 cd ~/a2a-lesson5/reviewer && a2a server stop
-a2a pair rm http://127.0.0.1:46757
+a2a pair rm http://127.0.0.1:46757    # the owner token of this machine
 ```
 
 Everything an agent keeps is in `.a2a/` in its workspace; delete the

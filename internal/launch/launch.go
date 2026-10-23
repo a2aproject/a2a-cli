@@ -30,6 +30,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
 	"github.com/a2aproject/a2a-cli/internal/agentsrv"
 	"github.com/a2aproject/a2a-cli/internal/controlapi"
+	"github.com/a2aproject/a2a-cli/internal/credstore"
 	"github.com/a2aproject/a2a-cli/internal/service"
 )
 
@@ -39,9 +40,10 @@ const maxLogSize = 10 << 20
 // Foreground runs the agent of dir until ctx ends. Progress, including the
 // output of pulling or building the harness image, goes to out; logs and the
 // harness's stderr go to state/server.log, and also to stderr when verbose.
-// quiet keeps the image output in the log only. ready, if set, is called once
-// the agent serves.
-func Foreground(ctx context.Context, dir agentdir.Dir, out io.Writer, verbose, quiet bool, ready func()) error {
+// quiet keeps the image output in the log only. creds, if set, receives an
+// owner token for the local URL. ready, if set, is called once the agent
+// serves.
+func Foreground(ctx context.Context, dir agentdir.Dir, out io.Writer, verbose, quiet bool, creds *credstore.Store, ready func()) error {
 	cfg, err := dir.LoadConfig()
 	if err != nil {
 		return err
@@ -70,7 +72,7 @@ func Foreground(ctx context.Context, dir agentdir.Dir, out io.Writer, verbose, q
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(logOut, &slog.HandlerOptions{Level: level})))
 	slog.Info("starting agent server", "name", cfg.Name, "harness", cfg.Harness, "dir", dir.Root)
-	opts := agentsrv.Options{Dir: dir, Config: cfg, Secrets: secrets, Out: out, HarnessLog: logOut, ImageProgress: out}
+	opts := agentsrv.Options{Dir: dir, Config: cfg, Secrets: secrets, Out: out, HarnessLog: logOut, ImageProgress: out, Credentials: creds}
 	if quiet {
 		lw := &logLines{msg: "harness image"}
 		defer lw.flush()

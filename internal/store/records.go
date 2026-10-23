@@ -288,6 +288,12 @@ func (s *Store) Tokens(ctx context.Context) ([]Token, error) {
 	return out, rows.Err()
 }
 
+// DeleteTokens deletes the tokens issued to name, keeping its user and links.
+func (s *Store) DeleteTokens(ctx context.Context, name string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM tokens WHERE name = ?`, name)
+	return err
+}
+
 // RevokeTokens deletes the tokens and channel links made with the pairing
 // name, and the user of principal with its links. It returns the number of
 // tokens and links deleted.

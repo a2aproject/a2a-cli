@@ -30,12 +30,19 @@ the foreground. Later runs, from the project or a subdirectory, are just
 `a2a server`. Run `a2a server` without flags in a new directory and it asks
 a few questions instead.
 
-Let yourself call it from another terminal:
+On start, the server saves an owner token for its local URL in your
+`~/.config/a2a-cli/credentials.json` and prints how to call it, so from
+another terminal on the same machine:
 
 ```sh
-a2a server pair --name me                      # in ~/src/app: prints a one-time code
-a2a pair add http://127.0.0.1:<port> <code>    # saves a token for that URL
 a2a send -a http://127.0.0.1:<port> "What does this project do?"
+```
+
+Anyone else needs an invitation:
+
+```sh
+a2a server pair invite anna                    # in ~/src/app: prints a one-time code
+a2a pair add <agent-url> <code>                # on anna's side: saves a token for that URL
 ```
 
 `a2a send`, `a2a task …` and `a2a card get` attach the saved token
@@ -88,7 +95,7 @@ or service process doesn't depend on your shell's environment.
 | `a2a server --service` | Installs and starts a systemd (Linux) or launchd (macOS) user service. |
 | `a2a server status` | URLs, channels, owner links, task counts. |
 | `a2a server logs [-f]` | The server and harness log. |
-| `a2a server stop [--uninstall]` | Stops it; `--uninstall` also removes the service. |
+| `a2a server stop [--uninstall]` | Stops it, detached or as a service; `--uninstall` also removes the service. |
 
 ## Sandbox
 
@@ -108,7 +115,9 @@ pulled, the server builds it from the Dockerfile bundled in the binary
 (`internal/harness/images`). `--image` uses another image.
 
 `--sandbox local` runs the harness on the host, for trusted setups or when
-Docker isn't available.
+Docker isn't available. It runs as you, so it can read your
+`~/.config/a2a-cli/credentials.json`, including the owner token of this
+machine.
 
 The harness calls other agents with the `a2a` CLI, through the server (see
 [Agent to agent](#agent-to-agent)), over a Unix socket that only the harness
@@ -149,6 +158,7 @@ Answer with a message on the same task: the option ID or label, `approve`,
 
 | Caller | How it is recognized | Principal |
 | --- | --- | --- |
+| You, on the machine running the agent | The owner token the server saves in your a2a credentials | `user:owner` |
 | Messenger account | Linked once with a pairing code | `user:owner` or `pair:<name>` |
 | Your machines on the tailnet | Tailscale `WhoIs`: the same user as the agent | `user:owner` |
 | Other tailnet users | `network.identities` in `config.yaml`, or the `a2aproject.org/cap/a2a` app capability | `user:<login>` |
@@ -156,8 +166,8 @@ Answer with a message on the same task: the option ID or label, `approve`,
 | [Webhook nodes](#webhook-nodes) | Their node token, as members | `node:<name>` |
 
 ```sh
-a2a server pair --name grok                 # member: can talk to the agent
-a2a server pair --name anna --role owner    # owner: can also approve
+a2a server pair invite grok                 # member: can talk to the agent
+a2a server pair invite anna --role owner    # owner: can also approve
 a2a server pair list                        # list issued tokens
 a2a server pair rm grok                     # revoke its tokens and messenger links
 ```
@@ -165,6 +175,10 @@ a2a server pair rm grok                     # revoke its tokens and messenger li
 A code works once, for 15 minutes. The caller exchanges it with
 `a2a pair add <agent-url> <code>`, or sends `link <code>` to the agent's bot.
 The agent card and `/pair` are public; every A2A request needs a principal.
+
+The owner token the server saves for this machine is listed as `local`.
+`a2a server pair rm local` revokes it, and the next start issues a new one;
+the name `local` can't be invited.
 
 ## Networks
 
@@ -266,15 +280,15 @@ An agent can host agents that only run when woken, such as a Grok Bot
 routine. A node is a pairing with a webhook:
 
 ```sh
-a2a server pair --name grok --webhook https://<grok routine webhook URL> \
+a2a server pair invite grok --webhook https://<grok routine webhook URL> \
   --webhook-header "Authorization: Bearer env:GROK_WEBHOOK_TOKEN"
 # → a message for the agent behind the webhook: its skill URL and a pairing code
-a2a server pair --name grok          # a new code, if the node lost its token
+a2a server pair invite grok          # a new code, if the node lost its token
 a2a server pair list                 # callers and nodes
 a2a server pair rm grok
 ```
 
-Running `pair --webhook` again for an existing node updates it, and its
+Running `pair invite --webhook` again for an existing node updates it, and its
 previous token stops working.
 
 The agent calls the node as `grok` (`a2a send -a http://a2a/<handle>/grok`), and it is at

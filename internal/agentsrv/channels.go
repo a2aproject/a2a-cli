@@ -15,6 +15,7 @@
 package agentsrv
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
@@ -60,6 +61,29 @@ func (s *Server) buildChannels() ([]channel.Channel, error) {
 }
 
 func (s *Server) buildChannel(cfg *agentdir.Config, secrets agentdir.Secrets, kind string) (channel.Channel, error) {
+	return newChannel(cfg, secrets, kind, s.store.ChannelState(), s.telegramServerURL)
+}
+
+// ValidateChannel checks the credentials of the channel of kind configured
+// in cfg, such as a bot token, without starting it.
+func ValidateChannel(ctx context.Context, cfg *agentdir.Config, secrets agentdir.Secrets, kind string) error {
+	ch, err := newChannel(cfg, secrets, kind, nil, "")
+	if err != nil {
+		return err
+	}
+	return validateChannel(ctx, ch)
+}
+
+func validateChannel(ctx context.Context, ch channel.Channel) error {
+	if v, ok := ch.(channel.Validator); ok {
+		return v.Validate(ctx)
+	}
+	return nil
+}
+
+// newChannel creates the channel of kind configured in cfg. kv keeps the
+// channel's state; telegramURL overrides the Telegram Bot API URL.
+func newChannel(cfg *agentdir.Config, secrets agentdir.Secrets, kind string, kv channel.KV, telegramURL string) (channel.Channel, error) {
 	switch kind {
 	case ChannelTelegram:
 		if cfg.Channels.Telegram == nil {
@@ -69,7 +93,9 @@ func (s *Server) buildChannel(cfg *agentdir.Config, secrets agentdir.Secrets, ki
 		if err != nil {
 			return nil, fmt.Errorf("telegram: %w", err)
 		}
-		return telegram.New(tok), nil
+		ch := telegram.New(tok)
+		ch.ServerURL = telegramURL
+		return ch, nil
 	case ChannelDiscord:
 		if cfg.Channels.Discord == nil {
 			return nil, fmt.Errorf("discord is not configured")
@@ -78,7 +104,7 @@ func (s *Server) buildChannel(cfg *agentdir.Config, secrets agentdir.Secrets, ki
 		if err != nil {
 			return nil, fmt.Errorf("discord: %w", err)
 		}
-		return discord.New(tok, s.store.ChannelState()), nil
+		return discord.New(tok, kv), nil
 	case ChannelEmail:
 		ec := cfg.Channels.Email
 		if ec == nil {
@@ -94,7 +120,7 @@ func (s *Server) buildChannel(cfg *agentdir.Config, secrets agentdir.Secrets, ki
 		return email.New(email.Config{
 			Address: ec.Address, IMAP: ec.IMAP, SMTP: ec.SMTP, Username: ec.Username, Password: pw,
 			Mailbox: ec.Mailbox, TrustedAuthServ: ec.TrustedAuthServ,
-		}, s.store.ChannelState()), nil
+		}, kv), nil
 	}
 	return nil, fmt.Errorf("unknown channel %q: want telegram, discord or email", kind)
 }

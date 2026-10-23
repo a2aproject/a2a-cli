@@ -36,6 +36,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
 	"github.com/a2aproject/a2a-cli/internal/channel"
 	"github.com/a2aproject/a2a-cli/internal/controlapi"
+	"github.com/a2aproject/a2a-cli/internal/credstore"
 	"github.com/a2aproject/a2a-cli/internal/harness"
 )
 
@@ -74,10 +75,12 @@ type testServer struct {
 }
 
 type serverOpts struct {
-	name     string
-	dir      string
-	channel  *fakeChannel
-	approver string
+	name        string
+	dir         string
+	channel     *fakeChannel
+	approver    string
+	credentials *credstore.Store
+	telegramAPI string
 }
 
 // startServer starts an agent server and stops it when the test ends.
@@ -117,7 +120,7 @@ func startServer(t *testing.T, o serverOpts) *testServer {
 	}
 	ts := &testServer{t: t, dir: dir, ch: o.channel, done: make(chan error, 1)}
 	ready := make(chan *Server, 1)
-	opts := Options{Dir: dir, Config: cfg, Secrets: agentdir.Secrets{}, Ready: func(s *Server) { ready <- s }}
+	opts := Options{Dir: dir, Config: cfg, Secrets: agentdir.Secrets{}, Credentials: o.credentials, TelegramServerURL: o.telegramAPI, Ready: func(s *Server) { ready <- s }}
 	if o.channel != nil {
 		opts.Channels = []channel.Channel{o.channel}
 	}

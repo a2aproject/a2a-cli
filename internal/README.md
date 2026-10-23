@@ -271,9 +271,9 @@ Streams events to stdout until the task reaches a terminal state. Output format 
 |---|---|
 | `server <harness>` | Save the flags to `.a2a/config.yaml` and start the agent. `--detach`, `--service`. |
 | `server` | Start the agent of the nearest `.a2a/` directory (or `--dir`). Asks a few questions on a first run in a terminal. |
-| `server status` / `logs [-f]` / `stop [--uninstall]` | Manage the running agent. |
-| `server pair --name <who> [--role owner]` | Mint a one-time code for a caller or a messenger account. |
-| `server pair --name <id> --webhook <url>` | Host a webhook node and mint its code; without `--webhook`, a new code for an existing node. |
+| `server status` / `logs [-f]` / `stop [--uninstall]` | Manage the running agent; `stop --uninstall` also removes its service. |
+| `server pair invite <who> [--role owner]` | Create a one-time code for a caller or a messenger account. The user running the server needs none: the server saves an owner token for its local URL. |
+| `server pair invite <id> --webhook <url>` | Host a webhook node and create its code; without `--webhook`, a new code for an existing node. |
 | `server pair list` / `pair rm <name>` | List callers and nodes, or revoke a caller / remove a node. |
 | `server peers` | Agents found on the private network. |
 | `server contact add\|list\|rm` | Agents this agent may call with the `a2a` CLI, through the server. |

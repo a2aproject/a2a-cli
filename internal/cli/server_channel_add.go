@@ -15,12 +15,15 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"maps"
 
 	"github.com/spf13/cobra"
 
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
+	"github.com/a2aproject/a2a-cli/internal/agentsrv"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/controlapi"
 )
@@ -56,17 +59,19 @@ func newServerChannelAddCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
 			if args[0] != agentdir.ChannelEmail && token == "" {
 				return clierr.Usage("--token is required")
 			}
-			if err := saveSettings(d, s); err != nil {
-				return err
+			conf, secrets, err := d.ApplySettings(s)
+			var se *agentdir.SettingsError
+			if errors.As(err, &se) {
+				return clierr.Usage(se.Error())
 			}
-			conf, err := d.LoadConfig()
 			if err != nil {
 				return err
 			}
-			st, err := controlapi.NewClient(d).AddChannel(cmd.Context(), controlapi.ChannelRequestFromConfig(conf, args[0]))
+			req := controlapi.ChannelRequestFromConfig(conf, args[0])
+			req.Secrets = secrets
+			st, err := controlapi.NewClient(d).AddChannel(cmd.Context(), req)
 			if errors.Is(err, controlapi.ErrNotRunning) {
-				_, err := fmt.Fprintf(cfg.Out, "✓ saved %s; it starts with the agent (a2a server)\n", args[0])
-				return err
+				return addChannelOffline(cmd.Context(), cfg, d, conf, secrets, args[0])
 			}
 			if err != nil {
 				return err
@@ -88,4 +93,25 @@ func newServerChannelAddCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
 	f.StringVar(&email.Mailbox, "mailbox", "", "Email: mailbox to watch (default INBOX)")
 	f.StringVar(&email.TrustedAuthServ, "trusted-authserv", "", "Email: authserv-id of your mail server's Authentication-Results")
 	return cmd
+}
+
+// addChannelOffline checks the channel's credentials before saving it for
+// the next start, since no running agent can check them.
+func addChannelOffline(ctx context.Context, cfg *globalConfig, d agentdir.Dir, conf *agentdir.Config, secrets agentdir.Secrets, kind string) error {
+	all, err := d.LoadSecrets()
+	if err != nil {
+		return err
+	}
+	maps.Copy(all, secrets)
+	if err := agentsrv.ValidateChannel(ctx, conf, all, kind); err != nil {
+		return err
+	}
+	if err := d.SaveSecrets(secrets); err != nil {
+		return err
+	}
+	if err := d.SaveConfig(conf); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(cfg.Out, "✓ saved %s; it starts with the agent (a2a server)\n", kind)
+	return err
 }

@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"os"
@@ -31,7 +32,6 @@ import (
 
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
 	"github.com/a2aproject/a2a-cli/internal/auth"
-	"github.com/a2aproject/a2a-cli/internal/channel"
 	"github.com/a2aproject/a2a-cli/internal/controlapi"
 	"github.com/a2aproject/a2a-cli/internal/fsutil"
 	"github.com/a2aproject/a2a-cli/internal/jsonhttp"
@@ -147,7 +147,11 @@ func (s *Server) ctlPair(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" || strings.ContainsAny(req.Name, " /:") {
-		jsonhttp.Error(w, http.StatusBadRequest, "--name must be non-empty, without spaces, slashes or colons")
+		jsonhttp.Error(w, http.StatusBadRequest, "the name must be non-empty, without spaces, slashes or colons")
+		return
+	}
+	if req.Name == localOwnerName {
+		jsonhttp.Error(w, http.StatusBadRequest, fmt.Sprintf("%q is reserved for the owner token of this machine; pick another name", localOwnerName))
 		return
 	}
 	_, err := s.store.Node(r.Context(), req.Name)
@@ -315,6 +319,7 @@ func (s *Server) ctlAddChannel(w http.ResponseWriter, r *http.Request) {
 		jsonhttp.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	maps.Copy(secrets, req.Secrets)
 	next := s.config()
 	if err := next.SetChannel(req.Kind, req.Token, req.Email); err != nil {
 		jsonhttp.Error(w, http.StatusBadRequest, err.Error())
@@ -325,11 +330,13 @@ func (s *Server) ctlAddChannel(w http.ResponseWriter, r *http.Request) {
 		jsonhttp.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if v, ok := ch.(channel.Validator); ok {
-		if err := v.Validate(r.Context()); err != nil {
-			jsonhttp.Error(w, http.StatusBadRequest, err.Error())
-			return
-		}
+	if err := validateChannel(r.Context(), ch); err != nil {
+		jsonhttp.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.dir.SaveSecrets(req.Secrets); err != nil {
+		jsonhttp.Error(w, http.StatusInternalServerError, err.Error())
+		return
 	}
 	s.cfgMu.Lock()
 	s.secrets = secrets

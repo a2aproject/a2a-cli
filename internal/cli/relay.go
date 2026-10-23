@@ -34,7 +34,7 @@ func newRelayCmd(cfg *globalConfig) *cobra.Command {
 		Use:   "relay",
 		Short: "Answer tasks as a webhook node hosted by an agent server",
 		Long: `Commands a webhook node runs: an agent which only runs when woken, such as a
-Grok Bot routine, hosted by an agent server ("a2a server pair --webhook" on its side).
+Grok Bot routine, hosted by an agent server ("a2a server pair invite --webhook" on its side).
 The node pairs once with "a2a pair add <agent-url> <code>", then answers each
 wake with reply.
 

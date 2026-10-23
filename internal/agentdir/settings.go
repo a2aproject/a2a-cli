@@ -198,18 +198,28 @@ func (e *SettingsError) Error() string { return e.Err.Error() }
 
 func (e *SettingsError) Unwrap() error { return e.Err }
 
-// SaveSettings merges start flags into the agent's config and secrets.
-func (d Dir) SaveSettings(s Settings) error {
+// ApplySettings returns the agent's config with start flags merged in, and
+// the secrets to store with it, without saving either.
+func (d Dir) ApplySettings(s Settings) (*Config, Secrets, error) {
 	conf := &Config{}
 	if d.Exists() {
 		var err error
 		if conf, err = d.LoadConfig(); err != nil {
-			return err
+			return nil, nil, err
 		}
 	}
 	secrets, err := s.Apply(conf, d.DefaultName())
 	if err != nil {
-		return &SettingsError{Err: err}
+		return nil, nil, &SettingsError{Err: err}
+	}
+	return conf, secrets, nil
+}
+
+// SaveSettings merges start flags into the agent's config and secrets.
+func (d Dir) SaveSettings(s Settings) error {
+	conf, secrets, err := d.ApplySettings(s)
+	if err != nil {
+		return err
 	}
 	if err := d.SaveSecrets(secrets); err != nil {
 		return err

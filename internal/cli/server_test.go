@@ -71,6 +71,7 @@ func runCMDWithCreds(t *testing.T, creds *credstore.Store, args ...string) (stri
 		credentials: creds,
 	}
 	root := mustNewRoot(t, cfg, deps{poller: polling.Stream, cfgLoader: clicfg.LoadEmpty})
+	root.SetOut(&buf)
 	root.SetArgs(args)
 	err := root.Execute()
 	return buf.String(), err
@@ -116,13 +117,21 @@ func TestServerPairAndSend(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	out, err := runCMDWithCreds(t, creds, "server", "pair", "--dir", dir, "--name", "me", "--role", "owner")
+	out, err := runCMDWithCreds(t, creds, "send", "-a", status.Local, "hello")
+	if err != nil || !strings.Contains(out, "Hello from fakeacp.") {
+		t.Fatalf("a2a send with the owner token of this machine = %q, %v, want the agent's answer", out, err)
+	}
+	if out, err := runCMDWithCreds(t, creds, "server", "pair", "--dir", dir); err != nil || !strings.Contains(out, "invite") {
+		t.Fatalf("a2a server pair = %q, %v, want help listing invite", out, err)
+	}
+
+	out, err = runCMDWithCreds(t, creds, "server", "pair", "invite", "me", "--dir", dir, "--role", "owner")
 	if err != nil {
-		t.Fatalf("a2a server pair error = %v", err)
+		t.Fatalf("a2a server pair invite error = %v", err)
 	}
 	code := regexp.MustCompile(`code ([A-Z0-9]{4}-[A-Z0-9]{4})`).FindStringSubmatch(out)
 	if code == nil {
-		t.Fatalf("a2a server pair = %q, want a code", out)
+		t.Fatalf("a2a server pair invite = %q, want a code", out)
 	}
 	if _, err := runCMDWithCreds(t, creds, "pair", "add", status.Local, code[1]); err != nil {
 		t.Fatalf("a2a pair add error = %v", err)
@@ -138,13 +147,13 @@ func TestServerPairAndSend(t *testing.T) {
 		t.Fatalf("a2a send without a token error = nil, want error")
 	}
 
-	out, err = runCMDWithCreds(t, creds, "server", "pair", "--dir", dir, "--name", "grok", "--webhook", "https://example.com/hook")
+	out, err = runCMDWithCreds(t, creds, "server", "pair", "invite", "grok", "--dir", dir, "--webhook", "https://example.com/hook")
 	if err != nil {
-		t.Fatalf("a2a server pair --webhook error = %v", err)
+		t.Fatalf("a2a server pair invite --webhook error = %v", err)
 	}
 	code = regexp.MustCompile(`of the agent at (\S+)\.\n.*\n.*Your pairing code is ([A-Z0-9]{4}-[A-Z0-9]{4})\.`).FindStringSubmatch(out)
 	if code == nil {
-		t.Fatalf("a2a server pair --webhook = %q, want the node's instructions", out)
+		t.Fatalf("a2a server pair invite --webhook = %q, want the node's instructions", out)
 	}
 	if out, err := runCMDWithCreds(t, creds, "pair", "add", code[1], code[2]); err != nil || !strings.Contains(out, "node grok") {
 		t.Fatalf("a2a pair add with a node code = %q, %v, want the node token", out, err)
@@ -169,8 +178,9 @@ func TestServerPairAndSend(t *testing.T) {
 		t.Fatalf("a2a send after a2a server pair rm error = nil, want error")
 	}
 
-	if _, err := runCMDWithCreds(t, creds, "server", "stop", "--dir", dir); err != nil {
-		t.Fatalf("a2a server stop error = %v", err)
+	out, err = runCMDWithCreds(t, creds, "server", "stop", "--uninstall", "--dir", dir)
+	if err != nil || !strings.Contains(out, "stopped coder") || !strings.Contains(out, "no service was installed") {
+		t.Fatalf("a2a server stop --uninstall = %q, %v, want the agent stopped and no service removed", out, err)
 	}
 	select {
 	case err := <-done:

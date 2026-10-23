@@ -212,7 +212,11 @@ func runAgent(ctx context.Context, cfg *globalConfig, d agentdir.Dir, m runMode)
 	}
 	ctx, stop := signalContext(ctx)
 	defer stop()
-	return launch.Foreground(ctx, d, cfg.Out, cfg.verbose, m.quiet, func() {
+	creds, err := cfg.credentialStore()
+	if err != nil {
+		slog.Warn("no credential store for the owner token of this machine", "error", err)
+	}
+	return launch.Foreground(ctx, d, cfg.Out, cfg.verbose, m.quiet, creds, func() {
 		if _, err := fmt.Fprintln(cfg.Out, "  (running in the foreground; Ctrl-C to stop, or start with --detach)"); err != nil {
 			slog.Debug("writing progress", "error", err)
 		}

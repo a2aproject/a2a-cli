@@ -78,7 +78,8 @@ Serve a coding agent over A2A, from its project directory:
 ```bash
 cd ~/src/app
 a2a server opencode --name coder --secret OPENROUTER_API_KEY --private tailscale --telegram env:CODER_BOT_TOKEN
-a2a server pair --name me          # one-time code; then: a2a pair add <agent-url> <code>
+a2a send -a http://127.0.0.1:<port> "What does this project do?"   # from this machine: no pairing
+a2a server pair invite anna        # a one-time code for anyone else; they run: a2a pair add <agent-url> <code>
 ```
 
 See the **[agent server guide](./docs/agent-server.md)** and its **[architecture](./docs/agent-server-architecture.md)** for sandboxing, approvals, networks, messengers, agent-to-agent calls and webhook nodes, and the **[full command reference](./internal/README.md)** for all commands, flags, configuration, and server mode.

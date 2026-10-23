@@ -38,6 +38,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/agentsrv/nodes"
 	"github.com/a2aproject/a2a-cli/internal/auth"
 	"github.com/a2aproject/a2a-cli/internal/channel"
+	"github.com/a2aproject/a2a-cli/internal/credstore"
 	"github.com/a2aproject/a2a-cli/internal/fsutil"
 	"github.com/a2aproject/a2a-cli/internal/network"
 	"github.com/a2aproject/a2a-cli/internal/store"
@@ -59,6 +60,11 @@ type Options struct {
 	Executor a2asrv.AgentExecutor
 	// Channels replace the channels from the config, for tests.
 	Channels []channel.Channel
+	// Credentials, if set, receive an owner token for the local URL, so the
+	// user running the server can call it from this machine.
+	Credentials *credstore.Store
+	// TelegramServerURL overrides the Telegram Bot API URL, for tests.
+	TelegramServerURL string
 	// Ready is called with the server once it serves requests.
 	Ready func(*Server)
 }
@@ -83,6 +89,9 @@ type Server struct {
 	private network.Provider
 	public  network.Provider
 	bridge  harnessBridge
+
+	credentials       *credstore.Store
+	telegramServerURL string
 
 	urlMu      sync.Mutex
 	localURL   string
@@ -137,6 +146,9 @@ func Run(ctx context.Context, opts Options) error {
 		started: time.Now(),
 		cancel:  cancel,
 		bus:     newEventBus(),
+
+		credentials:       opts.Credentials,
+		telegramServerURL: opts.TelegramServerURL,
 
 		pairFailures: newFailureLimiter(10, time.Minute),
 	}
@@ -429,6 +441,13 @@ func (s *Server) printSummary(ctx context.Context) error {
 	}
 	if public != "" {
 		s.logf("✓ public   %s", public)
+	}
+	if s.credentials != nil {
+		if err := s.saveLocalOwnerToken(ctx); err != nil {
+			s.logf("! saving an owner token for this machine: %v", err)
+		} else {
+			s.logf("→ call it from this machine: a2a send -a %s \"…\"", local)
+		}
 	}
 	return s.router.announce(ctx)
 }

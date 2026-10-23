@@ -124,7 +124,7 @@ a2a send -a https://coder.your-tailnet.ts.net "What's in notes.md?"
 ```
 
 Other people get a code from you, as in lesson 5:
-`a2a server pair --name anna`, and then they run `a2a pair add` with it.
+`a2a server pair invite anna`, and then they run `a2a pair add` with it.
 
 ## 6. Add the Grok bot as a webhook node
 
@@ -136,7 +136,7 @@ In the agent's directory, add the node. Header values can be `env:VAR`:
 
 ```bash
 export GROK_WEBHOOK_TOKEN=<token your Grok webhook expects>
-a2a server pair --name grok \
+a2a server pair invite grok \
   --webhook <your Grok bot's webhook URL> \
   --webhook-header "Authorization: Bearer env:GROK_WEBHOOK_TOKEN" \
   --description "Grok: web search and current events"
@@ -189,7 +189,7 @@ a2a server pair list
 ```
 
 The `grok` row shows `node:grok`. It says `not paired` until the bot has
-redeemed its code. If the code expired, run `a2a server pair --name grok`
+redeemed its code. If the code expired, run `a2a server pair invite grok`
 again for a new one.
 
 ## 8. Delegate to Grok from Telegram
@@ -235,7 +235,7 @@ a2a server logs -f
 | The URL doesn't resolve | On the tailnet, the calling machine must run Tailscale with MagicDNS. From the internet, a new Funnel name can take several minutes to appear in public DNS; check with `dig <name> @8.8.8.8`. |
 | `! tailscale: getting the certificate` | HTTPS certificates on the DNS page (step 1); the error says what Tailscale rejected. |
 | The bot never answers | `a2a server logs`: a wake that failed shows the webhook's status, such as `webhook returned 401` for a wrong token. `a2a server pair list` shows whether the node is paired. |
-| The node lost its token | `a2a server pair --name grok` issues a new code; pairing replaces the old token. |
+| The node lost its token | `a2a server pair invite grok` issues a new code; pairing replaces the old token. |
 | Telegram is silent | Only one process can use a bot token; stop any other process using it. |
 
 ## Next steps

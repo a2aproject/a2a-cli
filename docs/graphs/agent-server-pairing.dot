@@ -12,8 +12,8 @@ digraph agent_server_pairing {
 
   subgraph cluster_mint {
     label="1. Mint (control socket)"; style="rounded,filled"; fillcolor="#fdf1e6"; color="#e0b48a";
-    PairCaller [label="a2a server pair --name anna\n[--role owner]"];
-    PairNode   [label="a2a server pair --name grok\n--webhook <url>"];
+    PairCaller [label="a2a server pair invite anna\n[--role owner]"];
+    PairNode   [label="a2a server pair invite grok\n--webhook <url>"];
     Code       [label="one-time code K7Q2-9XF4\n15 min, single use\npurpose: pair or node", shape=note, fillcolor="#fff7d6"];
   }
 
@@ -43,10 +43,11 @@ digraph agent_server_pairing {
     POwner  [label="user:owner\nanswers approvals"];
     PPair   [label="pair:<name>\nmember (talks) or owner"];
     PUser   [label="user:<login>\ntailnet user from\nnetwork.identities or app cap"];
-    PNode   [label="node:<id>\nonly the /relay API"];
+    PNode   [label="node:<id>\nthe /relay API, and\ncalls the agent as a member"];
   }
 
   Tailnet [label="Tailscale WhoIs\non the private listener", shape=ellipse, fillcolor="#e3f4e3"];
+  Start   [label="a2a server, on start:\nowner token \"local\"\nfor the local URL", shape=ellipse, fillcolor="#e3f4e3"];
 
   Owner -> PairCaller; Owner -> PairNode;
   PairCaller -> Code; PairNode -> Code;
@@ -63,6 +64,9 @@ digraph agent_server_pairing {
   NodeT -> PNode;
   Tailnet -> POwner [label="same user as the agent:\nno code needed"];
   Tailnet -> PUser;
+  {rank=same; Owner; Start}
+  Start -> Tokens [label="no code needed"];
+  Start -> Creds [style=dashed, label="the user\nrunning it"];
 
   Revoke [label="a2a server pair rm <name>\nrevokes tokens and links,\nor removes a node", shape=note, fillcolor="#fff7d6"];
   Revoke -> Tokens [style=dotted]; Revoke -> Links [style=dotted]; Revoke -> NodeT [style=dotted];

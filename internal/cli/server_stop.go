@@ -17,6 +17,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -40,34 +41,41 @@ func newServerStopCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			client := controlapi.NewClient(d)
+			_, err = client.Status(cmd.Context())
+			running := err == nil
+			if err != nil && !errors.Is(err, controlapi.ErrNotRunning) {
+				return err
+			}
 			name := launch.ServiceName(d, conf)
-			if uninstall {
-				if !service.Installed(name) {
-					return fmt.Errorf("%s is not installed as a service", conf.Name)
-				}
+			installed := service.Installed(name)
+			if uninstall && installed {
 				if err := service.Uninstall(name); err != nil {
 					return err
 				}
-				_, err := fmt.Fprintf(cfg.Out, "✓ removed the %s service\n", conf.Name)
+			}
+			// A detached agent, or one the service manager didn't stop.
+			if err := client.Stop(cmd.Context()); err != nil && !errors.Is(err, controlapi.ErrNotRunning) {
 				return err
 			}
-			err = controlapi.NewClient(d).Stop(cmd.Context())
-			if errors.Is(err, controlapi.ErrNotRunning) {
-				_, err := fmt.Fprintf(cfg.Out, "%s is not running\n", conf.Name)
-				return err
+			var sb strings.Builder
+			if running {
+				fmt.Fprintf(&sb, "✓ stopped %s\n", conf.Name)
+			} else {
+				fmt.Fprintf(&sb, "%s is not running\n", conf.Name)
 			}
-			if err != nil {
-				return err
+			switch {
+			case uninstall && installed:
+				fmt.Fprintf(&sb, "✓ removed the %s service\n", conf.Name)
+			case uninstall:
+				sb.WriteString("  no service was installed\n")
+			case installed:
+				sb.WriteString("  it starts again at login; remove the service with `a2a server stop --uninstall`\n")
 			}
-			if _, err := fmt.Fprintf(cfg.Out, "✓ stopped %s\n", conf.Name); err != nil {
-				return err
-			}
-			if service.Installed(name) {
-				_, err = fmt.Fprintln(cfg.Out, "  it starts again at login; remove the service with `a2a server stop --uninstall`")
-			}
+			_, err = fmt.Fprint(cfg.Out, sb.String())
 			return err
 		},
 	}
-	cmd.Flags().BoolVar(&uninstall, "uninstall", false, "Stop and remove the launchd or systemd service")
+	cmd.Flags().BoolVar(&uninstall, "uninstall", false, "Also remove the launchd or systemd service")
 	return cmd
 }

@@ -325,7 +325,7 @@ func (r *Router) handle(ctx context.Context, in channel.Inbound) {
 	}
 	if !ok {
 		if in.Direct && in.Authentic {
-			r.reply(ctx, ch, in, "I don't know you yet. Ask my owner for a code (`a2a server pair --name <you>`), then send: link <code>")
+			r.reply(ctx, ch, in, "I don't know you yet. Ask my owner for a code (`a2a server pair invite <you>`), then send: link <code>")
 		}
 		return
 	}

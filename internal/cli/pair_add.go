@@ -29,11 +29,11 @@ func newPairAddCmd(cfg *globalConfig) *cobra.Command {
 	return &cobra.Command{
 		Use:   "add <agent-url> <code>",
 		Short: "Exchange a pairing code for a token and save it",
-		Long: `Exchange a pairing code from an agent's owner (a2a server pair) for a token.
+		Long: `Exchange a pairing code from an agent's owner (a2a server pair invite) for a token.
 The token is saved to ~/.config/a2a-cli/credentials.json, and later commands
 for the same agent, such as a2a send, attach it.
 
-A code for a webhook node (a2a server pair --webhook) returns a node token
+A code for a webhook node (a2a server pair invite --webhook) returns a node token
 instead, which the a2a relay commands use.`,
 		Example: "  a2a pair add https://assistant.tail1234.ts.net 3MZ8-LQ0D",
 		Args:    cobra.ExactArgs(2),

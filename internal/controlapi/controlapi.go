@@ -138,6 +138,9 @@ type ChannelRequest struct {
 	Kind  string                `json:"kind"`
 	Token string                `json:"token,omitempty"`
 	Email *agentdir.EmailConfig `json:"email,omitempty"`
+	// Secrets are new secret values the channel refers to. They are saved
+	// with the channel once it is validated.
+	Secrets agentdir.Secrets `json:"secrets,omitempty"`
 }
 
 // NodeInfo describes a webhook node.

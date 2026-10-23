@@ -69,8 +69,13 @@ The state is all in the agent directory:
 
 ![B. Pairing and identity](graphs/agent-server-pairing.png)
 
-Every way in starts with a code minted over the control socket, so only
-someone with access to the agent directory can hand out access.
+Every way in starts with a code minted over the control socket
+(`a2a server pair invite`), so only someone with access to the agent
+directory can hand out access. The one exception is the user running the
+server: on start, it saves an owner token named `local` for its local URL in
+that user's `~/.config/a2a-cli/credentials.json`. Loopback connections aren't
+trusted instead, because tunnels such as ngrok reach the server from
+loopback too.
 
 - **Callers** run `a2a pair add <agent-url> <code>`. The token (`a2p_...`) is
   saved in `~/.config/a2a-cli/credentials.json`, and later `a2a send`,
@@ -82,8 +87,9 @@ someone with access to the agent directory can hand out access.
   and keep the token in their own database. On the same tailnet no code is
   needed: the callee identifies the caller with `WhoIs`.
 - **Webhook nodes** redeem a node code with the same `a2a pair add`. Their
-  token (`a2rn.<api url>.<id>.<secret>`) carries the agent's URL and only
-  opens the `/relay/api`.
+  token (`a2rn.<api url>.<id>.<secret>`) carries the agent's URL, opens the
+  `/relay/api`, and authenticates the node's own A2A calls to the agent as a
+  member.
 
 Principals are `user:owner`, `pair:<name>` (member or owner role),
 `user:<login>` for other tailnet users allowed in `config.yaml`, and
