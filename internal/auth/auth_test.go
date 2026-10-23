@@ -115,6 +115,18 @@ func TestChainAuthenticate(t *testing.T) {
 			wantOK: true,
 		},
 		{
+			name:   "on-behalf-of ignored from other tailnet users",
+			req:    Request{Listener: network.ListenerPrivate, RemoteAddr: "100.1.1.2:5000", Header: header(HeaderOnBehalfOf, "user:owner", HeaderHops, "2")},
+			want:   Principal{ID: "user:anna@example.com", Roles: []string{RoleMember}, Hops: 2},
+			wantOK: true,
+		},
+		{
+			name:   "negative hops ignored",
+			req:    Request{Listener: network.ListenerPrivate, RemoteAddr: "100.1.1.1:5000", Header: header(HeaderHops, "-1000")},
+			want:   Principal{ID: OwnerID, Roles: []string{RoleOwner}},
+			wantOK: true,
+		},
+		{
 			name: "unknown tailnet user",
 			req:  Request{Listener: network.ListenerPrivate, RemoteAddr: "100.1.1.4:5000", Header: http.Header{}},
 		},
@@ -184,6 +196,44 @@ func TestLink(t *testing.T) {
 	links, err := s.LinksOf(ctx, OwnerID)
 	if err != nil || len(links) != 1 || links[0].Conv != "42" {
 		t.Fatalf("LinksOf() = %v, %v, want one link with conv 42", links, err)
+	}
+}
+
+func TestRevokeRemovesLinksOfPairing(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		role string
+	}{
+		{name: "member", role: RoleMember},
+		{name: "owner", role: RoleOwner},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := openStore(t)
+			ctx := context.Background()
+			chain := &Chain{Store: s}
+			in := &channel.Inbound{Channel: "telegram", Identity: "tg:42", Conv: "42", Direct: true, Authentic: true}
+			code, _, err := MintCode(ctx, s, PurposePair, "phone", tc.role)
+			if err != nil {
+				t.Fatalf("MintCode() error = %v", err)
+			}
+			if _, err := Link(ctx, s, in, code); err != nil {
+				t.Fatalf("Link() error = %v", err)
+			}
+
+			n, err := s.RevokeTokens(ctx, "phone", PrincipalForCode("phone", RoleMember))
+			if err != nil {
+				t.Fatalf("RevokeTokens() error = %v", err)
+			}
+			if n != 1 {
+				t.Fatalf("RevokeTokens() = %d, want 1", n)
+			}
+			if _, ok, err := chain.Authenticate(ctx, Request{Channel: in}); err != nil || ok {
+				t.Fatalf("Authenticate() after revoke = %v, %v, want false, nil", ok, err)
+			}
+		})
 	}
 }
 

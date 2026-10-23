@@ -17,6 +17,7 @@ package relayapi
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 )
@@ -49,12 +50,17 @@ func NodeClient(token string) (*Client, error) {
 	return &Client{BaseURL: base, Token: token}, nil
 }
 
-// Secret resolves an env:VAR reference to the value of VAR.
-func Secret(v string) string {
-	if name, ok := strings.CutPrefix(v, "env:"); ok {
-		return os.Getenv(name)
+// Secret resolves an env:VAR reference to the value of VAR, which must be set.
+func Secret(v string) (string, error) {
+	name, ok := strings.CutPrefix(v, "env:")
+	if !ok {
+		return v, nil
 	}
-	return v
+	val := os.Getenv(name)
+	if val == "" {
+		return "", fmt.Errorf("environment variable %s is empty", name)
+	}
+	return val, nil
 }
 
 // A node token is a2rn.<base64url node API base>.<node ID>.<secret>, so a

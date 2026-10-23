@@ -16,7 +16,10 @@ package agentsrv
 
 import (
 	"context"
+	"sync"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 
 	"github.com/a2aproject/a2a-cli/internal/auth"
 	"github.com/a2aproject/a2a-cli/internal/channel"
@@ -40,6 +43,45 @@ func TestRouterUnknownSenderGetsPairingHint(t *testing.T) {
 	ts.ch.waitFor(t, "dm9", hasText("I don't know you yet"))
 	ts.ch.write("tg:9", "dm9", "link AAAA-BBBB")
 	ts.ch.waitFor(t, "dm9", hasText("invalid or has expired"))
+}
+
+func TestRouterRestartsFailingChannel(t *testing.T) {
+	t.Parallel()
+	ch := newFakeChannel("fake")
+	ch.failures = 2
+	ts := startServer(t, serverOpts{channel: ch})
+	ts.ch.waitReady(t)
+	ts.ch.write("tg:9", "dm9", "hello")
+	ts.ch.waitFor(t, "dm9", hasText("I don't know you yet"))
+}
+
+func TestRouterPreparesOnlyAllowedSenders(t *testing.T) {
+	t.Parallel()
+	ts := startServer(t, serverOpts{channel: newFakeChannel("fake")})
+	linkOwner(t, ts, "tg:1", "dm1")
+	var mu sync.Mutex
+	prepared := map[string]bool{}
+	withPrepare := func(identity, conv, text string) channel.Inbound {
+		in := ts.ch.message(identity, conv, text)
+		in.Prepare = func(context.Context, *channel.Inbound) error {
+			mu.Lock()
+			defer mu.Unlock()
+			prepared[identity] = true
+			return nil
+		}
+		return in
+	}
+
+	ts.ch.deliver(withPrepare("tg:9", "dm9", "hello"))
+	ts.ch.waitFor(t, "dm9", hasText("I don't know you yet"))
+	ts.ch.deliver(withPrepare("tg:1", "dm1", "hello"))
+	ts.ch.waitFor(t, "dm1", hasText("Hello from fakeacp."))
+
+	mu.Lock()
+	defer mu.Unlock()
+	if diff := cmp.Diff(map[string]bool{"tg:1": true}, prepared); diff != "" {
+		t.Fatalf("Prepare() calls wrong result (-want +got) diff = %s", diff)
+	}
 }
 
 func TestRouterTurnAndApprovalInChat(t *testing.T) {

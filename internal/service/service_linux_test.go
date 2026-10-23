@@ -22,9 +22,48 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+func TestSystemdUnitEscaping(t *testing.T) {
+	t.Parallel()
+	got, err := SystemdUnit(Unit{
+		Description: "a2a server coder (/home/u/100%$x)",
+		Exe:         "/usr/local/bin/a2a",
+		Args:        []string{"server", "--dir", "/home/u/100%$x"},
+		Dir:         "/home/u/100%$x",
+		LogPath:     "/home/u/100%$x/server.log",
+	})
+	if err != nil {
+		t.Fatalf("SystemdUnit() error = %v", err)
+	}
+	want := `[Unit]
+Description=a2a server coder (/home/u/100%%$x)
+After=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/a2a server --dir /home/u/100%%$$x
+WorkingDirectory=/home/u/100%%$x
+StandardOutput=append:/home/u/100%%$x/server.log
+StandardError=append:/home/u/100%%$x/server.log
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+`
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Fatalf("SystemdUnit() wrong result (-want +got) diff = %s", diff)
+	}
+}
+
+func TestSystemdUnitRejectsNewlines(t *testing.T) {
+	t.Parallel()
+	if _, err := SystemdUnit(Unit{Description: "x", Exe: "/bin/a2a", Dir: "/home/u/a\nExecStartPre=/bin/evil", LogPath: "/tmp/l"}); err == nil {
+		t.Fatalf("SystemdUnit() error = nil, want error")
+	}
+}
+
 func TestSystemdUnit(t *testing.T) {
 	t.Parallel()
-	got := SystemdUnit(Unit{
+	got, err := SystemdUnit(Unit{
 		Description: "a2a server coder (/home/u/my app)",
 		Exe:         "/usr/local/bin/a2a",
 		Args:        []string{"server", "--dir", "/home/u/my app"},
@@ -32,6 +71,9 @@ func TestSystemdUnit(t *testing.T) {
 		LogPath:     "/home/u/my app/.a2a/state/server.log",
 		Env:         []string{"PATH=/usr/bin:/bin"},
 	})
+	if err != nil {
+		t.Fatalf("SystemdUnit() error = %v", err)
+	}
 	want := `[Unit]
 Description=a2a server coder (/home/u/my app)
 After=network-online.target

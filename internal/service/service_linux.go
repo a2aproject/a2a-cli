@@ -32,18 +32,32 @@ func unitPath(name string) (string, error) {
 	return filepath.Join(home, ".config", "systemd", "user", name+".service"), nil
 }
 
-// SystemdUnit renders the systemd user unit of u.
-func SystemdUnit(u Unit) string {
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "[Unit]\nDescription=%s\nAfter=network-online.target\n\n[Service]\n", u.Description)
-	fmt.Fprintf(&sb, "ExecStart=%s\n", quoteArgs(append([]string{u.Exe}, u.Args...)))
-	fmt.Fprintf(&sb, "WorkingDirectory=%s\n", u.Dir)
-	for _, kv := range u.Env {
-		fmt.Fprintf(&sb, "Environment=%s\n", quoteArgs([]string{kv}))
+// SystemdUnit renders the systemd user unit of u. systemd expands
+// %-specifiers in every value and $VARIABLES in ExecStart, so both are
+// escaped; a newline would start a new directive and is rejected.
+func SystemdUnit(u Unit) (string, error) {
+	values := append([]string{u.Description, u.Exe, u.Dir, u.LogPath}, u.Args...)
+	for _, v := range append(values, u.Env...) {
+		if strings.ContainsAny(v, "\r\n") {
+			return "", fmt.Errorf("systemd unit value %q contains a newline", v)
+		}
 	}
-	fmt.Fprintf(&sb, "StandardOutput=append:%s\nStandardError=append:%s\n", u.LogPath, u.LogPath)
+	spec := strings.NewReplacer("%", "%%").Replace
+	exec := strings.NewReplacer("%", "%%", "$", "$$").Replace
+	args := append([]string{u.Exe}, u.Args...)
+	for i, a := range args {
+		args[i] = exec(a)
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "[Unit]\nDescription=%s\nAfter=network-online.target\n\n[Service]\n", spec(u.Description))
+	fmt.Fprintf(&sb, "ExecStart=%s\n", quoteArgs(args))
+	fmt.Fprintf(&sb, "WorkingDirectory=%s\n", spec(u.Dir))
+	for _, kv := range u.Env {
+		fmt.Fprintf(&sb, "Environment=%s\n", quoteArgs([]string{spec(kv)}))
+	}
+	fmt.Fprintf(&sb, "StandardOutput=append:%s\nStandardError=append:%s\n", spec(u.LogPath), spec(u.LogPath))
 	sb.WriteString("Restart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=default.target\n")
-	return sb.String()
+	return sb.String(), nil
 }
 
 func quoteArgs(args []string) string {
@@ -64,18 +78,23 @@ func Install(u Unit) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	unit, err := SystemdUnit(u)
+	if err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(path, []byte(SystemdUnit(u)), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(unit), 0o644); err != nil {
 		return "", err
 	}
 	if err := run("systemctl", "--user", "daemon-reload"); err != nil {
 		return "", err
 	}
-	if err := run("systemctl", "--user", "enable", "--now", u.Name+".service"); err != nil {
+	if err := run("systemctl", "--user", "enable", u.Name+".service"); err != nil {
 		return "", err
 	}
+	// restart starts a stopped service and picks up a changed unit.
 	if err := run("systemctl", "--user", "restart", u.Name+".service"); err != nil {
 		return "", err
 	}

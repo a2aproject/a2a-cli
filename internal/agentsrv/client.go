@@ -21,14 +21,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
+	"github.com/a2aproject/a2a-cli/internal/fsutil"
 	"github.com/a2aproject/a2a-cli/internal/network"
 )
 
@@ -47,6 +50,12 @@ func NewClient(dir agentdir.Dir) *Client {
 	return &Client{dir: dir, hc: &http.Client{
 		Timeout: 60 * time.Second,
 		Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			if err := fsutil.CheckPrivate(filepath.Dir(path)); err != nil {
+				if errors.Is(err, fs.ErrNotExist) {
+					return nil, &net.OpError{Op: "dial", Net: "unix", Err: err}
+				}
+				return nil, fmt.Errorf("not trusting the control socket %s: %w", path, err)
+			}
 			var d net.Dialer
 			return d.DialContext(ctx, "unix", path)
 		}},

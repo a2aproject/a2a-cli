@@ -86,8 +86,9 @@ someone with access to the agent directory can hand out access.
 
 Principals are `user:owner`, `pair:<name>` (member or owner role),
 `user:<login>` for other tailnet users allowed in `config.yaml`, and
-`node:<id>`. `a2a server pair rm <name>` revokes a name's tokens and links,
-or removes a node.
+`node:<id>`. `a2a server pair rm <name>` revokes a name's tokens and the
+messenger links made with its codes, including links with the owner role, or
+removes a node.
 
 ## C. A turn
 
@@ -126,8 +127,10 @@ makes the call trustworthy happens in the server:
   handle is not a secret: only the harness reaches the listener.
 - **Making the call.** For a contact, the server resolves its card and calls
   it with its stored token or over tsnet, adding `X-A2A-On-Behalf-Of` and
-  `X-A2A-Hops` (at most 3). The callee trusts those headers only from callers
-  it identified on the private network. A node is called in-process.
+  `X-A2A-Hops` (at most 3). The callee counts hops from callers it identified
+  on the private network, and honors `X-A2A-On-Behalf-Of` only from agents of
+  its own owner, because the user it names is in the caller's namespace. A
+  node is called in-process.
 - **Approvals.** If the called agent asks for an approval, the server relays
   it to the user in the chat they are in, and refuses an answer from the
   harness itself. The user's answer goes to the remote task.

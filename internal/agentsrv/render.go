@@ -211,7 +211,7 @@ func (rd *renderer) showLocked(ctx context.Context, progress string) {
 		seg := text[rd.segStart:]
 		cut := strings.LastIndex(seg[:limit], "\n")
 		if cut < limit/2 {
-			cut = limit
+			cut = len(channel.Truncate(seg, limit))
 		}
 		rd.showSegmentLocked(ctx, seg[:cut])
 		rd.segStart += cut
@@ -367,14 +367,32 @@ func (rd *renderer) fail(ctx context.Context, err error) {
 	rd.send(ctx, "⚠ "+err.Error())
 }
 
-// finish handles a stream which ended without a final event.
+// finish handles a stream which ended without a final event: the task's
+// stored state tells whether it finished or the stream was cut off.
 func (rd *renderer) finish(ctx context.Context) {
 	rd.mu.Lock()
-	done := rd.done
+	done, taskID := rd.done, rd.taskID
 	rd.mu.Unlock()
-	if !done {
-		rd.final(ctx, a2a.TaskStatus{State: a2a.TaskStateCompleted})
+	if done {
+		return
 	}
+	interrupted := a2a.TaskStatus{State: a2a.TaskStateFailed, Message: a2a.NewMessage(a2a.MessageRoleAgent,
+		a2a.NewTextPart("The task was interrupted before it finished."))}
+	if taskID == "" {
+		rd.final(ctx, interrupted)
+		return
+	}
+	stored, err := rd.r.s.tasks.Get(auth.WithPrincipal(context.WithoutCancel(ctx), auth.Owner()), taskID)
+	if err != nil {
+		slog.Warn("loading the task of an ended stream", "task", taskID, "error", err)
+		rd.final(ctx, interrupted)
+		return
+	}
+	if !stored.Task.Status.State.Terminal() {
+		rd.final(ctx, interrupted)
+		return
+	}
+	rd.final(ctx, stored.Task.Status)
 }
 
 func joinText(a, b string) string {

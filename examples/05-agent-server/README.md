@@ -18,7 +18,7 @@ agent, opencode or Claude Code, from its project directory with
 - The `a2a` CLI installed (see the [repo README](../../README.md)).
 - Docker. Without it, add `--sandbox local` to the start commands below; the
   harness then runs on your machine and needs to be installed there.
-- An API key for the model, such as `ANTHROPIC_API_KEY`, exported in your shell.
+- An API key for the model, such as `OPENROUTER_API_KEY`, exported in your shell.
 
 ## 1. Create a workspace
 
@@ -37,7 +37,7 @@ EOF
 In **terminal A**, from the workspace:
 
 ```bash
-a2a server opencode --name coder --secret ANTHROPIC_API_KEY
+a2a server opencode --name coder --secret OPENROUTER_API_KEY
 ```
 
 For Claude Code, use `a2a server claude` instead.
@@ -133,7 +133,7 @@ Start a second agent in **terminal C**:
 
 ```bash
 mkdir -p ~/a2a-lesson5/reviewer && cd ~/a2a-lesson5/reviewer
-a2a server opencode --name reviewer --secret ANTHROPIC_API_KEY
+a2a server opencode --name reviewer --secret OPENROUTER_API_KEY
 ```
 
 In **terminal B**, let `coder` call it: mint a code on the reviewer's side

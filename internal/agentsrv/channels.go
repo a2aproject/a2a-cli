@@ -26,24 +26,31 @@ import (
 
 // Channel kinds.
 const (
-	ChannelTelegram = "telegram"
-	ChannelDiscord  = "discord"
-	ChannelEmail    = "email"
+	ChannelTelegram = agentdir.ChannelTelegram
+	ChannelDiscord  = agentdir.ChannelDiscord
+	ChannelEmail    = agentdir.ChannelEmail
 )
 
 // buildChannels creates the channels of the config.
 func (s *Server) buildChannels() ([]channel.Channel, error) {
 	cfg := s.config()
+	s.cfgMu.Lock()
+	secrets := s.secrets
+	s.cfgMu.Unlock()
+	configured := []struct {
+		kind string
+		set  bool
+	}{
+		{ChannelTelegram, cfg.Channels.Telegram != nil},
+		{ChannelDiscord, cfg.Channels.Discord != nil},
+		{ChannelEmail, cfg.Channels.Email != nil},
+	}
 	var out []channel.Channel
-	for kind, set := range map[string]bool{
-		ChannelTelegram: cfg.Channels.Telegram != nil,
-		ChannelDiscord:  cfg.Channels.Discord != nil,
-		ChannelEmail:    cfg.Channels.Email != nil,
-	} {
-		if !set {
+	for _, c := range configured {
+		if !c.set {
 			continue
 		}
-		ch, err := s.buildChannel(kind)
+		ch, err := s.buildChannel(cfg, secrets, c.kind)
 		if err != nil {
 			return nil, err
 		}
@@ -52,11 +59,7 @@ func (s *Server) buildChannels() ([]channel.Channel, error) {
 	return out, nil
 }
 
-func (s *Server) buildChannel(kind string) (channel.Channel, error) {
-	cfg := s.config()
-	s.cfgMu.Lock()
-	secrets := s.secrets
-	s.cfgMu.Unlock()
+func (s *Server) buildChannel(cfg *agentdir.Config, secrets agentdir.Secrets, kind string) (channel.Channel, error) {
 	switch kind {
 	case ChannelTelegram:
 		if cfg.Channels.Telegram == nil {
@@ -81,6 +84,9 @@ func (s *Server) buildChannel(kind string) (channel.Channel, error) {
 		if ec == nil {
 			return nil, fmt.Errorf("email is not configured")
 		}
+		if ec.TrustedAuthServ == "" {
+			return nil, fmt.Errorf("email: trusted_authserv must be set, or no mail could be trusted")
+		}
 		pw, err := secrets.Resolve(ec.Password)
 		if err != nil {
 			return nil, fmt.Errorf("email: %w", err)
@@ -93,20 +99,8 @@ func (s *Server) buildChannel(kind string) (channel.Channel, error) {
 	return nil, fmt.Errorf("unknown channel %q: want telegram, discord or email", kind)
 }
 
-// setChannelConfig sets or, with an empty request, removes a channel in the config.
-func setChannelConfig(c *agentdir.Config, req ChannelRequest) {
-	switch req.Kind {
-	case ChannelTelegram:
-		c.Channels.Telegram = nil
-		if req.Token != "" {
-			c.Channels.Telegram = &agentdir.TelegramConfig{Token: req.Token}
-		}
-	case ChannelDiscord:
-		c.Channels.Discord = nil
-		if req.Token != "" {
-			c.Channels.Discord = &agentdir.DiscordConfig{Token: req.Token}
-		}
-	case ChannelEmail:
-		c.Channels.Email = req.Email
-	}
+// ChannelRequestFromConfig is the request which starts the channel of kind
+// as configured in conf.
+func ChannelRequestFromConfig(conf *agentdir.Config, kind string) ChannelRequest {
+	return ChannelRequest{Kind: kind, Token: conf.ChannelToken(kind), Email: conf.Channels.Email}
 }

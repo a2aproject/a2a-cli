@@ -24,6 +24,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/a2aproject/a2a-cli/internal/channel"
 	"github.com/a2aproject/a2a-cli/internal/credstore"
 	"github.com/a2aproject/a2a-cli/internal/relayapi"
 )
@@ -71,7 +72,7 @@ func (r *relayClientFlags) nodeClient(cfg *globalConfig) (*relayapi.Client, erro
 
 func (r *relayClientFlags) nodeToken(cfg *globalConfig) (string, error) {
 	if r.token != "" {
-		return relayapi.Secret(r.token), nil
+		return relayapi.Secret(r.token)
 	}
 	if v := os.Getenv(relayapi.EnvNodeToken); v != "" {
 		return v, nil
@@ -97,7 +98,7 @@ func relayContext(cmd *cobra.Command, cfg *globalConfig) (context.Context, conte
 func oneLine(s string, limit int) string {
 	s = strings.Join(strings.Fields(s), " ")
 	if len(s) > limit {
-		s = s[:limit] + "…"
+		s = channel.Truncate(s, limit) + "…"
 	}
 	return s
 }

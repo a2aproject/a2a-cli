@@ -72,6 +72,9 @@ func printStatus(cfg *globalConfig, st *agentsrv.Status) error {
 	}
 	for _, c := range st.Channels {
 		fmt.Fprintf(&sb, "  %-8s %s\n", c.Name, c.Account)
+		if c.Error != "" {
+			fmt.Fprintf(&sb, "  %-8s ! failing, retrying: %s\n", "", c.Error)
+		}
 	}
 	if len(st.Owners) > 0 {
 		fmt.Fprintf(&sb, "  owner    %s\n", strings.Join(st.Owners, ", "))

@@ -92,6 +92,14 @@ type Server struct {
 	peers  *Peers
 	nodes  *Nodes
 
+	// instructionsMu serializes rewrites of the harness instruction files.
+	instructionsMu sync.Mutex
+	// pairFailures limits guesses of pairing codes.
+	pairFailures *failureLimiter
+
+	// ctx ends when the server stops. Work which outlives a request, such as
+	// watches, runs in it.
+	ctx     context.Context
 	cancel  context.CancelFunc
 	closers []func(context.Context) error
 }
@@ -111,7 +119,10 @@ func Run(ctx context.Context, opts Options) error {
 		out:     opts.Out,
 		started: time.Now(),
 		bus:     newEventBus(),
+		ctx:     ctx,
 		cancel:  cancel,
+
+		pairFailures: newFailureLimiter(10, time.Minute),
 	}
 	defer s.shutdown()
 
@@ -125,9 +136,11 @@ func Run(ctx context.Context, opts Options) error {
 	s.store = st
 	s.closers = append(s.closers, func(context.Context) error { return st.Close() })
 	s.tasks = st.Tasks("", s.viewer)
-	if n, err := s.tasks.FailUnfinished(ctx, "The agent server restarted before this task finished. Send the message again."); err != nil {
+	n, err := s.tasks.FailUnfinished(ctx, "The agent server restarted before this task finished. Send the message again.")
+	if err != nil {
 		return err
-	} else if n > 0 {
+	}
+	if n > 0 {
 		slog.Info("failed tasks interrupted by the previous run", "count", n)
 	}
 
@@ -157,7 +170,17 @@ func Run(ctx context.Context, opts Options) error {
 		a2asrv.WithLogger(slog.Default()),
 	)
 
-	errc := make(chan error, 8)
+	chans := opts.Channels
+	if chans == nil {
+		if chans, err = s.buildChannels(); err != nil {
+			return errors.Join(err, harnessLn.Close())
+		}
+	}
+	// The router exists before any listener serves, because handlers use it.
+	s.router = newRouter(ctx, s)
+	s.closers = append(s.closers, s.router.stopAll)
+
+	errc := make(chan error, 1)
 	s.serve(ctx, harnessLn, network.ListenerHarness, "", errc)
 	if err := s.listenLocal(ctx, errc); err != nil {
 		return err
@@ -169,15 +192,8 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	chans := opts.Channels
-	if chans == nil {
-		if chans, err = s.buildChannels(); err != nil {
-			return err
-		}
-	}
-	s.router = newRouter(s)
 	for _, ch := range chans {
-		s.router.add(ctx, ch, errc)
+		s.router.add(ch)
 	}
 	s.peers.resumeWatches(ctx)
 
@@ -199,7 +215,10 @@ func Run(ctx context.Context, opts Options) error {
 // Stop shuts the server down.
 func (s *Server) Stop() { s.cancel() }
 
+// shutdown stops background work first, then closes listeners and the store
+// in reverse order of opening.
 func (s *Server) shutdown() {
+	s.cancel()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	for i := len(s.closers) - 1; i >= 0; i-- {
@@ -217,11 +236,18 @@ func (s *Server) config() *agentdir.Config {
 }
 
 // updateConfig applies fn to the config and saves it.
-func (s *Server) updateConfig(fn func(*agentdir.Config)) error {
+func (s *Server) updateConfig(fn func(*agentdir.Config) error) error {
 	s.cfgMu.Lock()
 	defer s.cfgMu.Unlock()
-	fn(s.cfg)
-	return s.dir.SaveConfig(s.cfg)
+	next := *s.cfg
+	if err := fn(&next); err != nil {
+		return err
+	}
+	if err := s.dir.SaveConfig(&next); err != nil {
+		return err
+	}
+	*s.cfg = next
+	return nil
 }
 
 func (s *Server) logf(format string, args ...any) {
@@ -240,7 +266,7 @@ func (s *Server) listenLocal(ctx context.Context, errc chan<- error) error {
 	}
 	if port == 0 {
 		port = ln.Addr().(*net.TCPAddr).Port
-		if err := s.updateConfig(func(c *agentdir.Config) { c.Port = port }); err != nil {
+		if err := s.updateConfig(func(c *agentdir.Config) error { c.Port = port; return nil }); err != nil {
 			return errors.Join(err, ln.Close())
 		}
 	}
@@ -268,9 +294,19 @@ func (s *Server) serve(ctx context.Context, ln net.Listener, kind, baseURL strin
 	})
 	go func() {
 		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
-			errc <- fmt.Errorf("%s listener: %w", kind, err)
+			reportFatal(errc, fmt.Errorf("%s listener: %w", kind, err))
 		}
 	}()
+}
+
+// reportFatal hands err to Run, which stops on the first one; later errors
+// are only logged.
+func reportFatal(errc chan<- error, err error) {
+	select {
+	case errc <- err:
+	default:
+		slog.Error("server error after shutdown started", "error", err)
+	}
 }
 
 // URLs returns the URLs the agent is reachable at.
@@ -301,12 +337,7 @@ func (s *Server) printSummary(ctx context.Context) error {
 	if public != "" {
 		s.logf("✓ public   %s", public)
 	}
-	if s.router != nil {
-		if err := s.router.announce(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
+	return s.router.announce(ctx)
 }
 
 // viewer is the task store's view of the caller: owners see every task,

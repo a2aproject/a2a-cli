@@ -31,6 +31,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/a2aproject/a2a-cli/internal/fsutil"
 )
 
 // KindNode marks the token of a webhook node; other credentials are caller tokens.
@@ -84,36 +86,44 @@ func (s *Store) save(creds []Credential) error {
 	if err := os.MkdirAll(filepath.Dir(s.Path), 0o700); err != nil {
 		return err
 	}
-	tmp := s.Path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.Path)
+	return fsutil.WriteAtomic(s.Path, data, 0o600)
+}
+
+// update applies fn to the stored credentials under a lock, so that
+// concurrent commands don't lose each other's changes.
+func (s *Store) update(fn func([]Credential) ([]Credential, bool)) error {
+	return fsutil.WithLock(s.Path, func() error {
+		creds, err := s.List()
+		if err != nil {
+			return err
+		}
+		next, changed := fn(creds)
+		if !changed {
+			return nil
+		}
+		return s.save(next)
+	})
 }
 
 // Put stores a credential, replacing one of the same kind for the same URL.
 func (s *Store) Put(c Credential) error {
-	creds, err := s.List()
-	if err != nil {
-		return err
-	}
 	c.URL = Normalize(c.URL)
-	creds = slices.DeleteFunc(creds, func(x Credential) bool { return x.URL == c.URL && x.Kind == c.Kind })
-	return s.save(append(creds, c))
+	return s.update(func(creds []Credential) ([]Credential, bool) {
+		creds = slices.DeleteFunc(creds, func(x Credential) bool { return x.URL == c.URL && x.Kind == c.Kind })
+		return append(creds, c), true
+	})
 }
 
 // Delete removes the credentials for url. It reports whether one existed.
 func (s *Store) Delete(u string) (bool, error) {
-	creds, err := s.List()
-	if err != nil {
-		return false, err
-	}
-	n := len(creds)
-	creds = slices.DeleteFunc(creds, func(x Credential) bool { return x.URL == Normalize(u) })
-	if len(creds) == n {
-		return false, nil
-	}
-	return true, s.save(creds)
+	found := false
+	err := s.update(func(creds []Credential) ([]Credential, bool) {
+		n := len(creds)
+		creds = slices.DeleteFunc(creds, func(x Credential) bool { return x.URL == Normalize(u) })
+		found = len(creds) != n
+		return creds, found
+	})
+	return found, err
 }
 
 // Lookup returns the caller credential whose URL is target or the longest

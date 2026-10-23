@@ -98,7 +98,11 @@ func parseWebhookHeaders(headers []string) (map[string]string, error) {
 		}
 		v = strings.TrimSpace(v)
 		if i := strings.Index(v, "env:"); i >= 0 {
-			v = v[:i] + relayapi.Secret(v[i:])
+			secret, err := relayapi.Secret(v[i:])
+			if err != nil {
+				return nil, clierr.Usage(fmt.Sprintf("--webhook-header %s: %v", strings.TrimSpace(k), err))
+			}
+			v = v[:i] + secret
 		}
 		out[strings.TrimSpace(k)] = v
 	}

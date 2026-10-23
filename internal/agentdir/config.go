@@ -22,6 +22,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/a2aproject/a2a-cli/internal/fsutil"
 )
 
 // Config is the agent definition in .a2a/config.yaml. It holds no secrets:
@@ -102,6 +104,47 @@ type EmailConfig struct {
 	TrustedAuthServ string `yaml:"trusted_authserv"`
 }
 
+// Channel kinds.
+const (
+	ChannelTelegram = "telegram"
+	ChannelDiscord  = "discord"
+	ChannelEmail    = "email"
+)
+
+// SetChannel configures the channel of kind. A bot token is a secret
+// reference; an empty token or nil email removes the channel.
+func (c *Config) SetChannel(kind, token string, email *EmailConfig) error {
+	switch kind {
+	case ChannelTelegram:
+		c.Channels.Telegram = nil
+		if token != "" {
+			c.Channels.Telegram = &TelegramConfig{Token: token}
+		}
+	case ChannelDiscord:
+		c.Channels.Discord = nil
+		if token != "" {
+			c.Channels.Discord = &DiscordConfig{Token: token}
+		}
+	case ChannelEmail:
+		c.Channels.Email = email
+	default:
+		return fmt.Errorf("unknown channel %q: want telegram, discord or email", kind)
+	}
+	return nil
+}
+
+// ChannelToken returns the bot token reference of a telegram or discord
+// channel, or "" if it isn't configured.
+func (c *Config) ChannelToken(kind string) string {
+	switch {
+	case kind == ChannelTelegram && c.Channels.Telegram != nil:
+		return c.Channels.Telegram.Token
+	case kind == ChannelDiscord && c.Channels.Discord != nil:
+		return c.Channels.Discord.Token
+	}
+	return ""
+}
+
 // ApprovalsConfig decides who answers tool permission requests.
 type ApprovalsConfig struct {
 	// Allow and Deny are ACP tool kind globs answered without asking.
@@ -144,7 +187,7 @@ func (d Dir) SaveConfig(cfg *Config) error {
 		return err
 	}
 	header := "# Agent definition for `a2a server`. Secrets are kept in state/secrets, never here.\n"
-	return writeFileAtomic(d.ConfigPath(), append([]byte(header), data...), 0o644)
+	return fsutil.WriteAtomic(d.ConfigPath(), append([]byte(header), data...), 0o644)
 }
 
 // Mount is a parsed src[:dst][:ro] spec.
@@ -227,12 +270,4 @@ func expandHome(p string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(home, strings.TrimPrefix(p, "~")), nil
-}
-
-func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, perm); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
 }

@@ -90,6 +90,9 @@ func (p *prompter) choose(question string, options []string, def string) (string
 
 // Run asks for the settings of a new agent.
 func Run(in io.Reader, out io.Writer, defaultName string, harnesses []string, getenv func(string) string) (Result, error) {
+	if len(harnesses) == 0 {
+		return Result{}, errors.New("no harnesses to choose from")
+	}
 	p := &prompter{r: bufio.NewReader(in), out: out}
 	if _, err := fmt.Fprintln(out, "No agent here yet. A few questions to set one up (Enter keeps the default):"); err != nil {
 		return Result{}, err

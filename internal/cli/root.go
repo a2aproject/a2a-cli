@@ -67,6 +67,8 @@ type globalConfig struct {
 	unixSocket   string
 	configPath   string
 
+	storedTokenOnce sync.Once
+
 	pluginsEnabled bool
 
 	bindings []clicfg.FlagBinding

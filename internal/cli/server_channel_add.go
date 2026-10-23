@@ -63,14 +63,7 @@ func newServerChannelAddCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			req := agentsrv.ChannelRequest{Kind: args[0], Email: conf.Channels.Email}
-			switch args[0] {
-			case agentsrv.ChannelTelegram:
-				req.Token = conf.Channels.Telegram.Token
-			case agentsrv.ChannelDiscord:
-				req.Token = conf.Channels.Discord.Token
-			}
-			st, err := agentsrv.NewClient(d).AddChannel(cmd.Context(), req)
+			st, err := agentsrv.NewClient(d).AddChannel(cmd.Context(), agentsrv.ChannelRequestFromConfig(conf, args[0]))
 			if errors.Is(err, agentsrv.ErrNotRunning) {
 				_, err := fmt.Fprintf(cfg.Out, "✓ saved %s; it starts with the agent (a2a server)\n", args[0])
 				return err

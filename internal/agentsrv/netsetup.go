@@ -89,7 +89,7 @@ func (s *Server) listenNetwork(ctx context.Context, errc chan<- error) error {
 			return fmt.Errorf("private network (%s): %w", s.private.Name(), err)
 		}
 		if lan, ok := s.private.(*network.LAN); ok && s.config().Network.LANPort == 0 {
-			if err := s.updateConfig(func(c *agentdir.Config) { c.Network.LANPort = lan.BoundPort() }); err != nil {
+			if err := s.updateConfig(func(c *agentdir.Config) error { c.Network.LANPort = lan.BoundPort(); return nil }); err != nil {
 				return err
 			}
 		}

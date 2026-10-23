@@ -22,7 +22,7 @@ machines do.
 
 ```sh
 cd ~/src/app
-a2a server opencode --name coder --secret ANTHROPIC_API_KEY
+a2a server opencode --name coder --secret OPENROUTER_API_KEY
 ```
 
 The first run saves the flags to `.a2a/config.yaml` and starts the agent in
@@ -71,6 +71,13 @@ changes apply without a restart.
 `--secret VAR`, `--telegram env:VAR` and similar flags read values from your
 shell when you run the command and store them in `state/secrets`. A detached
 or service process doesn't depend on your shell's environment.
+
+> [!WARNING]
+> `config.yaml` decides what runs on your machine: `sandbox: local`,
+> `command`, `image`, `mounts`, `env` and `secrets`. Running `a2a server` in a
+> cloned repository runs whatever its `config.yaml` says, with access to the
+> mounts and secrets it names. Read a `config.yaml` you didn't write before you
+> start an agent from it, as you would a Makefile or a CI config.
 
 ## Running it
 
@@ -188,7 +195,10 @@ a2a server channel rm discord
 
 A bot token can be polled by only one process, so each agent gets its own bot.
 On start, the server prints a link for linking yourself as the owner (for
-Telegram, a `t.me` deep link). Unknown senders get a pairing hint.
+Telegram, a `t.me` deep link). Unknown senders get a pairing hint; their
+attachments aren't downloaded. `channel add` checks a bot token before saving
+it. A messenger that fails while running is restarted with backoff, and
+`a2a server status` shows its error in the meantime.
 
 - **Telegram:** long polling. Answers are streamed by editing a message about
   once a second; approvals are inline buttons. In groups the bot answers when
@@ -196,9 +206,11 @@ Telegram, a `t.me` deep link). Unknown senders get a pairing hint.
 - **Discord:** gateway WebSocket with the Message Content intent; `/link`,
   `/new` and `/stop` commands; buttons; one thread per conversation in guild
   channels; missed messages are fetched on reconnect.
-- **Email:** IMAP IDLE and SMTP. Only mail with `dmarc=pass` or aligned
-  `dkim=pass` from the trusted server's `Authentication-Results` is accepted.
-  Auto-replies, lists and the agent's own mail are dropped. Replies stay in the
+- **Email:** IMAP IDLE and SMTP. Only mail with `dmarc=pass` for the sender's
+  domain or aligned `dkim=pass` in the topmost `Authentication-Results` of the
+  trusted server is accepted. Mail with several `From` addresses, auto-replies,
+  lists and the agent's own mail are dropped. SMTP needs TLS (port 465 or
+  STARTTLS) unless the server is on localhost. Replies stay in the
   thread, and only questions and final results are sent. Approve with a
   one-word reply: `approve`, `always` or `deny`.
 
@@ -237,7 +249,9 @@ a2a server contact rm coder
   posted into the originating conversation as a new turn, so the agent
   continues and tells the user.
 - Calls carry `X-A2A-On-Behalf-Of` and a hop count (at most 3). The callee
-  trusts them only for callers it identified on the private network.
+  counts hops from any caller it identified on the private network, but
+  honors `X-A2A-On-Behalf-Of` only from your own agents (the same tailnet
+  login), since the user it names belongs to the caller.
 - When a called agent needs an approval, the calling agent relays it to the
   user in the chat they are already in: "coder wants to run git push",
   with buttons. The answer goes back to the remote task, and its result is
@@ -294,7 +308,7 @@ harness: opencode
 command: [cloudcode, acp]        # optional: replaces the profile's command
 sandbox: docker                  # or local
 mounts: [/home/u/src/app, /home/u/docs:/docs:ro]
-secrets: [ANTHROPIC_API_KEY]     # passed to the harness as environment variables
+secrets: [OPENROUTER_API_KEY]     # passed to the harness as environment variables
 port: 46757                      # localhost port, chosen on the first run
 network:
   private: tailscale

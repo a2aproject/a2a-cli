@@ -112,7 +112,13 @@ func (p *Peers) agentsHandler() http.Handler {
 		}
 		rest := "/" + r.PathValue("rest")
 		base := "http://" + r.Host + "/" + handle + "/" + name
-		if !p.callable(r.Context(), name) {
+		ok, err := p.callable(r.Context(), name)
+		if err != nil {
+			slog.Error("looking up a callable agent", "agent", name, "error", err)
+			writeError(w, http.StatusInternalServerError, "looking up "+name+" failed")
+			return
+		}
+		if !ok {
 			writeError(w, http.StatusNotFound, fmt.Sprintf("%q is not an agent you can call; the [a2a agents] line lists them", name))
 			return
 		}
@@ -141,12 +147,15 @@ func (p *Peers) agentsHandler() http.Handler {
 }
 
 // callable reports whether name is a contact or a hosted node.
-func (p *Peers) callable(ctx context.Context, name string) bool {
-	if _, err := p.s.store.Node(ctx, name); err == nil {
-		return true
+func (p *Peers) callable(ctx context.Context, name string) (bool, error) {
+	if node, err := p.isNode(ctx, name); err != nil || node {
+		return node, err
 	}
 	_, err := p.s.store.Contact(ctx, name)
-	return err == nil
+	if errors.Is(err, store.ErrNotFound) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 func proxyCard(name, base string) *a2a.AgentCard {
@@ -167,7 +176,11 @@ func proxyCard(name, base string) *a2a.AgentCard {
 // agentHandler returns the A2A handler of a node or a contact. A node is
 // served in-process, as principal.
 func (p *Peers) agentHandler(ctx context.Context, c callClaims, name string) (a2asrv.RequestHandler, *auth.Principal, func(), error) {
-	if _, err := p.s.store.Node(ctx, name); err == nil {
+	node, err := p.isNode(ctx, name)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if node {
 		pr := p.nodeCaller(c.OnBehalfOf, c.Hops)
 		return p.s.nodes.handler(name), &pr, func() {}, nil
 	}
@@ -233,7 +246,13 @@ func (g *guardedHandler) checkAnswer(ctx context.Context, req *a2a.SendMessageRe
 		return nil
 	}
 	task, err := g.RequestHandler.GetTask(ctx, &a2a.GetTaskRequest{ID: req.Message.TaskID})
-	if err != nil || task.Status.State != a2a.TaskStateInputRequired {
+	if errors.Is(err, a2a.ErrTaskNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("checking task %s at %s: %w", req.Message.TaskID, g.agent, err)
+	}
+	if task.Status.State != a2a.TaskStateInputRequired {
 		return nil
 	}
 	if q := questionOfStatus(task.Status); q != nil && q.Type == questionPermission {
@@ -255,12 +274,12 @@ func (g *guardedHandler) after(ctx context.Context, task *a2a.Task) {
 		if q == nil || q.Type != questionPermission {
 			return
 		}
-		g.p.relay(ctx, g.claims, g.agent, task, q)
+		g.p.relay(g.p.s.ctx, g.claims, g.agent, task, q)
 	}
 	w := store.Watch{Contact: g.agent, TaskID: string(task.ID), RemoteContextID: task.ContextID, OriginContextID: g.claims.ContextID, OnBehalfOf: g.claims.OnBehalfOf}
 	if err := g.p.s.store.PutWatch(ctx, w); err != nil {
 		slog.Error("storing watch", "agent", g.agent, "task", task.ID, "error", err)
 		return
 	}
-	g.p.watch(context.WithoutCancel(ctx), w)
+	g.p.watch(w)
 }

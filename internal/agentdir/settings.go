@@ -19,6 +19,7 @@ import (
 	"maps"
 	"os"
 	"slices"
+	"strings"
 )
 
 // Settings are the start flags of `a2a server <harness>`. Set fields
@@ -172,6 +173,9 @@ func (s Settings) Apply(cfg *Config, defaultName string) (Secrets, error) {
 		if v == "" {
 			continue
 		}
+		if ref, ok := strings.CutPrefix(v, SecretPrefix); ok && ref != name {
+			return nil, fmt.Errorf("%s: the network provider reads the secret %s; pass the value or env:VAR instead of %s", name, name, v)
+		}
 		_, sec, err := ResolveInput(v, name)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
@@ -184,6 +188,33 @@ func (s Settings) Apply(cfg *Config, defaultName string) (Secrets, error) {
 		return nil, fmt.Errorf("no harness: run `a2a server <harness>`")
 	}
 	return secrets, nil
+}
+
+// SettingsError is returned by [Dir.SaveSettings] for settings which can't
+// be applied, as opposed to failures to read or write the agent directory.
+type SettingsError struct{ Err error }
+
+func (e *SettingsError) Error() string { return e.Err.Error() }
+
+func (e *SettingsError) Unwrap() error { return e.Err }
+
+// SaveSettings merges start flags into the agent's config and secrets.
+func (d Dir) SaveSettings(s Settings) error {
+	conf := &Config{}
+	if d.Exists() {
+		var err error
+		if conf, err = d.LoadConfig(); err != nil {
+			return err
+		}
+	}
+	secrets, err := s.Apply(conf, d.DefaultName())
+	if err != nil {
+		return &SettingsError{Err: err}
+	}
+	if err := d.SaveSecrets(secrets); err != nil {
+		return err
+	}
+	return d.SaveConfig(conf)
 }
 
 // setNetwork sets a provider; "none" removes it.

@@ -37,6 +37,12 @@ func TestAuthentic(t *testing.T) {
 		{name: "dkim of a parent domain", results: []string{"mx.example.com; dkim=pass header.d=org"}, want: false},
 		{name: "unaligned dkim", results: []string{"mx.example.com; dkim=pass header.d=evil.com; dmarc=fail"}, want: false},
 		{name: "untrusted server", results: []string{"evil.com; dmarc=pass"}, want: false},
+		{name: "dmarc pass for another domain", results: []string{"mx.example.com; dmarc=pass header.from=evil.com"}, want: false},
+		{name: "dmarc pass without header.from", results: []string{"mx.example.com; dmarc=pass"}, want: false},
+		{name: "forged header below the trusted one", results: []string{
+			"mx.example.com; dmarc=fail header.from=alice.org",
+			"mx.example.com; dmarc=pass header.from=alice.org",
+		}, want: false},
 		{name: "no results", want: false},
 	}
 	for _, tc := range tests {
@@ -83,13 +89,17 @@ func TestParse(t *testing.T) {
 	}
 
 	for name, header := range map[string]string{
-		"auto-reply": "Auto-Submitted: auto-replied\r\n",
-		"list":       "List-Id: <dev.lists.example.com>\r\n",
-		"own mail":   "",
+		"auto-reply":      "Auto-Submitted: auto-replied\r\n",
+		"list":            "List-Id: <dev.lists.example.com>\r\n",
+		"own mail":        "",
+		"several senders": "",
 	} {
 		raw := header + rawMail
-		if name == "own mail" {
+		switch name {
+		case "own mail":
 			raw = strings.Replace(rawMail, "Alice <Alice@alice.org>", "coder@example.com", 1)
+		case "several senders":
+			raw = strings.Replace(rawMail, "Alice <Alice@alice.org>", "Alice <alice@alice.org>, x@evil.com", 1)
 		}
 		if _, ok, err := c.parse([]byte(raw)); err != nil || ok {
 			t.Errorf("parse(%s) = %v, %v, want dropped", name, ok, err)

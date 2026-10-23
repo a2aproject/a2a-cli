@@ -72,8 +72,13 @@ func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclie
 }
 
 // attachStoredToken uses the token saved by `a2a pair add` for the target
-// agent, unless the request already carries a credential.
+// agent, unless the request already carries a credential. It runs once per
+// command, however many paths reach it.
 func attachStoredToken(cfg *globalConfig) {
+	cfg.storedTokenOnce.Do(func() { lookupStoredToken(cfg) })
+}
+
+func lookupStoredToken(cfg *globalConfig) {
 	target := cfg.url
 	if target == "" && cfg.agentCard.IsSet() {
 		target = cfg.agentCard.URL()

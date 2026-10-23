@@ -210,11 +210,9 @@ func (s *Server) onQuestion(ctx context.Context, execCtx *a2asrv.ExecutorContext
 			slog.Error("storing question", "error", err)
 			return
 		}
-		slog.Info("approval needed", "task", execCtx.TaskID, "from", starter, "page", s.hitlURL(rec))
+		slog.Info("approval needed", "task", execCtx.TaskID, "from", starter, "question", rec.ID)
 		header := fmt.Sprintf("%s needs your approval", displayPrincipal(starter))
-		if s.router != nil {
-			s.router.ask(ctx, s.approverIDs(), "", "", header, rec)
-		}
+		s.router.ask(ctx, s.approverIDs(), "", "", header, rec)
 	}()
 }
 
@@ -286,17 +284,17 @@ func (s *Server) handleHitl(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := s.answer(r.Context(), rec, auth.Owner(), opt); err != nil && !errors.Is(err, store.ErrAnswered) {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			slog.Error("answering question from the web", "question", rec.ID, "error", err)
+			http.Error(w, "Couldn't send the answer. Try again.", http.StatusInternalServerError)
 			return
 		}
-		if s.router != nil {
-			s.router.markAnswered(r.Context(), rec.ID, opt.Label, "web")
-		}
+		s.router.markAnswered(r.Context(), rec.ID, opt.Label, "web")
 		http.Redirect(w, r, r.URL.Path, http.StatusSeeOther)
 		return
 	}
 	if rec, err = s.store.QuestionByToken(r.Context(), r.PathValue("token")); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("reloading question", "error", err)
+		http.Error(w, "Couldn't load the question. Try again.", http.StatusInternalServerError)
 		return
 	}
 	text := q.Text

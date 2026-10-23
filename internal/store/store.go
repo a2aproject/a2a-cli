@@ -25,6 +25,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -43,7 +44,8 @@ type Store struct {
 // Open opens or creates the database at path. ":memory:" opens a private
 // in-memory database, for tests.
 func Open(path string) (*Store, error) {
-	dsn := "file:" + path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
+	u := url.URL{Scheme: "file", OmitHost: true, Path: path, RawQuery: "_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"}
+	dsn := u.String()
 	if path == ":memory:" {
 		dsn = "file::memory:?_pragma=foreign_keys(1)"
 	}
@@ -77,7 +79,8 @@ CREATE INDEX IF NOT EXISTS tasks_updated ON tasks (scope, updated DESC, id);
 CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, roles TEXT NOT NULL, created INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS links (
 	channel TEXT NOT NULL, identity TEXT NOT NULL, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-	conv TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, PRIMARY KEY (channel, identity));
+	conv TEXT NOT NULL DEFAULT '', created INTEGER NOT NULL, name TEXT NOT NULL DEFAULT '',
+	PRIMARY KEY (channel, identity));
 CREATE TABLE IF NOT EXISTS convs (
 	channel TEXT NOT NULL, conv TEXT NOT NULL, context_id TEXT NOT NULL, updated INTEGER NOT NULL,
 	PRIMARY KEY (channel, conv));
@@ -108,7 +111,22 @@ CREATE TABLE IF NOT EXISTS watches (
 `
 
 func (s *Store) migrate(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, schema)
+	if _, err := s.db.ExecContext(ctx, schema); err != nil {
+		return err
+	}
+	return s.addColumn(ctx, "links", "name", "TEXT NOT NULL DEFAULT ''")
+}
+
+// addColumn adds a column to a table created before the column existed.
+func (s *Store) addColumn(ctx context.Context, table, column, decl string) error {
+	var n int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, table, column).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := s.db.ExecContext(ctx, fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, decl))
 	return err
 }
 

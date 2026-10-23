@@ -17,6 +17,7 @@ package store
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -289,6 +290,27 @@ func TestQuestionAnsweredOnce(t *testing.T) {
 	}
 	if got.Answer != "once" || got.Data["id"] != "x" {
 		t.Fatalf("QuestionByToken() = %+v, want answer once", got)
+	}
+	if err := s.AnswerQuestion(ctx, "missing1", "user:owner", "once"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("AnswerQuestion() unknown question error = %v, want %v", err, ErrNotFound)
+	}
+}
+
+func TestOpenPathWithURLCharacters(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "a?b#c%d", "server.db")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("Stat() error = %v", err)
 	}
 }
 

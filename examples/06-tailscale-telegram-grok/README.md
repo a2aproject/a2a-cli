@@ -18,7 +18,7 @@ with a public URL so a Grok bot can work for it as a webhook node.
 ## Prerequisites
 
 - Lesson 5's setup: the `a2a` CLI, Docker, and an API key such as
-  `ANTHROPIC_API_KEY` exported in your shell.
+  `OPENROUTER_API_KEY` exported in your shell.
 - A [Tailscale](https://tailscale.com) account, with the machine you work
   from on the tailnet.
 - A Telegram account.
@@ -55,7 +55,7 @@ From the agent's project directory:
 
 ```bash
 mkdir -p ~/a2a-lesson6/coder && cd ~/a2a-lesson6/coder
-a2a server opencode --name coder --secret ANTHROPIC_API_KEY \
+a2a server opencode --name coder --secret OPENROUTER_API_KEY \
   --private tailscale --public tailscale \
   --telegram env:CODER_BOT_TOKEN
 ```

@@ -77,7 +77,7 @@ Serve a coding agent over A2A, from its project directory:
 
 ```bash
 cd ~/src/app
-a2a server opencode --name coder --secret ANTHROPIC_API_KEY --private tailscale --telegram env:CODER_BOT_TOKEN
+a2a server opencode --name coder --secret OPENROUTER_API_KEY --private tailscale --telegram env:CODER_BOT_TOKEN
 a2a server pair --name me          # one-time code; then: a2a pair add <agent-url> <code>
 ```
 

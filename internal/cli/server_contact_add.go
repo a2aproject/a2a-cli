@@ -20,6 +20,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/a2aproject/a2a-cli/internal/agentsrv"
+	"github.com/a2aproject/a2a-cli/internal/clierr"
+	"github.com/a2aproject/a2a-cli/internal/relayapi"
 )
 
 func newServerContactAddCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
@@ -39,6 +41,9 @@ agent's owner, or pass a token.`,
 				return err
 			}
 			req.Name = args[0]
+			if req.Token, err = relayapi.Secret(req.Token); err != nil {
+				return clierr.Usage("--token: " + err.Error())
+			}
 			info, err := c.AddContact(cmd.Context(), req)
 			if err != nil {
 				return err
@@ -56,6 +61,6 @@ agent's owner, or pass a token.`,
 	}
 	cmd.Flags().StringVar(&req.URL, "url", "", "The agent's URL")
 	cmd.Flags().StringVar(&req.Code, "code", "", "A pairing code from the other agent's owner")
-	cmd.Flags().StringVar(&req.Token, "token", "", "A token for the other agent")
+	cmd.Flags().StringVar(&req.Token, "token", "", "A token for the other agent: env:VAR or the token")
 	return cmd
 }

@@ -160,12 +160,19 @@ type PairResponse struct {
 // handlePair exchanges a pair code for a caller token, or a node code for a
 // node token.
 func (s *Server) handlePair(w http.ResponseWriter, r *http.Request, baseURL string) {
+	host := remoteHost(r.RemoteAddr)
+	if !s.pairFailures.allow(host) {
+		w.Header().Set("Retry-After", "60")
+		writeError(w, http.StatusTooManyRequests, "too many invalid pairing codes; try again in a minute")
+		return
+	}
 	var req PairRequest
 	if !readJSON(w, r, &req) {
 		return
 	}
 	c, err := s.store.TakeCode(r.Context(), auth.NormalizeCode(req.Code), "")
 	if errors.Is(err, store.ErrNotFound) || errors.Is(err, store.ErrCodeExpired) {
+		s.pairFailures.fail(host)
 		writeError(w, http.StatusForbidden, "invalid or expired pairing code")
 		return
 	}

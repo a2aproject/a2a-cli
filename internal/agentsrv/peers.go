@@ -24,6 +24,7 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -118,11 +119,19 @@ func (p *Peers) handle(ctx context.Context, c callClaims) (string, error) {
 // claimsOf returns the claims of a handle.
 func (p *Peers) claimsOf(ctx context.Context, h string) (callClaims, bool) {
 	v, ok, err := p.s.store.Get(ctx, "handle:"+h)
-	if err != nil || !ok {
+	if err != nil {
+		slog.Error("loading agents URL handle", "error", err)
+		return callClaims{}, false
+	}
+	if !ok {
 		return callClaims{}, false
 	}
 	var c callClaims
-	return c, json.Unmarshal([]byte(v), &c) == nil
+	if err := json.Unmarshal([]byte(v), &c); err != nil {
+		slog.Error("decoding agents URL handle", "handle", h, "error", err)
+		return callClaims{}, false
+	}
+	return c, true
 }
 
 // discover lists agents on the private network, cached briefly.
@@ -171,6 +180,8 @@ func (p *Peers) addContact(ctx context.Context, req ContactRequest) (store.Conta
 	} else if p.s.private != nil && p.onPrivateNetwork(ctx, c.URL) {
 		c.Via = ViaPrivate
 	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	hc := p.httpClient(c, "", 0)
 	if req.Code != "" {
 		tok, err := pairWith(ctx, hc, c.URL, req.Code)
@@ -240,19 +251,27 @@ func pairWith(ctx context.Context, hc *http.Client, agentURL, code string) (stri
 	return out.Token, nil
 }
 
-// headerTransport adds the caller's headers to every request.
+// headerTransport adds the caller's headers to requests for the contact's
+// host. Requests redirected elsewhere go without them, so that the token
+// doesn't leak to another host.
 type headerTransport struct {
 	base   http.RoundTripper
+	host   string
 	header http.Header
 }
 
 func (t *headerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	if !strings.EqualFold(r.URL.Host, t.host) {
+		return t.base.RoundTrip(r)
+	}
 	r = r.Clone(r.Context())
 	maps.Copy(r.Header, t.header)
 	return t.base.RoundTrip(r)
 }
 
 // httpClient returns the client for calls to a contact on behalf of a user.
+// It has no overall timeout, because streams to the contact last as long as
+// its task; callers bound requests with their context.
 func (p *Peers) httpClient(c store.Contact, onBehalfOf string, hops int) *http.Client {
 	base := http.DefaultClient
 	if c.Via == ViaPrivate && p.s.private != nil {
@@ -270,7 +289,11 @@ func (p *Peers) httpClient(c store.Contact, onBehalfOf string, hops int) *http.C
 		h.Set(auth.HeaderOnBehalfOf, onBehalfOf)
 	}
 	h.Set(auth.HeaderHops, strconv.Itoa(hops+1))
-	return &http.Client{Transport: &headerTransport{base: rt, header: h}, Timeout: 30 * time.Second}
+	host := ""
+	if u, err := url.Parse(c.URL); err == nil {
+		host = u.Host
+	}
+	return &http.Client{Transport: &headerTransport{base: rt, host: host, header: h}}
 }
 
 // target is an agent a2a.send talks to.
@@ -316,7 +339,11 @@ var ErrOffline = errors.New("offline")
 
 // target resolves an agent name to a contact or a hosted node.
 func (p *Peers) target(ctx context.Context, name, onBehalfOf string, hops int) (target, error) {
-	if _, err := p.s.store.Node(ctx, name); err == nil {
+	node, err := p.isNode(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	if node {
 		return localTarget{h: p.s.nodes.handler(name), p: p.nodeCaller(onBehalfOf, hops)}, nil
 	}
 	client, err := p.contactClient(ctx, name, onBehalfOf, hops)
@@ -324,6 +351,15 @@ func (p *Peers) target(ctx context.Context, name, onBehalfOf string, hops int) (
 		return nil, err
 	}
 	return remoteTarget{c: client}, nil
+}
+
+// isNode reports whether name is a webhook node hosted here.
+func (p *Peers) isNode(ctx context.Context, name string) (bool, error) {
+	_, err := p.s.store.Node(ctx, name)
+	if errors.Is(err, store.ErrNotFound) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 // nodeCaller is the principal this agent calls its nodes as.
@@ -355,20 +391,26 @@ func (p *Peers) contactClient(ctx context.Context, name, onBehalfOf string, hops
 // relay asks the user on whose behalf a remote task runs to answer its
 // permission question, once per question.
 func (p *Peers) relay(ctx context.Context, claims callClaims, agent string, task *a2a.Task, q *hitlQuestion) {
-	key := agent + "|" + string(task.ID) + "|" + q.ID
+	key := relayKey(agent, string(task.ID)) + q.ID
 	p.mu.Lock()
 	seen := p.relayed[key]
 	p.relayed[key] = true
 	p.mu.Unlock()
-	if seen || p.s.router == nil {
+	if seen {
 		return
 	}
 	rec, err := p.s.newQuestionRecord(ctx, task.ID, task.ContextID, agent, q)
 	if err != nil {
 		slog.Error("storing remote question", "error", err)
+		p.mu.Lock()
+		delete(p.relayed, key)
+		p.mu.Unlock()
 		return
 	}
-	chName, conv, _ := p.s.store.ConvOf(ctx, claims.ContextID)
+	chName, conv, err := p.s.store.ConvOf(ctx, claims.ContextID)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		slog.Warn("finding the conversation of a relayed question", "context", claims.ContextID, "error", err)
+	}
 	user := claims.OnBehalfOf
 	if user == "" {
 		user = auth.OwnerID
@@ -378,6 +420,20 @@ func (p *Peers) relay(ctx context.Context, claims callClaims, agent string, task
 		header = fmt.Sprintf("%s wants to run %s", agent, q.Title)
 	}
 	p.s.router.ask(ctx, []string{user}, chName, channel.ConvKey(conv), header, rec)
+}
+
+func relayKey(agent, taskID string) string { return agent + "|" + taskID + "|" }
+
+// forgetRelayed drops the relayed questions of a task which is no longer watched.
+func (p *Peers) forgetRelayed(agent, taskID string) {
+	prefix := relayKey(agent, taskID)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for k := range p.relayed {
+		if strings.HasPrefix(k, prefix) {
+			delete(p.relayed, k)
+		}
+	}
 }
 
 // answerRemote forwards an answer to a remote agent's question.
@@ -399,13 +455,14 @@ func (p *Peers) resumeWatches(ctx context.Context) {
 		return
 	}
 	for _, w := range ws {
-		p.watch(ctx, w)
+		p.watch(w)
 	}
 }
 
-// watch polls a remote task until it finishes and posts the result into the
-// originating context as a new turn.
-func (p *Peers) watch(ctx context.Context, w store.Watch) {
+// watch polls a remote task until it finishes or the server stops, and posts
+// the result into the originating context as a new turn.
+func (p *Peers) watch(w store.Watch) {
+	ctx := p.s.ctx
 	key := w.Contact + "|" + w.TaskID
 	p.mu.Lock()
 	if p.watching[key] {
@@ -465,6 +522,8 @@ func (p *Peers) watch(ctx context.Context, w store.Watch) {
 }
 
 func (p *Peers) poll(ctx context.Context, w store.Watch) (*a2a.Task, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	t, err := p.target(ctx, w.Contact, w.OnBehalfOf, 0)
 	if err != nil {
 		return nil, err
@@ -477,18 +536,27 @@ func (p *Peers) finishWatch(ctx context.Context, w store.Watch, text string) {
 	if err := p.s.store.DeleteWatch(ctx, w.Contact, w.TaskID); err != nil {
 		slog.Error("deleting watch", "error", err)
 	}
-	if p.s.router == nil {
-		return
-	}
-	who := auth.Principal{ID: w.OnBehalfOf}
-	if who.ID == "" || who.ID == auth.OwnerID {
-		who = auth.Owner()
-	} else if u, err := p.s.store.User(ctx, who.ID); err == nil {
-		who.Roles = u.Roles
-	}
-	if err := p.s.router.injectTurn(ctx, w.OriginContextID, who, text); err != nil {
+	p.forgetRelayed(w.Contact, w.TaskID)
+	if err := p.s.router.injectTurn(ctx, w.OriginContextID, p.watchPrincipal(ctx, w), text); err != nil {
 		slog.Error("posting watched result", "contact", w.Contact, "task", w.TaskID, "error", err)
 	}
+}
+
+// watchPrincipal is the user a watched task's result is posted as.
+func (p *Peers) watchPrincipal(ctx context.Context, w store.Watch) auth.Principal {
+	if w.OnBehalfOf == "" || w.OnBehalfOf == auth.OwnerID {
+		return auth.Owner()
+	}
+	who := auth.Principal{ID: w.OnBehalfOf}
+	u, err := p.s.store.User(ctx, who.ID)
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			slog.Warn("loading the user of a watch", "user", who.ID, "error", err)
+		}
+		return who
+	}
+	who.Roles = u.Roles
+	return who
 }
 
 // resultText is the text of a finished task: its artifacts, or its status message.

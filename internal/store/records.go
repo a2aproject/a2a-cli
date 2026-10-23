@@ -60,6 +60,9 @@ type Link struct {
 	Identity string
 	UserID   string
 	Conv     string
+	// Name is the pairing the link was made with, so that revoking the
+	// pairing removes it even when it links to the owner.
+	Name string
 }
 
 // EnsureUser creates the user if it doesn't exist and returns it.
@@ -116,9 +119,9 @@ func hasRole(roles []string, role string) bool { return slices.Contains(roles, r
 
 // PutLink links a channel identity to a user, replacing an existing link.
 func (s *Store) PutLink(ctx context.Context, l Link) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO links (channel, identity, user_id, conv, created) VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT (channel, identity) DO UPDATE SET user_id = excluded.user_id, conv = excluded.conv`,
-		l.Channel, l.Identity, l.UserID, l.Conv, s.now().UnixNano())
+	_, err := s.db.ExecContext(ctx, `INSERT INTO links (channel, identity, user_id, conv, name, created) VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT (channel, identity) DO UPDATE SET user_id = excluded.user_id, conv = excluded.conv, name = excluded.name`,
+		l.Channel, l.Identity, l.UserID, l.Conv, l.Name, s.now().UnixNano())
 	return err
 }
 
@@ -283,11 +286,20 @@ func (s *Store) Tokens(ctx context.Context) ([]Token, error) {
 	return out, rows.Err()
 }
 
-// RevokeTokens deletes the tokens issued under name, and the user of
-// principal with its channel links. It returns the number of tokens and
-// links deleted.
-func (s *Store) RevokeTokens(ctx context.Context, name, principal string) (int, error) {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM tokens WHERE name = ?`, name)
+// RevokeTokens deletes the tokens and channel links made with the pairing
+// name, and the user of principal with its links. It returns the number of
+// tokens and links deleted.
+func (s *Store) RevokeTokens(ctx context.Context, name, principal string) (n int, err error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, tx.Rollback())
+		}
+	}()
+	res, err := tx.ExecContext(ctx, `DELETE FROM tokens WHERE name = ?`, name)
 	if err != nil {
 		return 0, err
 	}
@@ -295,7 +307,7 @@ func (s *Store) RevokeTokens(ctx context.Context, name, principal string) (int, 
 	if err != nil {
 		return 0, err
 	}
-	res, err = s.db.ExecContext(ctx, `DELETE FROM links WHERE user_id = ?`, principal)
+	res, err = tx.ExecContext(ctx, `DELETE FROM links WHERE name = ? OR user_id = ?`, name, principal)
 	if err != nil {
 		return 0, err
 	}
@@ -303,7 +315,10 @@ func (s *Store) RevokeTokens(ctx context.Context, name, principal string) (int, 
 	if err != nil {
 		return 0, err
 	}
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, principal); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, principal); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
 	return int(tokens + links), nil
@@ -515,10 +530,17 @@ func (s *Store) AnswerQuestion(ctx context.Context, id, by, answer string) error
 	if err != nil {
 		return err
 	}
-	if n, err := res.RowsAffected(); err != nil || n == 0 {
-		return errors.Join(ErrAnswered, err)
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
 	}
-	return nil
+	if n > 0 {
+		return nil
+	}
+	if _, err := s.QuestionByID(ctx, id); err != nil {
+		return err
+	}
+	return ErrAnswered
 }
 
 // Watch is a remote task started by a2a.send that outlived the call. When

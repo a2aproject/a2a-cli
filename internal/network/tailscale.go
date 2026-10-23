@@ -26,6 +26,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"tailscale.com/ipn"
 	"tailscale.com/tsnet"
@@ -49,9 +50,10 @@ type Tailscale struct {
 	// Logf receives messages for the user, such as the login URL.
 	Logf func(format string, args ...any)
 
-	mu      sync.Mutex
-	srv     *tsnet.Server
-	started bool
+	mu  sync.Mutex
+	srv *tsnet.Server
+	// started is set once srv is up; readers check it without mu.
+	started atomic.Bool
 	private *splitListener
 	public  *splitListener
 	url     *url.URL
@@ -65,14 +67,14 @@ func (t *Tailscale) Name() string { return "tailscale" }
 func (t *Tailscale) start(ctx context.Context) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.started {
+	if t.started.Load() {
 		return nil
 	}
 	logf := t.Logf
 	if logf == nil {
 		logf = func(string, ...any) {}
 	}
-	t.srv = &tsnet.Server{
+	srv := &tsnet.Server{
 		Hostname:   t.Hostname,
 		Dir:        t.StateDir,
 		ControlURL: t.ControlURL,
@@ -87,17 +89,18 @@ func (t *Tailscale) start(ctx context.Context) error {
 		},
 		Logf: func(format string, args ...any) { slog.Debug("tsnet", "msg", fmt.Sprintf(format, args...)) },
 	}
-	st, err := t.srv.Up(ctx)
+	st, err := srv.Up(ctx)
 	if err != nil {
-		return fmt.Errorf("joining the tailnet: %w", err)
+		return errors.Join(fmt.Errorf("joining the tailnet: %w", err), srv.Close())
 	}
-	domains := t.srv.CertDomains()
+	domains := srv.CertDomains()
 	if len(domains) == 0 {
-		return errors.New("tailscale: HTTPS certificates are disabled in this tailnet; enable HTTPS on the DNS page of the admin console (https://login.tailscale.com/admin/dns)")
+		return errors.Join(errors.New("tailscale: HTTPS certificates are disabled in this tailnet; enable HTTPS on the DNS page of the admin console (https://login.tailscale.com/admin/dns)"), srv.Close())
 	}
+	t.srv = srv
 	t.url = &url.URL{Scheme: "https", Host: domains[0]}
 	slog.Info("joined tailnet", "host", domains[0], "ip", st.TailscaleIPs)
-	t.started = true
+	t.started.Store(true)
 	return nil
 }
 
@@ -176,7 +179,7 @@ func isFunnel(c net.Conn) bool {
 
 // WhoIs implements [Provider].
 func (t *Tailscale) WhoIs(ctx context.Context, remoteAddr string) (*Peer, error) {
-	if !t.started {
+	if !t.started.Load() {
 		return nil, ErrNoIdentity
 	}
 	lc, err := t.srv.LocalClient()
@@ -205,7 +208,7 @@ func (t *Tailscale) WhoIs(ctx context.Context, remoteAddr string) (*Peer, error)
 
 // Peers implements [Provider].
 func (t *Tailscale) Peers(ctx context.Context) ([]PeerInfo, error) {
-	if !t.started {
+	if !t.started.Load() {
 		return nil, ErrUnsupported
 	}
 	lc, err := t.srv.LocalClient()
@@ -231,7 +234,7 @@ func (t *Tailscale) Peers(ctx context.Context) ([]PeerInfo, error) {
 // HTTPClient implements [Provider]. tsnet runs in userspace, so calls to
 // tailnet peers must go through its dialer, not the host network.
 func (t *Tailscale) HTTPClient() *http.Client {
-	if !t.started {
+	if !t.started.Load() {
 		return http.DefaultClient
 	}
 	return t.srv.HTTPClient()

@@ -187,10 +187,13 @@ func (a *Chain) networkPrincipal(ctx context.Context, r Request) (Principal, boo
 		}
 		p = Principal{ID: "user:" + peer.ID, Roles: []string{role}}
 	}
-	// Only a verified network caller can claim to act for someone, because
-	// only then is the caller an agent server of a known user.
-	p.OnBehalfOf = r.Header.Get(HeaderOnBehalfOf)
-	if h, err := strconv.Atoi(r.Header.Get(HeaderHops)); err == nil {
+	// The claimed user is named in the caller's namespace, where user:owner
+	// is the caller's owner. It only means the same here when the caller is
+	// another agent server of this owner.
+	if peer.Self {
+		p.OnBehalfOf = r.Header.Get(HeaderOnBehalfOf)
+	}
+	if h, err := strconv.Atoi(r.Header.Get(HeaderHops)); err == nil && h > 0 {
 		p.Hops = h
 	}
 	return p, true, nil
@@ -311,7 +314,7 @@ func Link(ctx context.Context, s *store.Store, in *channel.Inbound, code string)
 	if _, err := s.EnsureUser(ctx, p.ID, p.Roles); err != nil {
 		return Principal{}, err
 	}
-	l := store.Link{Channel: in.Channel, Identity: in.Identity, UserID: p.ID}
+	l := store.Link{Channel: in.Channel, Identity: in.Identity, UserID: p.ID, Name: c.Name}
 	if in.Direct {
 		l.Conv = string(in.Conv)
 	}

@@ -20,6 +20,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,10 +82,8 @@ func Install(u Unit) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", err
 	}
-	if Installed(u.Name) {
-		if err := run("launchctl", "bootout", domain(), path); err != nil {
-			return "", err
-		}
+	if err := bootout(u.Name, path); err != nil {
+		return "", err
 	}
 	if err := os.WriteFile(path, []byte(LaunchdPlist(u)), 0o644); err != nil {
 		return "", err
@@ -108,9 +107,19 @@ func Uninstall(name string) error {
 	if err != nil {
 		return err
 	}
-	stopErr := run("launchctl", "bootout", domain(), path)
+	stopErr := bootout(name, path)
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return errors.Join(stopErr, err)
 	}
 	return stopErr
+}
+
+// bootout unloads the agent if launchd has it loaded. After a reboot or a
+// manual unload the plist exists but isn't loaded, and bootout would fail.
+func bootout(name, path string) error {
+	if err := run("launchctl", "print", domain()+"/"+label(name)); err != nil {
+		slog.Debug("launchd agent not loaded", "label", label(name), "error", err)
+		return nil
+	}
+	return run("launchctl", "bootout", domain(), path)
 }

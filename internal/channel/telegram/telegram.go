@@ -19,6 +19,7 @@ package telegram
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -46,17 +47,18 @@ type Channel struct {
 	// ServerURL overrides the Bot API URL, for tests.
 	ServerURL string
 
-	once sync.Once
-	err  error
-	bot  *bot.Bot
-	me   *models.User
-	in   chan<- channel.Inbound
-	mu   sync.Mutex
+	connMu sync.Mutex
+	bot    *bot.Bot
+	me     *models.User
+
+	mu sync.Mutex
+	in chan<- channel.Inbound
 }
 
 var (
 	_ channel.Channel   = (*Channel)(nil)
 	_ channel.Describer = (*Channel)(nil)
+	_ channel.Validator = (*Channel)(nil)
 )
 
 // New returns a channel for the bot with token.
@@ -70,29 +72,40 @@ func (c *Channel) Caps() channel.Caps {
 	return channel.Caps{Edit: true, Buttons: true, Threads: true, Typing: true, MaxText: maxText, Markdown: true, Stream: true}
 }
 
+// connect creates the bot client once it succeeds; failures are retried on
+// the next call, so that a brief outage doesn't break the channel for good.
 func (c *Channel) connect(ctx context.Context) error {
-	c.once.Do(func() {
-		opts := []bot.Option{
-			bot.WithDefaultHandler(c.handle),
-			bot.WithAllowedUpdates(bot.AllowedUpdates{"message", "callback_query"}),
-			bot.WithHTTPClient(50*time.Second, &http.Client{Timeout: 70 * time.Second}),
-		}
-		if c.ServerURL != "" {
-			opts = append(opts, bot.WithServerURL(c.ServerURL))
-		}
-		b, err := bot.New(c.token, opts...)
-		if err != nil {
-			c.err = fmt.Errorf("connecting to the Telegram bot: %w", err)
-			return
-		}
-		me, err := b.GetMe(ctx)
-		if err != nil {
-			c.err = fmt.Errorf("telegram getMe: %w", err)
-			return
-		}
-		c.bot, c.me = b, me
-	})
-	return c.err
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	if c.bot != nil {
+		return nil
+	}
+	opts := []bot.Option{
+		bot.WithDefaultHandler(c.handle),
+		bot.WithAllowedUpdates(bot.AllowedUpdates{"message", "callback_query"}),
+		bot.WithHTTPClient(50*time.Second, &http.Client{Timeout: 70 * time.Second}),
+		bot.WithSkipGetMe(),
+	}
+	if c.ServerURL != "" {
+		opts = append(opts, bot.WithServerURL(c.ServerURL))
+	}
+	b, err := bot.New(c.token, opts...)
+	if err != nil {
+		return fmt.Errorf("connecting to the Telegram bot: %w", err)
+	}
+	me, err := b.GetMe(ctx)
+	if err != nil {
+		return fmt.Errorf("telegram getMe: %w", err)
+	}
+	c.bot, c.me = b, me
+	return nil
+}
+
+// Validate implements [channel.Validator]: it checks the bot token.
+func (c *Channel) Validate(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	return c.connect(ctx)
 }
 
 // Describe implements [channel.Describer].
@@ -219,18 +232,26 @@ func (c *Channel) handleMessage(ctx context.Context, b *bot.Bot, msg *models.Mes
 		Text:      text,
 		Authentic: true,
 	}
+	type attachment struct{ id, name, mediaType string }
+	var files []attachment
 	if msg.Document != nil {
-		if f, err := c.download(ctx, b, msg.Document.FileID, msg.Document.FileName, msg.Document.MimeType); err == nil {
-			m.Files = append(m.Files, f)
-		} else {
-			slog.Warn("telegram: downloading document", "error", err)
-		}
+		files = append(files, attachment{msg.Document.FileID, msg.Document.FileName, msg.Document.MimeType})
 	}
 	if n := len(msg.Photo); n > 0 {
-		if f, err := c.download(ctx, b, msg.Photo[n-1].FileID, "photo.jpg", "image/jpeg"); err == nil {
-			m.Files = append(m.Files, f)
-		} else {
-			slog.Warn("telegram: downloading photo", "error", err)
+		files = append(files, attachment{msg.Photo[n-1].FileID, "photo.jpg", "image/jpeg"})
+	}
+	if len(files) > 0 {
+		m.Prepare = func(ctx context.Context, in *channel.Inbound) error {
+			var errs []error
+			for _, a := range files {
+				f, err := c.download(ctx, b, a.id, a.name, a.mediaType)
+				if err != nil {
+					errs = append(errs, fmt.Errorf("telegram: downloading %s: %w", a.name, err))
+					continue
+				}
+				in.Files = append(in.Files, f)
+			}
+			return errors.Join(errs...)
 		}
 	}
 	c.deliver(ctx, m)
@@ -372,10 +393,7 @@ func (c *Channel) Edit(ctx context.Context, ref channel.Ref, m channel.Outbound)
 	if err != nil {
 		return fmt.Errorf("invalid telegram message id %q", ref.ID)
 	}
-	text := m.Text
-	if len(text) > maxText {
-		text = text[:maxText]
-	}
+	text := channel.Truncate(m.Text, maxText)
 	params := &bot.EditMessageTextParams{
 		ChatID: chat, MessageID: id, Text: ToMarkdownV2(text), ParseMode: models.ParseModeMarkdown,
 		ReplyMarkup:        keyboard(m.Question),

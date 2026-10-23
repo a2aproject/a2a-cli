@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -78,6 +79,8 @@ func (s *Server) writeInstructions(ctx context.Context) error {
 	if s.config().Sandbox == SandboxLocal {
 		return nil
 	}
+	s.instructionsMu.Lock()
+	defer s.instructionsMu.Unlock()
 	agents, err := s.peers.callableAgents(ctx)
 	if err != nil {
 		return err
@@ -117,25 +120,27 @@ func writeSection(path, body string) error {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	text := string(data)
-	section := sectionBegin + "\n" + body + sectionEnd + "\n"
-	if i := strings.Index(text, sectionBegin); i >= 0 {
-		end := len(text)
-		if j := strings.Index(text[i:], sectionEnd); j >= 0 {
-			end = i + j + len(sectionEnd)
-			end += len(text[end:]) - len(strings.TrimPrefix(text[end:], "\n"))
-		}
-		text = text[:i] + section + text[end:]
-	} else {
-		if text != "" && !strings.HasSuffix(text, "\n\n") {
-			text = strings.TrimRight(text, "\n") + "\n\n"
-		}
-		text += section
-	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(text), 0o600)
+	return os.WriteFile(path, []byte(withSection(string(data), body)), 0o600)
+}
+
+func withSection(text, body string) string {
+	section := sectionBegin + "\n" + body + sectionEnd + "\n"
+	i := strings.Index(text, sectionBegin)
+	if i < 0 {
+		if text != "" && !strings.HasSuffix(text, "\n\n") {
+			text = strings.TrimRight(text, "\n") + "\n\n"
+		}
+		return text + section
+	}
+	end := len(text)
+	if j := strings.Index(text[i:], sectionEnd); j >= 0 {
+		end = i + j + len(sectionEnd)
+		end += len(text[end:]) - len(strings.TrimPrefix(text[end:], "\n"))
+	}
+	return text[:i] + section + text[end:]
 }
 
 // withAgentsLine returns execCtx with the agents line added before the
@@ -146,7 +151,11 @@ func (s *Server) withAgentsLine(ctx context.Context, execCtx *a2asrv.ExecutorCon
 		return execCtx
 	}
 	agents, err := s.peers.callableAgents(ctx)
-	if err != nil || len(agents) == 0 {
+	if err != nil {
+		slog.Warn("listing callable agents", "error", err)
+		return execCtx
+	}
+	if len(agents) == 0 {
 		return execCtx
 	}
 	claims := callClaims{ContextID: execCtx.ContextID}
@@ -157,6 +166,7 @@ func (s *Server) withAgentsLine(ctx context.Context, execCtx *a2asrv.ExecutorCon
 	}
 	u, err := s.peers.agentsURL(ctx, claims)
 	if err != nil {
+		slog.Warn("creating the agents URL", "error", err)
 		return execCtx
 	}
 	names := make([]string, len(agents))

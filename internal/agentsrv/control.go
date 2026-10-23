@@ -31,6 +31,8 @@ import (
 
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
 	"github.com/a2aproject/a2a-cli/internal/auth"
+	"github.com/a2aproject/a2a-cli/internal/channel"
+	"github.com/a2aproject/a2a-cli/internal/fsutil"
 	"github.com/a2aproject/a2a-cli/internal/store"
 )
 
@@ -55,6 +57,8 @@ type Status struct {
 type ChannelStatus struct {
 	Name    string `json:"name"`
 	Account string `json:"account,omitempty"`
+	// Error is set while the channel is failing and waits to restart.
+	Error string `json:"error,omitempty"`
 }
 
 // PairCodeRequest asks for a pairing code.
@@ -138,7 +142,7 @@ type NodeInfo struct {
 // change the running server without a restart.
 func (s *Server) serveControl(ctx context.Context, errc chan<- error) error {
 	path := s.dir.SocketPath()
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := fsutil.MkdirPrivate(filepath.Dir(path)); err != nil {
 		return err
 	}
 	if c, err := net.DialTimeout("unix", path, time.Second); err == nil {
@@ -180,7 +184,7 @@ func (s *Server) serveControl(ctx context.Context, errc chan<- error) error {
 	})
 	go func() {
 		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errc <- fmt.Errorf("control socket: %w", err)
+			reportFatal(errc, fmt.Errorf("control socket: %w", err))
 		}
 	}()
 	return nil
@@ -200,9 +204,7 @@ func (s *Server) ctlStatus(w http.ResponseWriter, r *http.Request) {
 		Name: cfg.Name, Harness: cfg.Harness, Dir: s.dir.Root, PID: pid(), Started: s.started,
 		Local: local, Private: private, Public: public, Tasks: map[string]int{},
 	}
-	if s.router != nil {
-		st.Channels = s.router.status()
-	}
+	st.Channels = s.router.status()
 	counts, err := s.tasks.TaskCounts(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -273,10 +275,7 @@ func (s *Server) ctlPair(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	resp := PairCodeResponse{Code: code, Expires: expires, URL: s.bestURL(), PairCommand: pairCommand(s.bestURL(), code)}
-	if s.router != nil {
-		resp.Hints = s.router.linkHints(code)
-	}
+	resp := PairCodeResponse{Code: code, Expires: expires, URL: s.bestURL(), PairCommand: pairCommand(s.bestURL(), code), Hints: s.router.linkHints(code)}
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -415,29 +414,40 @@ func (s *Server) ctlAddChannel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.cfgMu.Lock()
-	s.secrets = secrets
-	s.cfgMu.Unlock()
-	if err := s.updateConfig(func(c *agentdir.Config) { setChannelConfig(c, req) }); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+	next := s.config()
+	if err := next.SetChannel(req.Kind, req.Token, req.Email); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	ch, err := s.buildChannel(req.Kind)
+	ch, err := s.buildChannel(next, secrets, req.Kind)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	s.router.replace(ch)
+	if v, ok := ch.(channel.Validator); ok {
+		if err := v.Validate(r.Context()); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	s.cfgMu.Lock()
+	s.secrets = secrets
+	s.cfgMu.Unlock()
+	if err := s.updateConfig(func(c *agentdir.Config) error { return c.SetChannel(req.Kind, req.Token, req.Email) }); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.router.add(ch)
 	writeJSON(w, http.StatusOK, s.router.channelStatus(ch, s.router.ownerHint(r.Context(), ch)))
 }
 
 func (s *Server) ctlDeleteChannel(w http.ResponseWriter, r *http.Request) {
 	kind := r.PathValue("kind")
-	if !slices.Contains([]string{ChannelTelegram, ChannelDiscord, ChannelEmail}, kind) {
-		writeError(w, http.StatusBadRequest, "unknown channel "+kind)
+	if err := (&agentdir.Config{}).SetChannel(kind, "", nil); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := s.updateConfig(func(c *agentdir.Config) { setChannelConfig(c, ChannelRequest{Kind: kind, Token: ""}) }); err != nil {
+	if err := s.updateConfig(func(c *agentdir.Config) error { return c.SetChannel(kind, "", nil) }); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

@@ -26,7 +26,7 @@ import (
 
 func TestRun(t *testing.T) {
 	t.Parallel()
-	env := map[string]string{"ANTHROPIC_API_KEY": "x", "NGROK_AUTHTOKEN": "y"}
+	env := map[string]string{"OPENROUTER_API_KEY": "x", "NGROK_AUTHTOKEN": "y"}
 	getenv := func(k string) string { return env[k] }
 	tests := []struct {
 		name  string
@@ -37,14 +37,14 @@ func TestRun(t *testing.T) {
 			name:  "defaults",
 			input: "\n\n\n\n\n\n\n",
 			want: Result{Mode: ModeForeground, Settings: agentdir.Settings{
-				Harness: "opencode", Name: "app", Secrets: []string{"ANTHROPIC_API_KEY"}, Private: "none", Public: "none",
+				Harness: "opencode", Name: "app", Secrets: []string{"OPENROUTER_API_KEY"}, Private: "none", Public: "none",
 			}},
 		},
 		{
 			name:  "choices with retries",
-			input: "claude\ncoder\nMISSING\nANTHROPIC_API_KEY\nwifi\ntailscale\nngrok\n\nenv:BOT\nservice\n",
+			input: "claude\ncoder\nMISSING\nOPENROUTER_API_KEY\nwifi\ntailscale\nngrok\n\nenv:BOT\nservice\n",
 			want: Result{Mode: ModeService, Settings: agentdir.Settings{
-				Harness: "claude", Name: "coder", Secrets: []string{"ANTHROPIC_API_KEY"}, Private: "tailscale", Public: "ngrok",
+				Harness: "claude", Name: "coder", Secrets: []string{"OPENROUTER_API_KEY"}, Private: "tailscale", Public: "ngrok",
 				NgrokAuthToken: "env:NGROK_AUTHTOKEN", Telegram: "env:BOT",
 			}},
 		},

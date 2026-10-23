@@ -215,3 +215,32 @@ func TestSettingsApply(t *testing.T) {
 		t.Fatalf("Apply() without a harness error = nil, want error")
 	}
 }
+
+func TestSettingsApplyNetworkSecrets(t *testing.T) {
+	t.Setenv("A2A_TEST_TS", "tskey-1")
+	tests := []struct {
+		name        string
+		authKey     string
+		wantSecrets Secrets
+		wantErr     bool
+	}{
+		{name: "value", authKey: "tskey-2", wantSecrets: Secrets{SecretTailscaleKey: "tskey-2"}},
+		{name: "env", authKey: "env:A2A_TEST_TS", wantSecrets: Secrets{SecretTailscaleKey: "tskey-1"}},
+		{name: "stored under its name", authKey: "secret:" + SecretTailscaleKey, wantSecrets: Secrets{}},
+		{name: "other secret", authKey: "secret:OTHER", wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := Settings{Harness: "opencode", TailscaleAuthKey: tc.authKey}.Apply(&Config{}, "x")
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("Apply() error = %v, want error %v", err, tc.wantErr)
+			}
+			if tc.wantErr {
+				return
+			}
+			if diff := cmp.Diff(tc.wantSecrets, got); diff != "" {
+				t.Fatalf("Apply() wrong secrets (-want +got) diff = %s", diff)
+			}
+		})
+	}
+}

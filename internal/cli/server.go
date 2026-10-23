@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"os"
 	"os/signal"
 	"strings"
@@ -31,12 +30,9 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
 	"github.com/a2aproject/a2a-cli/internal/agentsrv"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
-	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/harness"
 	"github.com/a2aproject/a2a-cli/internal/localsrv"
-	"github.com/a2aproject/a2a-cli/internal/transportplugin"
 	"github.com/a2aproject/a2a-cli/internal/wizard"
-	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
 )
 
@@ -85,6 +81,9 @@ git finds a repository, or take --dir.
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if f.echo || f.proxy || f.execCmd != "" {
 				return runLocalServer(cmd.Context(), cfg, &f)
+			}
+			if err := checkTestServerFlags(cmd); err != nil {
+				return err
 			}
 			return runConfiguredAgent(cmd, cfg, &f)
 		},
@@ -189,23 +188,14 @@ func runWizard(cmd *cobra.Command, cfg *globalConfig) error {
 	return runAgent(cmd.Context(), cfg, d, res.Mode == wizard.ModeDetach, res.Mode == wizard.ModeService)
 }
 
-// saveSettings merges start flags into the agent's config and secrets.
+// saveSettings saves start flags, reporting invalid ones as usage errors.
 func saveSettings(d agentdir.Dir, s agentdir.Settings) error {
-	conf := &agentdir.Config{}
-	if d.Exists() {
-		var err error
-		if conf, err = d.LoadConfig(); err != nil {
-			return err
-		}
+	err := d.SaveSettings(s)
+	var se *agentdir.SettingsError
+	if errors.As(err, &se) {
+		return clierr.Usage(se.Error())
 	}
-	secrets, err := s.Apply(conf, d.DefaultName())
-	if err != nil {
-		return clierr.Usage(err.Error())
-	}
-	if err := d.SaveSecrets(secrets); err != nil {
-		return err
-	}
-	return d.SaveConfig(conf)
+	return err
 }
 
 // runAgent runs the agent in the foreground, or starts it in the background.
@@ -228,62 +218,31 @@ func signalContext(ctx context.Context) (context.Context, context.CancelFunc) {
 
 // runLocalServer runs the echo, proxy or exec test server.
 func runLocalServer(ctx context.Context, cfg *globalConfig, f *serverFlags) error {
-	if f.protocol != "latest" && f.protocol != "0.3" {
-		return fmt.Errorf("--protocol must be %q or %q", "latest", "0.3")
-	}
-	modes := 0
-	for _, on := range []bool{f.echo, f.proxy, f.execCmd != ""} {
-		if on {
-			modes++
-		}
-	}
-	if modes > 1 {
-		return clierr.Usage("--echo, --proxy, and --exec are mutually exclusive")
-	}
 	ctx, stop := signalContext(ctx)
 	defer stop()
-	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", f.host, f.port))
-	if err != nil {
-		return fmt.Errorf("listen: %w", err)
-	}
-	transport, err := flagparse.SingleTransport([]string{f.serveTransport})
-	if err != nil {
-		return err
-	}
-	if !transportplugin.IsBuiltin(transport) {
-		return fmt.Errorf("serve %q transport not supported", transport)
-	}
-	sc := localsrv.Config{
-		Listener:        listener,
-		Logger:          cfg.logf,
-		ProtocolVersion: a2a.ProtocolVersion(f.protocol),
-		CardCompat:      f.cardCompat,
-		Quiet:           f.quiet,
-		CardParams: localsrv.CardParams{
-			AgentName:        f.name,
-			AgentDesc:        f.desc,
-			CardPath:         f.cardFile,
-			Transport:        transport,
-			AdvertiseAddress: f.advertiseAddress,
+	return localsrv.Run(ctx, localsrv.Options{
+		Echo: f.echo, Proxy: f.proxy, Exec: f.execCmd, Chunk: f.chunk,
+		Host: f.host, Port: f.port, Protocol: f.protocol, ServeTransport: f.serveTransport,
+		CardCompat: f.cardCompat, Quiet: f.quiet, Logger: cfg.logf,
+		Card: localsrv.CardParams{AgentName: f.name, AgentDesc: f.desc, CardPath: f.cardFile, AdvertiseAddress: f.advertiseAddress},
+		Upstream: func(ctx context.Context, opts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
+			return newAgentClient(ctx, cfg, opts...)
 		},
-	}
-	if sc.AdvertiseAddress == "" {
-		sc.AdvertiseAddress = listener.Addr().String()
-	}
-	switch {
-	case f.echo:
-		return localsrv.ServeEcho(ctx, sc)
-	case f.proxy:
-		var proxyOpts []a2aclient.FactoryOption
-		if !f.quiet {
-			proxyOpts = append(proxyOpts, localsrv.ProxyLogInterceptorOption())
+		SvcParams: cfg.svcParams,
+		Tenant:    cfg.tenant,
+	})
+}
+
+// testServerFlags only apply to the echo, proxy and exec test servers.
+var testServerFlags = []string{"port", "host", "name", "description", "card", "card-compat", "protocol", "serve-transport", "quiet", "chunk", "advertise-address"}
+
+// checkTestServerFlags rejects test server flags without a test server mode,
+// rather than ignoring them.
+func checkTestServerFlags(cmd *cobra.Command) error {
+	for _, name := range testServerFlags {
+		if cmd.Flags().Changed(name) {
+			return clierr.Usage(fmt.Sprintf("--%s only applies to test servers (--echo, --proxy or --exec); to configure an agent, run `a2a server <harness> --%s ...`", name, name))
 		}
-		client, err := newAgentClient(ctx, cfg, proxyOpts...)
-		if err != nil {
-			return fmt.Errorf("creating upstream client: %w", err)
-		}
-		return localsrv.ServeProxy(ctx, sc, cfg.svcParams, client, cfg.tenant)
-	default:
-		return localsrv.ServeExec(ctx, sc, f.execCmd, f.chunk)
 	}
+	return nil
 }

@@ -44,7 +44,7 @@ func newServerHarnessCmd(cfg *globalConfig, sf *serverFlags, name string) *cobra
 	cmd := &cobra.Command{
 		Use:   name,
 		Short: short,
-		Example: fmt.Sprintf(`  a2a server %[1]s --name coder --secret ANTHROPIC_API_KEY
+		Example: fmt.Sprintf(`  a2a server %[1]s --name coder --secret OPENROUTER_API_KEY
   a2a server %[1]s --private tailscale --telegram env:CODER_BOT_TOKEN --detach
   a2a server %[1]s --mount ~/src/app --mount ~/docs:/docs:ro`, name),
 		Args: cobra.NoArgs,

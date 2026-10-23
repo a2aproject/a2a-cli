@@ -16,8 +16,10 @@ package agentsrv
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,6 +54,7 @@ func TestMain(m *testing.M) {
 	}
 	watchInterval, watchMaxInterval = 200*time.Millisecond, time.Second
 	webhookRetries = []time.Duration{0, 100 * time.Millisecond}
+	channelRetryMin = 10 * time.Millisecond
 	code := m.Run()
 	if err := os.RemoveAll(dir); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -167,7 +170,11 @@ func (ts *testServer) pair(name, role string) string {
 // client returns an A2A client authenticated with token.
 func (ts *testServer) client(token string) *a2aclient.Client {
 	ts.t.Helper()
-	hc := &http.Client{Transport: &headerTransport{base: http.DefaultTransport, header: http.Header{"Authorization": {"Bearer " + token}}}}
+	u, err := url.Parse(ts.localURL())
+	if err != nil {
+		ts.t.Fatalf("url.Parse() error = %v", err)
+	}
+	hc := &http.Client{Transport: &headerTransport{base: http.DefaultTransport, host: u.Host, header: http.Header{"Authorization": {"Bearer " + token}}}}
 	ctx := context.Background()
 	card, err := agentcard.NewResolver(hc).Resolve(ctx, ts.localURL())
 	if err != nil {
@@ -246,6 +253,8 @@ func wantResult(t *testing.T, task *a2a.Task, state a2a.TaskState, text string) 
 type fakeChannel struct {
 	name    string
 	buttons bool
+	// failures is how many times Run fails before it connects.
+	failures int
 
 	mu    sync.Mutex
 	in    chan<- channel.Inbound
@@ -271,6 +280,11 @@ func (f *fakeChannel) LinkHint(code string) string { return "/start " + code }
 
 func (f *fakeChannel) Run(ctx context.Context, in chan<- channel.Inbound) error {
 	f.mu.Lock()
+	if f.failures > 0 {
+		f.failures--
+		f.mu.Unlock()
+		return errors.New("messenger unreachable")
+	}
 	f.in = in
 	f.mu.Unlock()
 	close(f.ready)
@@ -302,12 +316,30 @@ var msgSeq struct {
 
 // write delivers a message from identity in conversation conv.
 func (f *fakeChannel) write(identity, conv, text string) {
-	<-f.ready
+	f.deliver(f.message(identity, conv, text))
+}
+
+func (f *fakeChannel) message(identity, conv, text string) channel.Inbound {
 	msgSeq.Lock()
 	msgSeq.n++
 	id := strconv.Itoa(msgSeq.n)
 	msgSeq.Unlock()
-	f.in <- channel.Inbound{Channel: f.name, MessageID: "m" + id, Identity: identity, Name: identity, Conv: channel.ConvKey(conv), Direct: true, Text: text, Authentic: true}
+	return channel.Inbound{Channel: f.name, MessageID: "m" + id, Identity: identity, Name: identity, Conv: channel.ConvKey(conv), Direct: true, Text: text, Authentic: true}
+}
+
+func (f *fakeChannel) deliver(in channel.Inbound) {
+	<-f.ready
+	f.in <- in
+}
+
+// waitReady waits until the router runs the channel.
+func (f *fakeChannel) waitReady(t *testing.T) {
+	t.Helper()
+	select {
+	case <-f.ready:
+	case <-time.After(10 * time.Second):
+		t.Fatal("channel did not start")
+	}
 }
 
 // click presses option of a question message.

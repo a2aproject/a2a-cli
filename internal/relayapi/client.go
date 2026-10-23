@@ -29,6 +29,10 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2a"
 )
 
+// maxResponse bounds the responses of the node API, which hold an inbox of
+// at most a few hundred envelopes.
+const maxResponse = 32 << 20
+
 // Client calls the node API of an agent server with a node token.
 type Client struct {
 	// BaseURL is the node API base, <agent URL>/relay.
@@ -65,7 +69,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 		return err
 	}
 	defer closeBody(resp)
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponse))
 	if err != nil {
 		return err
 	}

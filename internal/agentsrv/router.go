@@ -34,90 +34,142 @@ import (
 // Router turns channel messages into A2A tasks of the agent and renders
 // task events back into the conversation.
 type Router struct {
-	s  *Server
-	in chan channel.Inbound
+	s   *Server
+	ctx context.Context
+	in  chan channel.Inbound
 
-	mu      sync.Mutex
-	chans   map[string]channel.Channel
-	cancels map[string]context.CancelFunc
-	convs   map[string]*sync.Mutex
+	mu    sync.Mutex
+	chans map[string]*runningChannel
+	convs map[string]*convMutex
 	// asked maps question IDs to the messages which show them, so that they
 	// can be updated once answered.
 	asked map[string][]askedRef
-	ctx   context.Context
-	errc  chan<- error
 }
 
-func newRouter(s *Server) *Router {
-	return &Router{
-		s:       s,
-		in:      make(chan channel.Inbound, 64),
-		chans:   map[string]channel.Channel{},
-		cancels: map[string]context.CancelFunc{},
-		convs:   map[string]*sync.Mutex{},
-		asked:   map[string][]askedRef{},
+type runningChannel struct {
+	ch     channel.Channel
+	cancel context.CancelFunc
+	done   chan struct{}
+	// err is the last error of Run, cleared when it runs again.
+	err error
+}
+
+type convMutex struct {
+	sync.Mutex
+	refs int
+}
+
+// Channel restarts back off from channelRetryMin to channelRetryMax.
+var (
+	channelRetryMin = 5 * time.Second
+	channelRetryMax = 5 * time.Minute
+)
+
+// newRouter returns a router which dispatches channel messages until ctx ends.
+func newRouter(ctx context.Context, s *Server) *Router {
+	r := &Router{
+		s:     s,
+		ctx:   ctx,
+		in:    make(chan channel.Inbound, 64),
+		chans: map[string]*runningChannel{},
+		convs: map[string]*convMutex{},
+		asked: map[string][]askedRef{},
 	}
+	go r.dispatch(ctx)
+	return r
 }
 
-// add starts a channel.
-func (r *Router) add(ctx context.Context, ch channel.Channel, errc chan<- error) {
-	r.mu.Lock()
-	first := r.ctx == nil
-	r.ctx, r.errc = ctx, errc
-	r.mu.Unlock()
-	if first {
-		go r.dispatch(ctx)
-	}
-	r.start(ch)
-}
-
-func (r *Router) start(ch channel.Channel) {
-	r.mu.Lock()
-	ctx, errc := r.ctx, r.errc
-	cctx, cancel := context.WithCancel(ctx)
-	r.chans[ch.Name()] = ch
-	r.cancels[ch.Name()] = cancel
-	r.mu.Unlock()
-	go func() {
-		err := ch.Run(cctx, r.in)
-		if err != nil && cctx.Err() == nil {
-			slog.Error("channel stopped", "channel", ch.Name(), "error", err)
-			select {
-			case errc <- fmt.Errorf("%s: %w", ch.Name(), err):
-			default:
-			}
-		}
-	}()
-}
-
-// replace swaps a channel at runtime.
-func (r *Router) replace(ch channel.Channel) {
+// add starts a channel, replacing a running one of the same name after it
+// stopped. A failing channel is restarted with backoff rather than stopping
+// the server, so that a messenger outage doesn't take the agent down.
+func (r *Router) add(ch channel.Channel) {
 	r.remove(ch.Name())
-	r.start(ch)
+	cctx, cancel := context.WithCancel(r.ctx)
+	rc := &runningChannel{ch: ch, cancel: cancel, done: make(chan struct{})}
+	r.mu.Lock()
+	r.chans[ch.Name()] = rc
+	r.mu.Unlock()
+	go r.run(cctx, rc)
 }
 
+func (r *Router) run(ctx context.Context, rc *runningChannel) {
+	defer close(rc.done)
+	delay := channelRetryMin
+	for {
+		err := rc.ch.Run(ctx, r.in)
+		if ctx.Err() != nil {
+			return
+		}
+		if err == nil {
+			err = errors.New("stopped unexpectedly")
+		}
+		slog.Error("channel stopped; restarting", "channel", rc.ch.Name(), "in", delay, "error", err)
+		r.mu.Lock()
+		rc.err = err
+		r.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+		delay = min(delay*2, channelRetryMax)
+		r.mu.Lock()
+		rc.err = nil
+		r.mu.Unlock()
+	}
+}
+
+// remove stops a channel and waits until it stopped, so that a replacement
+// never polls the same account at the same time.
 func (r *Router) remove(name string) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	if cancel := r.cancels[name]; cancel != nil {
-		cancel()
-	}
+	rc := r.chans[name]
 	delete(r.chans, name)
-	delete(r.cancels, name)
+	r.mu.Unlock()
+	if rc == nil {
+		return
+	}
+	rc.cancel()
+	<-rc.done
+}
+
+// stopAll stops every channel and waits until they stopped or ctx ends.
+func (r *Router) stopAll(ctx context.Context) error {
+	r.mu.Lock()
+	running := make([]*runningChannel, 0, len(r.chans))
+	for name, rc := range r.chans {
+		running = append(running, rc)
+		delete(r.chans, name)
+	}
+	r.mu.Unlock()
+	for _, rc := range running {
+		rc.cancel()
+	}
+	for _, rc := range running {
+		select {
+		case <-rc.done:
+		case <-ctx.Done():
+			return fmt.Errorf("waiting for %s to stop: %w", rc.ch.Name(), ctx.Err())
+		}
+	}
+	return nil
 }
 
 func (r *Router) channel(name string) channel.Channel {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.chans[name]
+	if rc := r.chans[name]; rc != nil {
+		return rc.ch
+	}
+	return nil
 }
 
 func (r *Router) channels() []channel.Channel {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	out := make([]channel.Channel, 0, len(r.chans))
-	for _, ch := range r.chans {
-		out = append(out, ch)
+	for _, rc := range r.chans {
+		out = append(out, rc.ch)
 	}
 	slices.SortFunc(out, func(a, b channel.Channel) int { return strings.Compare(a.Name(), b.Name()) })
 	return out
@@ -139,6 +191,11 @@ func (r *Router) channelStatus(ch channel.Channel, hint string) *ChannelStatus {
 	if hint != "" {
 		st.Account = strings.TrimSpace(st.Account + "\n" + hint)
 	}
+	r.mu.Lock()
+	if rc := r.chans[ch.Name()]; rc != nil && rc.err != nil {
+		st.Error = rc.err.Error()
+	}
+	r.mu.Unlock()
 	return st
 }
 
@@ -201,17 +258,27 @@ func (r *Router) dispatch(ctx context.Context) {
 	}
 }
 
-// convLock serializes the handling of one conversation's messages.
-func (r *Router) convLock(ch string, conv channel.ConvKey) *sync.Mutex {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+// lockConv serializes the handling of one conversation's messages. The
+// returned function unlocks it.
+func (r *Router) lockConv(ch string, conv channel.ConvKey) func() {
 	key := ch + "\x00" + string(conv)
+	r.mu.Lock()
 	l := r.convs[key]
 	if l == nil {
-		l = &sync.Mutex{}
+		l = &convMutex{}
 		r.convs[key] = l
 	}
-	return l
+	l.refs++
+	r.mu.Unlock()
+	l.Lock()
+	return func() {
+		l.Unlock()
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if l.refs--; l.refs == 0 {
+			delete(r.convs, key)
+		}
+	}
 }
 
 func (r *Router) reply(ctx context.Context, ch channel.Channel, in channel.Inbound, text string) {
@@ -257,6 +324,11 @@ func (r *Router) handle(ctx context.Context, in channel.Inbound) {
 		}
 		return
 	}
+	if in.Prepare != nil {
+		if err := in.Prepare(ctx, &in); err != nil {
+			slog.Warn("preparing channel message", "channel", in.Channel, "error", err)
+		}
+	}
 	// Stops and answers must not wait for the turn they stop or unblock,
 	// which holds the conversation.
 	if isCommand(in.Text, "stop") {
@@ -267,9 +339,7 @@ func (r *Router) handle(ctx context.Context, in channel.Inbound) {
 		return
 	}
 
-	l := r.convLock(in.Channel, in.Conv)
-	l.Lock()
-	defer l.Unlock()
+	defer r.lockConv(in.Channel, in.Conv)()
 	switch {
 	case isCommand(in.Text, "new"):
 		if err := r.s.store.SetContext(ctx, in.Channel, string(in.Conv), a2a.NewContextID()); err != nil {
@@ -395,6 +465,9 @@ func (r *Router) follow(ctx context.Context, ch channel.Channel, conv channel.Co
 func (r *Router) handleAction(ctx context.Context, ch channel.Channel, in channel.Inbound) {
 	rec, err := r.s.store.QuestionByID(ctx, in.Action.QuestionID)
 	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			slog.Error("loading question", "question", in.Action.QuestionID, "error", err)
+		}
 		return
 	}
 	if rec.AnsweredBy != "" {
@@ -402,7 +475,11 @@ func (r *Router) handleAction(ctx context.Context, ch channel.Channel, in channe
 		return
 	}
 	p, ok, err := r.s.chain.Authenticate(ctx, auth.Request{Channel: &in})
-	if err != nil || !ok {
+	if err != nil {
+		slog.Error("authenticating channel action", "error", err)
+		return
+	}
+	if !ok {
 		return
 	}
 	q := questionFromRecord(rec)
@@ -448,17 +525,23 @@ func (r *Router) answerIn(ctx context.Context, ch channel.Channel, in channel.In
 	if who == "" {
 		who = displayPrincipal(p.ID)
 	}
-	own, _ := r.s.store.ContextOf(ctx, in.Channel, string(in.Conv))
+	own, err := r.s.store.ContextOf(ctx, in.Channel, string(in.Conv))
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		slog.Warn("resolving conversation context", "error", err)
+	}
 	if rec.Contact == "" && rec.ContextID == own {
 		if err := r.s.store.AnswerQuestion(ctx, rec.ID, p.ID, opt.ID); err != nil {
+			if !errors.Is(err, store.ErrAnswered) {
+				slog.Error("answering question", "question", rec.ID, "error", err)
+				r.reply(ctx, ch, in, "Couldn't record the answer. Try again.")
+				return
+			}
 			r.reply(ctx, ch, in, "Already answered.")
 			return
 		}
 		r.markAnswered(ctx, rec.ID, opt.Label, who)
 		msg := answerMessage(a2a.TaskID(rec.TaskID), rec.ContextID, q.ID, opt.ID)
-		l := r.convLock(in.Channel, in.Conv)
-		l.Lock()
-		defer l.Unlock()
+		defer r.lockConv(in.Channel, in.Conv)()
 		r.stream(ctx, ch, in.Conv, channel.Ref{}, p, &a2a.SendMessageRequest{Message: msg})
 		return
 	}
@@ -577,10 +660,8 @@ func (r *Router) injectTurn(ctx context.Context, contextID string, p auth.Princi
 	chName, conv, err := r.s.store.ConvOf(ctx, contextID)
 	if err == nil {
 		if ch := r.channel(chName); ch != nil {
-			l := r.convLock(chName, channel.ConvKey(conv))
 			go func() {
-				l.Lock()
-				defer l.Unlock()
+				defer r.lockConv(chName, channel.ConvKey(conv))()
 				if last, err := r.s.tasks.LatestInContext(ctx, contextID); err == nil && last.Status.State == a2a.TaskStateInputRequired {
 					msg.TaskID = last.ID
 				}

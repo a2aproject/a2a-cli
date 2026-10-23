@@ -176,6 +176,7 @@ func waitReady(ctx context.Context, dir agentdir.Dir, offset int64, alive func()
 			// Print what the server logged while becoming ready.
 			lines, _, err := readFrom(dir.LogPath(), offset)
 			if err != nil {
+				slog.Debug("reading the startup log", "error", err)
 				return nil
 			}
 			for _, l := range lines {
@@ -208,6 +209,9 @@ func isProgress(line string) bool {
 	return line != "" && !strings.HasPrefix(line, "time=")
 }
 
+// readFrom returns the complete lines of the file at path after offset, and
+// the offset after them. A file shorter than offset was replaced, as on a
+// restart, and is read from the start.
 func readFrom(path string, offset int64) ([]string, int64, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -218,6 +222,13 @@ func readFrom(path string, offset int64) ([]string, int64, error) {
 			slog.Debug("closing log", "error", err)
 		}
 	}()
+	fi, err := f.Stat()
+	if err != nil {
+		return nil, offset, err
+	}
+	if fi.Size() < offset {
+		offset = 0
+	}
 	if _, err := f.Seek(offset, io.SeekStart); err != nil {
 		return nil, offset, err
 	}
@@ -225,9 +236,12 @@ func readFrom(path string, offset int64) ([]string, int64, error) {
 	r := bufio.NewReader(f)
 	for {
 		line, err := r.ReadString('\n')
-		if err != nil {
+		if errors.Is(err, io.EOF) {
 			// A partial line is read again once it is complete.
 			return lines, offset, nil
+		}
+		if err != nil {
+			return lines, offset, err
 		}
 		offset += int64(len(line))
 		lines = append(lines, strings.TrimRight(line, "\r\n"))
@@ -264,9 +278,6 @@ func FollowLog(ctx context.Context, dir agentdir.Dir, n int, follow bool, out io
 		lines, next, err := readFrom(dir.LogPath(), offset)
 		if err != nil {
 			return err
-		}
-		if next < offset {
-			next = 0
 		}
 		offset = next
 		if err := printLines(out, lines); err != nil {

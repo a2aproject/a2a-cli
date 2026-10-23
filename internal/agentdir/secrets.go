@@ -22,6 +22,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/a2aproject/a2a-cli/internal/fsutil"
 )
 
 // SecretPrefix marks a config value as a reference to a stored secret.
@@ -53,19 +55,21 @@ func (d Dir) SaveSecrets(s Secrets) error {
 	if len(s) == 0 {
 		return nil
 	}
-	cur, err := d.LoadSecrets()
-	if err != nil {
-		return err
-	}
-	maps.Copy(cur, s)
 	if err := d.Init(); err != nil {
 		return err
 	}
-	data, err := yaml.Marshal(cur)
-	if err != nil {
-		return err
-	}
-	return writeFileAtomic(d.SecretsPath(), data, 0o600)
+	return fsutil.WithLock(d.SecretsPath(), func() error {
+		cur, err := d.LoadSecrets()
+		if err != nil {
+			return err
+		}
+		maps.Copy(cur, s)
+		data, err := yaml.Marshal(cur)
+		if err != nil {
+			return err
+		}
+		return fsutil.WriteAtomic(d.SecretsPath(), data, 0o600)
+	})
 }
 
 // Resolve returns the value of a config field: the secret it references, or

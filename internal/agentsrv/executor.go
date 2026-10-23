@@ -34,6 +34,7 @@ import (
 
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
 	"github.com/a2aproject/a2a-cli/internal/auth"
+	"github.com/a2aproject/a2a-cli/internal/fsutil"
 	"github.com/a2aproject/a2a-cli/internal/harness"
 	"github.com/a2aproject/a2a-cli/internal/store"
 )
@@ -118,7 +119,10 @@ func (s *Server) newExecutor(ctx context.Context, harnessLog io.Writer) (a2asrv.
 		runner = dr
 	case SandboxLocal:
 		runner = harness.LocalRunner{}
-		if exe, err := os.Executable(); err == nil {
+		exe, err := os.Executable()
+		if err != nil {
+			s.logf("! the a2a CLI isn't on the harness's PATH: %v", err)
+		} else {
 			env = append(env, "PATH="+filepath.Dir(exe)+string(os.PathListSeparator)+os.Getenv("PATH"))
 		}
 		env = append(env, "A2ACLI_UNIX_SOCKET="+harnessHost+"="+s.harnessSocket)
@@ -200,7 +204,10 @@ func (s *Server) listenHarness(ctx context.Context, sandboxed bool) (net.Listene
 
 func (s *Server) listenHarnessSocket() (net.Listener, error) {
 	dir := s.dir.HarnessSocketDir()
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := fsutil.MkdirPrivate(filepath.Dir(dir)); err != nil {
+		return nil, err
+	}
+	if err := fsutil.MkdirPrivate(dir); err != nil {
 		return nil, err
 	}
 	sock := filepath.Join(dir, filepath.Base(harness.SandboxSocket))
@@ -347,8 +354,11 @@ func (i *callerInterceptor) Before(ctx context.Context, callCtx *a2asrv.CallCont
 // caller who may not approve.
 func (s *Server) checkAnswer(ctx context.Context, p auth.Principal, taskID a2a.TaskID) error {
 	stored, err := s.tasks.Get(auth.WithPrincipal(ctx, auth.Owner()), taskID)
-	if err != nil {
+	if errors.Is(err, a2a.ErrTaskNotFound) {
 		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("checking task %s: %w", taskID, err)
 	}
 	task := stored.Task
 	if task.Status.State != a2a.TaskStateInputRequired {

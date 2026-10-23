@@ -66,10 +66,7 @@ func Detach(u Unit) (int, error) {
 		return 0, startErr
 	}
 	pid := cmd.Process.Pid
-	if err := cmd.Process.Release(); err != nil {
-		return pid, err
-	}
-	return pid, closeErr
+	return pid, errors.Join(cmd.Process.Release(), closeErr)
 }
 
 func run(name string, args ...string) error {

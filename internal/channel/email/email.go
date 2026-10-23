@@ -28,6 +28,7 @@ import (
 	"log/slog"
 	"net"
 	"net/smtp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -58,8 +59,9 @@ type Config struct {
 }
 
 const (
-	maxText   = 100_000
-	idleLimit = 25 * time.Minute
+	maxText     = 100_000
+	idleLimit   = 25 * time.Minute
+	smtpTimeout = 2 * time.Minute
 )
 
 // Channel is a mailbox.
@@ -217,11 +219,16 @@ func (c *Channel) checkValidity(ctx context.Context, sel *imap.SelectData) error
 }
 
 func (c *Channel) fetchNew(ctx context.Context, client *imapclient.Client, in chan<- channel.Inbound) error {
-	lastStr, _, err := c.kv.Get(ctx, lastUIDKey)
+	lastStr, ok, err := c.kv.Get(ctx, lastUIDKey)
 	if err != nil {
 		return err
 	}
-	last, _ := strconv.ParseUint(lastStr, 10, 32)
+	var last uint64
+	if ok {
+		if last, err = strconv.ParseUint(lastStr, 10, 32); err != nil {
+			return fmt.Errorf("email: invalid last UID %q: %w", lastStr, err)
+		}
+	}
 	var set imap.UIDSet
 	set.AddRange(imap.UID(last+1), 0)
 	section := &imap.FetchItemBodySection{Peek: true}
@@ -265,6 +272,10 @@ func (c *Channel) parse(raw []byte) (channel.Inbound, bool, error) {
 	if err != nil || len(from) == 0 {
 		return channel.Inbound{}, false, fmt.Errorf("no From address: %w", err)
 	}
+	// DMARC checks one of several From domains, so the sender would be ambiguous.
+	if len(from) > 1 {
+		return channel.Inbound{}, false, nil
+	}
 	sender := strings.ToLower(from[0].Address)
 	if strings.EqualFold(sender, c.cfg.Address) {
 		return channel.Inbound{}, false, nil
@@ -291,6 +302,7 @@ func (c *Channel) parse(raw []byte) (channel.Inbound, bool, error) {
 	}
 	subject, err := h.Subject()
 	if err != nil {
+		slog.Debug("email: undecodable subject", "error", err)
 		subject = ""
 	}
 
@@ -318,13 +330,24 @@ func (c *Channel) parse(raw []byte) (channel.Inbound, bool, error) {
 		}
 		switch ph := p.Header.(type) {
 		case *mail.InlineHeader:
-			ct, _, _ := ph.ContentType()
+			ct, _, err := ph.ContentType()
+			if err != nil {
+				slog.Debug("email: inline part without a valid content type", "error", err)
+				continue
+			}
 			if ct == "text/plain" && text == "" {
 				text = string(body)
 			}
 		case *mail.AttachmentHeader:
-			name, _ := ph.Filename()
-			ct, _, _ := ph.ContentType()
+			name, err := ph.Filename()
+			if err != nil {
+				slog.Debug("email: attachment without a valid filename", "error", err)
+			}
+			ct, _, err := ph.ContentType()
+			if err != nil {
+				slog.Debug("email: attachment without a valid content type", "error", err)
+				ct = "application/octet-stream"
+			}
 			in.Files = append(in.Files, channel.File{Name: name, MediaType: ct, Data: body})
 		}
 	}
@@ -351,8 +374,9 @@ func domainOf(addr string) string {
 	return strings.ToLower(d)
 }
 
-// Authentic reports whether an Authentication-Results header added by the
-// trusted server shows dmarc=pass, or dkim=pass for the sender's domain.
+// Authentic reports whether the topmost Authentication-Results header added
+// by the trusted server shows dmarc=pass for the sender's domain, or dkim=pass
+// aligned with it. Headers further down may have been forged by the sender.
 func Authentic(results []string, trusted, fromDomain string) bool {
 	for _, r := range results {
 		id, rest, ok := strings.Cut(r, ";")
@@ -366,7 +390,9 @@ func Authentic(results []string, trusted, fromDomain string) bool {
 			}
 			switch fields[0] {
 			case "dmarc=pass":
-				return true
+				if slices.Contains(fields[1:], "header.from="+fromDomain) {
+					return true
+				}
 			case "dkim=pass":
 				for _, f := range fields[1:] {
 					if d, ok := strings.CutPrefix(f, "header.d="); ok && aligned(d, fromDomain) {
@@ -375,6 +401,7 @@ func Authentic(results []string, trusted, fromDomain string) bool {
 				}
 			}
 		}
+		return false
 	}
 	return false
 }
@@ -508,6 +535,15 @@ func (c *Channel) sendSMTP(ctx context.Context, to string, msg []byte) error {
 	if err != nil {
 		return fmt.Errorf("email: SMTP: %w", err)
 	}
+	// A stalled server would otherwise block every later reply, which wait
+	// for c.mu.
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		deadline = time.Now().Add(smtpTimeout)
+	}
+	if err := conn.SetDeadline(deadline); err != nil {
+		return errors.Join(fmt.Errorf("email: SMTP: %w", err), conn.Close())
+	}
 	client, err := smtp.NewClient(conn, host)
 	if err != nil {
 		return errors.Join(fmt.Errorf("email: SMTP: %w", err), conn.Close())
@@ -517,10 +553,14 @@ func (c *Channel) sendSMTP(ctx context.Context, to string, msg []byte) error {
 			slog.Debug("email: closing SMTP", "error", err)
 		}
 	}()
-	if ok, _ := client.Extension("STARTTLS"); ok {
+	_, implicitTLS := conn.(*tls.Conn)
+	switch ok, _ := client.Extension("STARTTLS"); {
+	case ok:
 		if err := client.StartTLS(&tls.Config{ServerName: host}); err != nil {
 			return fmt.Errorf("email: STARTTLS: %w", err)
 		}
+	case !implicitTLS && !isLoopback(host):
+		return fmt.Errorf("email: %s doesn't offer STARTTLS; refusing to send the password unencrypted", c.cfg.SMTP)
 	}
 	if err := client.Auth(smtp.PlainAuth("", c.cfg.Username, c.cfg.Password, host)); err != nil {
 		return fmt.Errorf("email: SMTP auth: %w", err)
@@ -542,6 +582,14 @@ func (c *Channel) sendSMTP(ctx context.Context, to string, msg []byte) error {
 		return err
 	}
 	return client.Quit()
+}
+
+func isLoopback(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // Edit implements [channel.Channel]. Email can't edit sent messages.

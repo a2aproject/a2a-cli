@@ -48,6 +48,12 @@ type Describer interface {
 	LinkHint(code string) string
 }
 
+// Validator is implemented by channels which can check their credentials
+// before they are saved.
+type Validator interface {
+	Validate(ctx context.Context) error
+}
+
 // Caps are what a channel supports.
 type Caps struct {
 	Edit    bool
@@ -99,6 +105,10 @@ type Inbound struct {
 	Authentic bool
 	// ReplyTo is the message this one answers, if the channel tracks it.
 	ReplyTo Ref
+	// Prepare, if set, finishes the message once its sender is known to be
+	// allowed in: it downloads files and may move Conv to a new thread. It
+	// keeps strangers from making the server do work on their behalf.
+	Prepare func(ctx context.Context, in *Inbound) error
 }
 
 // Outbound is a message to a channel.
@@ -170,6 +180,18 @@ func Split(text string, limit int) []string {
 }
 
 func isRuneStart(b byte) bool { return b&0xC0 != 0x80 }
+
+// Truncate cuts text to at most limit bytes without splitting a character.
+func Truncate(text string, limit int) string {
+	if len(text) <= limit {
+		return text
+	}
+	cut := limit
+	for cut > 0 && !isRuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut]
+}
 
 // KV persists small channel state, such as the last message seen, across
 // restarts.

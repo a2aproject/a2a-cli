@@ -20,6 +20,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/a2aproject/a2a-cli/internal/agentdir"
 	"github.com/a2aproject/a2a-cli/internal/agentsrv"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
 )
@@ -36,28 +37,24 @@ func newServerChannelRmCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
 			}
 			err = agentsrv.NewClient(d).DeleteChannel(cmd.Context(), args[0])
 			if errors.Is(err, agentsrv.ErrNotRunning) {
-				conf, err := d.LoadConfig()
-				if err != nil {
-					return err
-				}
-				switch args[0] {
-				case agentsrv.ChannelTelegram:
-					conf.Channels.Telegram = nil
-				case agentsrv.ChannelDiscord:
-					conf.Channels.Discord = nil
-				case agentsrv.ChannelEmail:
-					conf.Channels.Email = nil
-				default:
-					return clierr.Usage("unknown channel " + args[0])
-				}
-				if err := d.SaveConfig(conf); err != nil {
-					return err
-				}
-			} else if err != nil {
+				err = removeChannelOffline(d, args[0])
+			}
+			if err != nil {
 				return err
 			}
 			_, err = fmt.Fprintf(cfg.Out, "✓ removed %s\n", args[0])
 			return err
 		},
 	}
+}
+
+func removeChannelOffline(d agentdir.Dir, kind string) error {
+	conf, err := d.LoadConfig()
+	if err != nil {
+		return err
+	}
+	if err := conf.SetChannel(kind, "", nil); err != nil {
+		return clierr.Usage(err.Error())
+	}
+	return d.SaveConfig(conf)
 }

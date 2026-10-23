@@ -56,6 +56,8 @@ const inboxSize = 200
 type Nodes struct {
 	s *Server
 
+	handlerMu sync.Mutex
+
 	mu       sync.Mutex
 	handlers map[string]a2asrv.RequestHandler
 	open     map[a2a.TaskID]*nodeWaiter
@@ -109,6 +111,9 @@ func (n *Nodes) tasks(ctx context.Context, id string) *store.TaskStore {
 
 // handler returns the A2A handler of a node.
 func (n *Nodes) handler(id string) a2asrv.RequestHandler {
+	// Two handlers for one node would keep separate queues of its tasks.
+	n.handlerMu.Lock()
+	defer n.handlerMu.Unlock()
 	n.mu.Lock()
 	h, ok := n.handlers[id]
 	n.mu.Unlock()
@@ -415,7 +420,7 @@ func (e *nodeExecutor) Execute(ctx context.Context, ec *a2asrv.ExecutorContext) 
 		w := n.openTask(ec.TaskID, e.node)
 		defer n.closeTask(ec.TaskID, w)
 
-		n.wake(ctx, e.node, relayapi.Envelope{
+		n.wake(e.node, relayapi.Envelope{
 			Kind: kind, TaskID: string(ec.TaskID), ContextID: ec.ContextID, Sender: senderOf(ctx, n.s.config().Name),
 			Message: ec.Message, Text: relayapi.TextOf(ec.Message), State: relayapi.StateName(state),
 		})
@@ -491,7 +496,7 @@ func (e *nodeExecutor) Cancel(ctx context.Context, ec *a2asrv.ExecutorContext) i
 		if w != nil {
 			w.close()
 		}
-		n.wake(ctx, e.node, relayapi.Envelope{Kind: relayapi.KindCanceled, TaskID: string(ec.TaskID), ContextID: ec.ContextID,
+		n.wake(e.node, relayapi.Envelope{Kind: relayapi.KindCanceled, TaskID: string(ec.TaskID), ContextID: ec.ContextID,
 			Sender: senderOf(ctx, n.s.config().Name), State: relayapi.StateName(a2a.TaskStateCanceled)})
 		yield(a2a.NewStatusUpdateEvent(ec, a2a.TaskStateCanceled, nil), nil)
 	}
@@ -519,18 +524,30 @@ func (n *Nodes) openTask(id a2a.TaskID, node string) *nodeWaiter {
 	return w
 }
 
+// idempotencyRetention is how long the idempotency keys of a closed task are
+// kept, so that a node retrying its last event still gets a duplicate reply.
+var idempotencyRetention = 10 * time.Minute
+
 func (n *Nodes) closeTask(id a2a.TaskID, w *nodeWaiter) {
 	w.close()
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if n.open[id] == w {
-		delete(n.open, id)
+	if n.open[id] != w {
+		return
 	}
+	delete(n.open, id)
+	time.AfterFunc(idempotencyRetention, func() {
+		n.mu.Lock()
+		defer n.mu.Unlock()
+		if n.open[id] == nil {
+			delete(n.keys, id)
+		}
+	})
 }
 
 // wake records an envelope in the node's inbox and delivers it to the
 // node's webhook in the background.
-func (n *Nodes) wake(ctx context.Context, nodeID string, env relayapi.Envelope) *relayapi.InboxEntry {
+func (n *Nodes) wake(nodeID string, env relayapi.Envelope) *relayapi.InboxEntry {
 	env.ID = "wake_" + store.RandomString(12, store.Alphanumeric)
 	env.Node = nodeID
 	env.CreatedAt = time.Now().UTC()
@@ -548,7 +565,7 @@ func (n *Nodes) wake(ctx context.Context, nodeID string, env relayapi.Envelope) 
 	n.inbox[nodeID] = list
 	n.mu.Unlock()
 
-	go n.deliver(context.WithoutCancel(ctx), entry)
+	go n.deliver(n.s.ctx, entry)
 	return entry
 }
 
@@ -560,9 +577,17 @@ func (n *Nodes) deliver(ctx context.Context, entry *relayapi.InboxEntry) {
 		return
 	}
 	for i, delay := range webhookRetries {
-		time.Sleep(delay)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
 		node, err := n.s.store.Node(ctx, env.Node)
+		if errors.Is(err, store.ErrNotFound) {
+			return
+		}
 		if err != nil {
+			slog.Error("loading node for webhook delivery", "node", env.Node, "error", err)
 			return
 		}
 		err = postWebhook(ctx, node, env.ID, body)
