@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestPrepareLocal(t *testing.T) {
@@ -58,6 +59,30 @@ func TestPrepareLocal(t *testing.T) {
 	}
 	if err := p.Stop(context.Background()); err != nil {
 		t.Fatalf("Stop() error = %v", err)
+	}
+}
+
+func TestDockerCLIMount(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		cli  string
+		goos string
+		want []agentdir.Mount
+	}{
+		{name: "linux host", cli: "/opt/a2a", goos: "linux", want: []agentdir.Mount{{Src: "/opt/a2a", Dst: SandboxCLI, ReadOnly: true}}},
+		{name: "macOS host keeps the image's binary", cli: "/opt/a2a", goos: "darwin"},
+		{name: "windows host keeps the image's binary", cli: `C:\a2a.exe`, goos: "windows"},
+		{name: "no binary", goos: "linux"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := dockerCLIMount(tc.cli, tc.goos)
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Fatalf("dockerCLIMount() wrong result (-want +got) diff = %s", diff)
+			}
+		})
 	}
 }
 

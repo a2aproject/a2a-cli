@@ -134,14 +134,22 @@ func prepareDocker(ctx context.Context, spec Spec, ws Workspace) (*Prepared, err
 		dr.Mounts = append(dr.Mounts, agentdir.Mount{Src: filepath.Dir(spec.Socket), Dst: SandboxDir})
 		dr.Env = append(dr.Env, EnvUnixSocket+"="+spec.SocketHost+"="+filepath.Join(SandboxDir, filepath.Base(spec.Socket)))
 	}
-	if spec.CLI != "" {
-		dr.Mounts = append(dr.Mounts, agentdir.Mount{Src: spec.CLI, Dst: SandboxCLI, ReadOnly: true})
-	}
+	dr.Mounts = append(dr.Mounts, dockerCLIMount(spec.CLI, runtime.GOOS)...)
 	cmd, err := dr.Command(ctx, spec.Profile.Command(ws))
 	if err != nil {
 		return nil, err
 	}
 	return &Prepared{Args: cmd.Args, Env: cmd.Env, Dir: cmd.Dir, Summary: "docker: " + what, Stop: dr.Stop}, nil
+}
+
+// dockerCLIMount mounts the server's binary over the image's a2a CLI. Only
+// a Linux host's binary runs in the container; elsewhere the image's own
+// build, made for the server's commit, is used.
+func dockerCLIMount(cli, goos string) []agentdir.Mount {
+	if cli == "" || goos != "linux" {
+		return nil
+	}
+	return []agentdir.Mount{{Src: cli, Dst: SandboxCLI, ReadOnly: true}}
 }
 
 func prepareLocal(ctx context.Context, spec Spec, ws Workspace) (*Prepared, error) {
