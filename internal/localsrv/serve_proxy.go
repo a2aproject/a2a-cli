@@ -26,8 +26,6 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 )
 
-var _ a2asrv.RequestHandler = (*proxyHandler)(nil)
-
 // ProxyLogInterceptorOption returns a client factory option that logs proxied
 // calls to stderr. Callers should apply it when building the upstream client so
 // that proxied requests are traced unless running in quiet mode.
@@ -43,7 +41,12 @@ func ServeProxy(ctx context.Context, cfg Config, svcParams *flagparse.ServicePar
 		return err
 	}
 
-	handler := &proxyHandler{client: client, svcParams: svcParams}
+	handler := &ClientHandler{Client: client, Context: func(ctx context.Context) context.Context {
+		if params := svcParams.Params(); len(params) > 0 {
+			return a2aclient.AttachServiceParams(ctx, params)
+		}
+		return ctx
+	}}
 
 	if !cfg.Quiet {
 		fmt.Fprintf(os.Stderr, "Proxying to %q agent\n", card.Name)
@@ -73,64 +76,68 @@ func resolveProxyCard(ctx context.Context, cfg Config, client *a2aclient.Client,
 	return &cardCopy, nil
 }
 
-type proxyHandler struct {
-	client    *a2aclient.Client
-	svcParams *flagparse.ServiceParams
+// ClientHandler serves A2A requests by forwarding them to an agent through
+// Client. Context, if set, prepares the context of every forwarded request.
+type ClientHandler struct {
+	Client  *a2aclient.Client
+	Context func(context.Context) context.Context
 }
 
-func (p *proxyHandler) withParams(ctx context.Context) context.Context {
-	if params := p.svcParams.Params(); len(params) > 0 {
-		return a2aclient.AttachServiceParams(ctx, params)
+var _ a2asrv.RequestHandler = (*ClientHandler)(nil)
+
+func (p *ClientHandler) ctx(ctx context.Context) context.Context {
+	if p.Context != nil {
+		return p.Context(ctx)
 	}
 	return ctx
 }
 
-func (p *proxyHandler) GetTask(ctx context.Context, req *a2a.GetTaskRequest) (*a2a.Task, error) {
-	return p.client.GetTask(p.withParams(ctx), req)
+func (p *ClientHandler) GetTask(ctx context.Context, req *a2a.GetTaskRequest) (*a2a.Task, error) {
+	return p.Client.GetTask(p.ctx(ctx), req)
 }
 
-func (p *proxyHandler) ListTasks(ctx context.Context, req *a2a.ListTasksRequest) (*a2a.ListTasksResponse, error) {
-	return p.client.ListTasks(p.withParams(ctx), req)
+func (p *ClientHandler) ListTasks(ctx context.Context, req *a2a.ListTasksRequest) (*a2a.ListTasksResponse, error) {
+	return p.Client.ListTasks(p.ctx(ctx), req)
 }
 
-func (p *proxyHandler) CancelTask(ctx context.Context, req *a2a.CancelTaskRequest) (*a2a.Task, error) {
-	return p.client.CancelTask(p.withParams(ctx), req)
+func (p *ClientHandler) CancelTask(ctx context.Context, req *a2a.CancelTaskRequest) (*a2a.Task, error) {
+	return p.Client.CancelTask(p.ctx(ctx), req)
 }
 
-func (p *proxyHandler) SendMessage(ctx context.Context, req *a2a.SendMessageRequest) (a2a.SendMessageResult, error) {
-	return p.client.SendMessage(p.withParams(ctx), req)
+func (p *ClientHandler) SendMessage(ctx context.Context, req *a2a.SendMessageRequest) (a2a.SendMessageResult, error) {
+	return p.Client.SendMessage(p.ctx(ctx), req)
 }
 
-func (p *proxyHandler) SubscribeToTask(ctx context.Context, req *a2a.SubscribeToTaskRequest) iter.Seq2[a2a.Event, error] {
-	return p.client.SubscribeToTask(p.withParams(ctx), req)
+func (p *ClientHandler) SubscribeToTask(ctx context.Context, req *a2a.SubscribeToTaskRequest) iter.Seq2[a2a.Event, error] {
+	return p.Client.SubscribeToTask(p.ctx(ctx), req)
 }
 
-func (p *proxyHandler) SendStreamingMessage(ctx context.Context, req *a2a.SendMessageRequest) iter.Seq2[a2a.Event, error] {
-	return p.client.SendStreamingMessage(p.withParams(ctx), req)
+func (p *ClientHandler) SendStreamingMessage(ctx context.Context, req *a2a.SendMessageRequest) iter.Seq2[a2a.Event, error] {
+	return p.Client.SendStreamingMessage(p.ctx(ctx), req)
 }
 
-func (p *proxyHandler) GetTaskPushConfig(ctx context.Context, req *a2a.GetTaskPushConfigRequest) (*a2a.PushConfig, error) {
-	return p.client.GetTaskPushConfig(p.withParams(ctx), req)
+func (p *ClientHandler) GetTaskPushConfig(ctx context.Context, req *a2a.GetTaskPushConfigRequest) (*a2a.PushConfig, error) {
+	return p.Client.GetTaskPushConfig(p.ctx(ctx), req)
 }
 
-func (p *proxyHandler) ListTaskPushConfigs(ctx context.Context, req *a2a.ListTaskPushConfigRequest) (*a2a.ListTaskPushConfigResponse, error) {
-	resp, err := p.client.ListTaskPushConfigs(p.withParams(ctx), req)
+func (p *ClientHandler) ListTaskPushConfigs(ctx context.Context, req *a2a.ListTaskPushConfigRequest) (*a2a.ListTaskPushConfigResponse, error) {
+	resp, err := p.Client.ListTaskPushConfigs(p.ctx(ctx), req)
 	if err != nil {
 		return nil, err
 	}
 	return &a2a.ListTaskPushConfigResponse{Configs: resp}, nil
 }
 
-func (p *proxyHandler) CreateTaskPushConfig(ctx context.Context, req *a2a.PushConfig) (*a2a.PushConfig, error) {
-	return p.client.CreateTaskPushConfig(p.withParams(ctx), req)
+func (p *ClientHandler) CreateTaskPushConfig(ctx context.Context, req *a2a.PushConfig) (*a2a.PushConfig, error) {
+	return p.Client.CreateTaskPushConfig(p.ctx(ctx), req)
 }
 
-func (p *proxyHandler) DeleteTaskPushConfig(ctx context.Context, req *a2a.DeleteTaskPushConfigRequest) error {
-	return p.client.DeleteTaskPushConfig(p.withParams(ctx), req)
+func (p *ClientHandler) DeleteTaskPushConfig(ctx context.Context, req *a2a.DeleteTaskPushConfigRequest) error {
+	return p.Client.DeleteTaskPushConfig(p.ctx(ctx), req)
 }
 
-func (p *proxyHandler) GetExtendedAgentCard(ctx context.Context, req *a2a.GetExtendedAgentCardRequest) (*a2a.AgentCard, error) {
-	return p.client.GetExtendedAgentCard(p.withParams(ctx), req)
+func (p *ClientHandler) GetExtendedAgentCard(ctx context.Context, req *a2a.GetExtendedAgentCardRequest) (*a2a.AgentCard, error) {
+	return p.Client.GetExtendedAgentCard(p.ctx(ctx), req)
 }
 
 type proxyLogInterceptor struct {

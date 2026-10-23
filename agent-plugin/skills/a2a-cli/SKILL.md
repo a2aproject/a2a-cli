@@ -135,6 +135,10 @@ Run `a2a <command> --help` for the full, current set. The load-bearing ones:
 | `--task-id <id>` / `--context-id <id>` | Continue a task / group a new task under a context. |
 | `--auth "<creds>"` / `--svc-param <k=v>` | Attach credentials or transport parameters (or set `A2ACLI_*` env vars). Never commit a secret. |
 
+Agents served by `a2a server` need a token. If the owner gives you a pairing
+code, run `a2a pair add <agent-url> <code>` once; later commands for that
+agent attach the token automatically.
+
 ## Configuration
 
 Every setting can come from a flag, an `A2ACLI_*` environment variable, a

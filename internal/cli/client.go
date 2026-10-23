@@ -17,6 +17,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -57,14 +58,42 @@ func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclie
 	case cfg.url != "" && cfg.agentCard.IsSet():
 		return nil, clierr.Usage("--endpoint and --agent-card are mutually exclusive")
 	case cfg.url != "":
+		attachStoredToken(cfg)
 		return newClientFromEndpoint(ctx, cfg, cfg.url, extraOpts...)
 	case cfg.agentCard.IsSet():
 		if err := cfg.agentCard.Validate(); err != nil {
 			return nil, clierr.Usage(err.Error())
 		}
+		attachStoredToken(cfg)
 		return newClientFromCard(ctx, cfg, cfg.agentCard.URL(), extraOpts...)
 	default:
 		return nil, clierr.Usage("either '--agent-card <ref>' or '--endpoint <url> --transport <t>' must be provided")
+	}
+}
+
+// attachStoredToken uses the token saved by `a2a pair add` for the target
+// agent, unless the request already carries a credential.
+func attachStoredToken(cfg *globalConfig) {
+	target := cfg.url
+	if target == "" && cfg.agentCard.IsSet() {
+		target = cfg.agentCard.URL()
+	}
+	if cfg.svcParams.HasCredential() || !strings.Contains(target, "://") {
+		return
+	}
+	store, err := cfg.credentialStore()
+	if err != nil {
+		cfg.logf("credentials: %v", err)
+		return
+	}
+	c, ok, err := store.Lookup(target)
+	if err != nil {
+		cfg.logf("credentials: %v", err)
+		return
+	}
+	if ok {
+		cfg.logf("using the token from `a2a pair add` for %s", c.URL)
+		cfg.svcParams.SetDefaultAuth("Bearer " + c.Token)
 	}
 }
 
@@ -136,7 +165,12 @@ func resolveCard(ctx context.Context, cfg *globalConfig, ref string) (*a2a.Agent
 		opts = append(opts, agentcard.WithRequestHeader(k, strings.Join(vals, ", ")))
 	}
 	cfg.logf("resolving agent card from %s", ref)
-	card, err := compatCardResolver.Resolve(ctx, ref, opts...)
+	resolver := compatCardResolver
+	if cfg.unixSocket != "" {
+		resolver = agentcard.NewResolver(&http.Client{Transport: cfg.httpTransport, Timeout: 30 * time.Second})
+		resolver.CardParser = a2av0.NewAgentCardParser()
+	}
+	card, err := resolver.Resolve(ctx, ref, opts...)
 	if err != nil {
 		return nil, clierr.CardResolution(err)
 	}
@@ -190,6 +224,7 @@ func stripHTTPScheme(raw string) string {
 // withServiceParams attaches the --svc-param entries (including the --auth
 // shorthand) to ctx so they ride along with every request the client makes.
 func withServiceParams(ctx context.Context, cfg *globalConfig) context.Context {
+	attachStoredToken(cfg)
 	if params := cfg.svcParams.Params(); len(params) > 0 {
 		ctx = a2aclient.AttachServiceParams(ctx, params)
 	}
@@ -200,4 +235,30 @@ func destroyClient(cfg *globalConfig, client *a2aclient.Client) {
 	if err := client.Destroy(); err != nil {
 		cfg.logf("failed to destroy client: %v", err)
 	}
+}
+
+// unixSocketTransport sends HTTP requests through a Unix socket. spec is
+// <path>, for every host, or <host>=<path>, for requests to host only.
+func unixSocketTransport(spec string) http.RoundTripper {
+	host, path, scoped := strings.Cut(spec, "=")
+	if !scoped {
+		host, path = "", spec
+	}
+	viaSocket := func(h string) bool { return host == "" || h == host }
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	proxy := t.Proxy
+	t.Proxy = func(r *http.Request) (*url.URL, error) {
+		if viaSocket(r.URL.Hostname()) || proxy == nil {
+			return nil, nil
+		}
+		return proxy(r)
+	}
+	var d net.Dialer
+	t.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		if h, _, err := net.SplitHostPort(addr); err == nil && viaSocket(h) {
+			return d.DialContext(ctx, "unix", path)
+		}
+		return d.DialContext(ctx, network, addr)
+	}
+	return t
 }

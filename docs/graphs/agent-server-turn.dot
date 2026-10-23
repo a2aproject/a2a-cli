@@ -1,0 +1,50 @@
+// C. One turn: a message from a chat or an A2A client becomes an ACP prompt,
+// and a tool call that changes something waits for an approver.
+// Render: dot -Tpng -Gdpi=110 agent-server-turn.dot -o agent-server-turn.png
+digraph agent_server_turn {
+  rankdir=TB;
+  graph [fontname="Helvetica", nodesep=0.4, ranksep=0.5, pad=0.3, newrank=true,
+         label="C. A turn, and a tool call that needs approval", labelloc=t, fontsize=20];
+  node  [fontname="Helvetica", fontsize=13, shape=box, style="rounded,filled", fillcolor="#ffffff", color="#555555"];
+  edge  [fontname="Helvetica", fontsize=11, color="#555555", fontcolor="#333333"];
+
+  { rank=same;
+    User     [label="Member or owner\nin a chat, or an A2A client", shape=ellipse, fillcolor="#dbe8ff"];
+    Approver [label="Owner or --approver\non their messengers,\nor the /hitl/<token> page", shape=ellipse, fillcolor="#dbe8ff"];
+  }
+
+  subgraph cluster_server {
+    label="Agent server"; style="rounded,filled"; fillcolor="#f0f9f0"; color="#9ccc9c";
+    { rank=same;
+      Router  [label="Router\nconversation = A2A context\n/new, /stop"];
+      Auth    [label="Auth chain\n-> principal"];
+    }
+    Handler [label="A2A handler\ntask store (SQLite)"];
+    { rank=same;
+      Rules   [label="--allow-tools / --deny-tools\nanswer by tool kind"];
+      Exec    [label="Executor (a2aacp)\ncontext -> ACP session\none turn per context at a time"];
+      Line    [label="[a2a agents] line\nadded to new prompts,\nkept out of task history", shape=note, fillcolor="#fff7d6"];
+    }
+    Hitl    [label="input-required\n{\"hitl\": {id, type: permission,\noptions: once, always, reject}}"];
+  }
+
+  subgraph cluster_sandbox {
+    label="Sandbox"; style="rounded,filled"; fillcolor="#f3eefb"; color="#b9a4dd";
+    Harness [label="Harness\nevery changing tool\nis set to ask"];
+  }
+
+  User -> Router   [label="1. message"];
+  User -> Auth     [label="1'. A2A request\n(token or tailnet)", style=dashed];
+  Router -> Auth   [label="2. channel link"];
+  Auth -> Handler  [label="3. SendMessage\nas the principal"];
+  Handler -> Exec  [label="4. execute"];
+  Exec -> Line     [style=dotted, dir=none];
+  Exec -> Harness  [label="5. session/prompt\n(streamed back as\ntask updates)", style=bold];
+  Harness -> Exec  [label="6. session/request_permission"];
+  Exec -> Rules    [label="7. allowed or denied\nby kind?"];
+  Rules -> Hitl    [label="8. otherwise ask"];
+  Hitl -> Router   [label="9. buttons to approvers;\nmembers see input-required", constraint=false];
+  Router -> Approver [constraint=false];
+  Approver -> Handler [label="10. answer on the same task:\noption, approve/deny or hitl data", color="#2e7d32", fontcolor="#2e7d32"];
+  Handler -> Exec  [label="11. only owners and approvers\nmay answer", style=dashed, color="#2e7d32", fontcolor="#2e7d32"];
+}

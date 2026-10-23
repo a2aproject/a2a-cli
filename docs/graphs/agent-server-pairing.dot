@@ -1,0 +1,69 @@
+// B. Pairing and identity: how callers, messenger accounts, other agents and
+// webhook nodes get a principal, and where each credential is kept.
+// Render: dot -Tpng -Gdpi=110 agent-server-pairing.dot -o agent-server-pairing.png
+digraph agent_server_pairing {
+  rankdir=TB;
+  graph [fontname="Helvetica", nodesep=0.4, ranksep=0.55, pad=0.3,
+         label="B. Pairing and identity: one kind of code, three ways to redeem it", labelloc=t, fontsize=18];
+  node  [fontname="Helvetica", fontsize=11, shape=box, style="rounded,filled", fillcolor="#ffffff", color="#555555"];
+  edge  [fontname="Helvetica", fontsize=9, color="#555555", fontcolor="#333333"];
+
+  Owner [label="Owner\n(in the agent's directory)", shape=ellipse, fillcolor="#dbe8ff"];
+
+  subgraph cluster_mint {
+    label="1. Mint (control socket)"; style="rounded,filled"; fillcolor="#fdf1e6"; color="#e0b48a";
+    PairCaller [label="a2a server pair --name anna\n[--role owner]"];
+    PairNode   [label="a2a server pair --name grok\n--webhook <url>"];
+    Code       [label="one-time code K7Q2-9XF4\n15 min, single use\npurpose: pair or node", shape=note, fillcolor="#fff7d6"];
+  }
+
+  subgraph cluster_redeem {
+    label="2. Redeem"; style="rounded,filled"; fillcolor="#eef5ff"; color="#9bb7e0";
+    PairAdd  [label="a2a pair add <agent-url> <code>\nPOST /pair"];
+    Link     [label="\"link <code>\" to the bot\n(Telegram, Discord, email)"];
+    Contact  [label="a2a server contact add grok\n--url <url> --code <code>\n(on another agent)"];
+  }
+
+  subgraph cluster_server {
+    label="3. Agent server keeps (server.db)"; style="rounded,filled"; fillcolor="#f0f9f0"; color="#9ccc9c";
+    Tokens [label="tokens: hash -> principal, roles"];
+    Links  [label="links: channel identity -> principal"];
+    NodeT  [label="nodes: token hash, webhook,\nsigning secret"];
+  }
+
+  subgraph cluster_holders {
+    label="4. The holder keeps"; style="rounded,filled"; fillcolor="#f3eefb"; color="#b9a4dd";
+    Creds   [label="~/.config/a2a-cli/credentials.json\ncaller token a2p_...\nattached by a2a send, task, card"];
+    NodeCreds [label="credentials.json (kind node)\nor A2A_RELAY_TOKEN\nnode token a2rn.<url>.<id>.<secret>\nused by a2a relay"];
+    ContactDB [label="the other agent's server.db\ncontact URL + token"];
+  }
+
+  subgraph cluster_principals {
+    label="Principals"; style="rounded,filled"; fillcolor="#f4f4f4"; color="#bbbbbb";
+    POwner  [label="user:owner\nanswers approvals"];
+    PPair   [label="pair:<name>\nmember (talks) or owner"];
+    PUser   [label="user:<login>\ntailnet user from\nnetwork.identities or app cap"];
+    PNode   [label="node:<id>\nonly the /relay API"];
+  }
+
+  Tailnet [label="Tailscale WhoIs\non the private listener", shape=ellipse, fillcolor="#e3f4e3"];
+
+  Owner -> PairCaller; Owner -> PairNode;
+  PairCaller -> Code; PairNode -> Code;
+  Code -> PairAdd; Code -> Link; Code -> Contact;
+  PairAdd -> Tokens [label="pair code:\ncaller token"];
+  PairAdd -> NodeT  [label="node code:\nnode token"];
+  Link -> Links;
+  Contact -> Tokens [label="caller token"];
+  PairAdd -> Creds [style=dashed];
+  PairAdd -> NodeCreds [style=dashed];
+  Contact -> ContactDB [style=dashed];
+  Tokens -> PPair; Tokens -> POwner [label="--role owner"];
+  Links -> PPair; Links -> POwner;
+  NodeT -> PNode;
+  Tailnet -> POwner [label="same user as the agent:\nno code needed"];
+  Tailnet -> PUser;
+
+  Revoke [label="a2a server pair rm <name>\nrevokes tokens and links,\nor removes a node", shape=note, fillcolor="#fff7d6"];
+  Revoke -> Tokens [style=dotted]; Revoke -> Links [style=dotted]; Revoke -> NodeT [style=dotted];
+}

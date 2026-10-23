@@ -22,3 +22,15 @@ import _ "embed"
 //
 //go:embed a2a-cli/SKILL.md
 var A2ACLI string
+
+// A2ARelay is the contents of the a2a-relay SKILL.md, teaching a webhook node
+// how to answer wakes. {{BASE}} stands for the hosting agent's URL.
+//
+//go:embed a2a-relay/SKILL.md
+var A2ARelay string
+
+// A2AAgents is the contents of the a2a-agents SKILL.md, teaching a harness
+// run by `a2a server` how to call other agents through the server.
+//
+//go:embed a2a-agents/SKILL.md
+var A2AAgents string

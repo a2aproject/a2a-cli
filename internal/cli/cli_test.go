@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -724,6 +725,66 @@ func TestSend_ResumeHintForInputRequiredTask(t *testing.T) {
 	}
 }
 
+func TestSendOverUnixSocket(t *testing.T) {
+	t.Parallel()
+	dir, err := os.MkdirTemp("", "a2a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(dir); err != nil {
+			t.Errorf("removing %s: %v", dir, err)
+		}
+	})
+	sock := filepath.Join(dir, "a2a.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const base = "http://agent.invalid"
+	mux := http.NewServeMux()
+	mux.Handle("/.well-known/agent-card.json", a2asrv.NewStaticAgentCardHandler(&a2a.AgentCard{
+		Name:                "socket",
+		SupportedInterfaces: []*a2a.AgentInterface{a2a.NewAgentInterface(base, a2a.TransportProtocolHTTPJSON)},
+		Capabilities:        a2a.AgentCapabilities{Streaming: true},
+	}))
+	mux.Handle("/", a2asrv.NewRESTHandler(a2asrv.NewHandler(
+		a2asrv.AgentExecutorFunc(func(ctx context.Context, ec *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
+			return func(yield func(a2a.Event, error) bool) {
+				yield(a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart("over the socket")), nil)
+			}
+		}),
+	)))
+	server := &httptest.Server{Listener: ln, Config: &http.Server{Handler: mux}}
+	server.Start()
+	t.Cleanup(server.Close)
+
+	tests := []struct {
+		name    string
+		socket  string
+		args    []string
+		wantErr bool
+	}{
+		{name: "agent card", socket: sock, args: []string{"-a", base}},
+		{name: "endpoint", socket: sock, args: []string{"-e", base, "--transport", "rest"}},
+		{name: "scoped to the host", socket: "agent.invalid=" + sock, args: []string{"-a", base}},
+		{name: "scoped to another host", socket: "other.invalid=" + sock, args: []string{"-a", base, "--timeout", "2s"}, wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			args := append(append([]string{"send", "--unix-socket", tc.socket}, tc.args...), "hello")
+			out, err := runCMD(t, args...)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("a2a %s error = %v, want error %v", strings.Join(args, " "), err, tc.wantErr)
+			}
+			if !tc.wantErr && !strings.Contains(out, "over the socket") {
+				t.Fatalf("a2a %s = %q, want the agent's answer", strings.Join(args, " "), out)
+			}
+		})
+	}
+}
+
 func TestSendWithVersionSelector(t *testing.T) {
 	t.Parallel()
 	url := startTestServer(t)
@@ -927,7 +988,7 @@ func TestGetTaskWait_Timeout(t *testing.T) {
 		}),
 	)
 	taskID := sendTestMessageWithConfig(t, url, &a2a.SendMessageConfig{ReturnImmediately: true}, "hello")
-	_, err := runCMD(t, "task", "get", "-a", url, string(taskID), "--wait", "--poll-interval", "1ms", "--timeout", "5ms")
+	_, err := runCMD(t, "task", "get", "-a", url, string(taskID), "--wait", "--poll-interval", "10ms", "--timeout", "500ms")
 	if err == nil {
 		t.Fatal("a2a task get --wait against a never-terminal task should time out")
 	}
@@ -943,7 +1004,7 @@ func TestServe_ModeValidation(t *testing.T) {
 		args           []string
 		wantErrContain string
 	}{
-		{"no mode", []string{"server"}, "specify --echo, --proxy <url>, or --exec"},
+		{"no mode and no agent", []string{"server", "--dir", "/nonexistent-a2a-agent"}, "has no .a2a/config.yaml"},
 		{"multiple modes", []string{"server", "--echo", "--exec", "cat"}, "mutually exclusive"},
 	} {
 		t.Run(tt.name+" fails", func(t *testing.T) {

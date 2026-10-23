@@ -1,0 +1,86 @@
+// A. Overview: who reaches the agent server, what runs inside it, and
+// where the harness runs. Top to bottom: callers, listeners, server core,
+// sandbox, calls to other agents.
+// Render: dot -Tpng -Gdpi=110 agent-server-overview.dot -o agent-server-overview.png
+digraph agent_server_overview {
+  rankdir=TB;
+  graph [fontname="Helvetica", nodesep=0.3, ranksep=0.45, pad=0.3, compound=true, newrank=true,
+         label="A. a2a server <harness>: one coding agent per process,\nstarted from its project directory", labelloc=t, fontsize=20];
+  node  [fontname="Helvetica", fontsize=13, shape=box, style="rounded,filled", fillcolor="#ffffff", color="#555555"];
+  edge  [fontname="Helvetica", fontsize=11, color="#555555", fontcolor="#333333"];
+
+  subgraph cluster_callers {
+    label="Callers"; style="rounded,filled"; fillcolor="#eef5ff"; color="#9bb7e0";
+    { rank=same;
+      Messenger [label="Messengers\nTelegram, Discord, email", shape=ellipse, fillcolor="#dbe8ff"];
+      Client    [label="A2A clients\na2a CLI, other agents", shape=ellipse, fillcolor="#dbe8ff"];
+      Owner     [label="Owner's terminal\na2a server pair, status,\ncontact, channel ...", shape=ellipse, fillcolor="#dbe8ff"];
+    }
+  }
+
+  subgraph cluster_server {
+    label="Agent server process"; style="rounded,filled"; fillcolor="#f0f9f0"; color="#9ccc9c";
+    subgraph cluster_in {
+      label="Listeners"; style="rounded,filled"; fillcolor="#e3f4e3"; color="#9ccc9c";
+      { rank=same;
+        Local   [label="localhost\n127.0.0.1:<port>"];
+        Private [label="private\ntailnet (tsnet) or LAN"];
+        Public  [label="public\nFunnel or ngrok"];
+        Control [label="control socket\nstate/server.sock"];
+      }
+    }
+    Router  [label="Router\nchannels, conversations,\napproval buttons"];
+    Auth    [label="Auth chain\nchannel link, Tailscale WhoIs,\npairing token -> principal"];
+    Handler [label="A2A handler\nJSON-RPC + REST, card,\n/pair, /hitl, /n/<node>, /relay"];
+    Approvals [label="Approvals\nhitl questions"];
+    Exec    [label="Executor (a2aacp)\nA2A task <-> ACP turn,\nadds the [a2a agents] line"];
+    DB      [label="server.db (SQLite)\ntasks, sessions, tokens, links,\ncontacts, nodes, handles, watches", shape=cylinder, fillcolor="#f4f4f4"];
+  }
+
+  subgraph cluster_sandbox {
+    label="Sandbox: Docker (or the host with --sandbox local)"; style="rounded,filled"; fillcolor="#f3eefb"; color="#b9a4dd";
+    { rank=same;
+      Harness [label="Harness\nopencode acp,\nclaude-agent-acp"];
+      Files   [label="workspace (same path)\n/home/agent: AGENTS.md,\nCLAUDE.md section", shape=folder, fillcolor="#f4f4f4"];
+    }
+    CLI [label="a2a CLI"];
+  }
+
+  subgraph cluster_out {
+    label="Agent server: calls to other agents"; style="rounded,filled"; fillcolor="#f0f9f0"; color="#9ccc9c";
+    { rank=same;
+      HSock [label="harness listener\nUnix socket\n(TCP + key on Docker Desktop)"];
+      Peers [label="Peers proxy\n/<handle>/<agent>,\napproval guard, watches"];
+      Nodes [label="Webhook nodes\ntasks held in SQLite"];
+    }
+  }
+
+  { rank=same;
+    Remote  [label="Contacts\nother agent servers", shape=ellipse, fillcolor="#e3f4e3"];
+    Webhook [label="Webhook nodes\nsuch as a Grok routine", shape=ellipse, fillcolor="#e3f4e3"];
+  }
+
+  { rank=same; Router; Auth; }
+  { rank=same; Approvals; Exec; DB; }
+
+  Messenger -> Router [label="poll, gateway,\nIMAP IDLE"];
+  Client -> Local; Client -> Private; Client -> Public;
+  Owner -> Control;
+  Local -> Auth; Private -> Auth; Public -> Auth;
+  Router -> Auth [label="link"];
+  Router -> Handler [label="in-process"];
+  Auth -> Handler [label="principal"];
+  Control -> Handler [label="management", style=dashed];
+  Handler -> Exec;
+  Approvals -> Router [label="ask the owner", style=dashed];
+  Exec -> DB [dir=none, style=dotted];
+  Exec -> Harness [label="ACP over stdio", style=bold];
+  Approvals -> Harness [label="permission request", style=dashed, dir=back];
+  Harness -> Files [dir=none, style=dotted];
+  Harness -> CLI [label="a2a send"];
+  CLI -> HSock [label="http://a2a/<handle>/<agent>"];
+  HSock -> Peers;
+  Peers -> Nodes;
+  Peers -> Remote [label="this agent's identity"];
+  Nodes -> Webhook [label="signed wake /\nrelay reply", dir=both];
+}

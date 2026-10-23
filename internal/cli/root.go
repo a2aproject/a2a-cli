@@ -29,6 +29,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/clicfg"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/commandplugin"
+	"github.com/a2aproject/a2a-cli/internal/credstore"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-cli/internal/polling"
@@ -63,6 +64,7 @@ type globalConfig struct {
 	timeout      time.Duration
 	verbose      bool
 	insecureGRPC bool
+	unixSocket   string
 	configPath   string
 
 	pluginsEnabled bool
@@ -72,6 +74,8 @@ type globalConfig struct {
 	errOut   io.Writer
 
 	httpTransport http.RoundTripper
+	// credentials overrides the store of `a2a pair add` tokens, for tests.
+	credentials *credstore.Store
 
 	handlers []handleEventFunc
 	*output.Printer
@@ -156,6 +160,9 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 			}
 			cfg.bindings = bindings
 			cfg.store = store
+			if cfg.unixSocket != "" && cfg.httpTransport == nil {
+				cfg.httpTransport = unixSocketTransport(cfg.unixSocket)
+			}
 
 			switch output.Mode(cfg.output) {
 			case output.ModeText, output.ModeJson, output.ModeJSONL:
@@ -179,6 +186,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	pf.DurationVar(&cfg.timeout, "timeout", 30*time.Second, "Request timeout")
 	pf.BoolVarP(&cfg.verbose, "verbose", "v", false, "Verbose output to stderr")
 	pf.BoolVar(&cfg.insecureGRPC, "insecure", false, "Use insecure (plaintext) gRPC transport credentials")
+	pf.StringVar(&cfg.unixSocket, "unix-socket", "", "Send HTTP requests through a Unix socket: <path> for every host, or <host>=<path> for one host")
 	pf.StringVar(&cfg.configPath, "config", "", "Load configuration from an explicit file (.yaml, .json, or .env) in place of the local .env")
 
 	cmd.AddCommand(
@@ -186,7 +194,9 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 		newSendCmd(cfg, deps.poller),
 		newTaskCmd(cfg),
 		newConfigCmd(cfg),
-		newServeCmd(cfg),
+		newServerCmd(cfg),
+		newPairCmd(cfg),
+		newRelayCmd(cfg),
 		newTransportCmd(cfg),
 		newPluginCmd(cfg),
 		newSkillCmd(cfg),

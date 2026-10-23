@@ -1,0 +1,67 @@
+// D. Agent to agent: the harness calls a contact or a webhook node with the
+// a2a CLI, and the server makes the call with its own identity.
+// Render: dot -Tpng -Gdpi=110 agent-server-a2a.dot -o agent-server-a2a.png
+digraph agent_server_a2a {
+  rankdir=TB;
+  graph [fontname="Helvetica", nodesep=0.4, ranksep=0.5, pad=0.3, newrank=true,
+         label="D. Agent to agent: calls go through the server,\ncredentials stay outside the sandbox", labelloc=t, fontsize=20];
+  node  [fontname="Helvetica", fontsize=13, shape=box, style="rounded,filled", fillcolor="#ffffff", color="#555555"];
+  edge  [fontname="Helvetica", fontsize=11, color="#555555", fontcolor="#333333"];
+
+  subgraph cluster_sandbox {
+    label="Sandbox of agent A"; style="rounded,filled"; fillcolor="#f3eefb"; color="#b9a4dd";
+    { rank=same;
+      Prompt  [label="[a2a agents] Agents URL for this\nconversation: http://a2a/k3\n(agents: coder, grok; ...)", shape=note, fillcolor="#fff7d6"];
+      Harness [label="Harness"];
+    }
+    CLI [label="a2a send -a http://a2a/k3/coder \"...\"\nA2ACLI_UNIX_SOCKET=a2a=/run/a2a/a2a.sock"];
+  }
+
+  User [label="User", shape=ellipse, fillcolor="#dbe8ff"];
+
+  subgraph cluster_a {
+    label="Agent server A"; style="rounded,filled"; fillcolor="#f0f9f0"; color="#9ccc9c";
+    { rank=same;
+      Sock    [label="harness listener\n/run/a2a/a2a.sock"];
+      Handles [label="handle k3 -> context,\nuser, hops (server.db)", shape=note, fillcolor="#fff7d6"];
+    }
+    { rank=same;
+      Guard   [label="guard\nrefuses answers to approvals,\nrelays them, watches tasks"];
+      Router  [label="Router\nasks the user in their chat:\n\"coder wants to run git push\""];
+    }
+    { rank=same;
+      Watch   [label="watch\npolls the task, posts the result\ninto the conversation as a new turn"];
+      NodeH   [label="node handler (in-process,\nas agent:A)\ntasks in SQLite"];
+      Client  [label="contact client\nBearer <contact token> or tsnet,\nX-A2A-On-Behalf-Of, X-A2A-Hops (max 3)"];
+    }
+  }
+
+  Webhook [label="Webhook node grok\n(Grok routine)", shape=ellipse, fillcolor="#e3f4e3"];
+
+  subgraph cluster_b {
+    label="Agent server B (contact coder)"; style="rounded,filled"; fillcolor="#eef5ff"; color="#9bb7e0";
+    AuthB  [label="auth chain\ntailnet WhoIs: trusts on-behalf-of\notherwise pairing token"];
+    TaskB  [label="task on B's harness\nmay need an approval"];
+  }
+
+
+  { rank=same; Webhook; AuthB; }
+
+  Prompt -> Harness [style=dotted, dir=none];
+  Harness -> CLI [label="1. bash"];
+  CLI -> Sock    [label="2. A2A over the socket"];
+  Sock -> Handles [style=dotted, dir=none];
+  Sock -> Guard  [label="3. known handle,\ncallable agent"];
+  Guard -> Client [label="4a. contact"];
+  Guard -> NodeH  [label="4b. node"];
+  Guard -> Watch  [label="6. --async, or paused\non an approval"];
+  Guard -> Router [label="permission\nquestion"];
+  Router -> User;
+  User -> Router [label="approve", color="#2e7d32", fontcolor="#2e7d32"];
+  Router -> Client [label="answer sent\nas the user", color="#2e7d32", fontcolor="#2e7d32"];
+  Client -> AuthB [label="5a. A2A over tsnet or HTTPS"];
+  AuthB -> TaskB;
+  NodeH -> Webhook [label="5b. signed POST wake\nX-A2A-Signature"];
+  Webhook -> NodeH [label="a2a relay reply\n(node token, /relay/api)", style=dashed];
+  Harness -> Watch [label="7. \"[coder finished task ...]\"\nas a new turn", style=bold, color="#2e7d32", fontcolor="#2e7d32", dir=back];
+}

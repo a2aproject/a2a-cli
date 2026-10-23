@@ -28,8 +28,9 @@ import (
 // registers several flags backed by one accumulator; merging happens as flags
 // are parsed, so Params can be read repeatedly without accumulating duplicates.
 type ServiceParams struct {
-	entries []serviceParam
-	auth    string
+	entries     []serviceParam
+	auth        string
+	defaultAuth string
 }
 
 type serviceParam struct {
@@ -48,7 +49,7 @@ func (s *ServiceParams) Attach(f *pflag.FlagSet) {
 // to the result and repeated calls never accumulate duplicates. Returns nil when
 // nothing was provided.
 func (s *ServiceParams) Params() a2aclient.ServiceParams {
-	if len(s.entries) == 0 && s.auth == "" {
+	if len(s.entries) == 0 && s.auth == "" && s.defaultAuth == "" {
 		return nil
 	}
 	params := a2aclient.ServiceParams{}
@@ -58,8 +59,15 @@ func (s *ServiceParams) Params() a2aclient.ServiceParams {
 	if s.auth != "" {
 		params.Append("Authorization", s.auth)
 	}
+	if s.defaultAuth != "" && !s.HasCredential() {
+		params.Append("Authorization", s.defaultAuth)
+	}
 	return params
 }
+
+// SetDefaultAuth sets the Authorization value used when neither --auth nor
+// an Authorization --svc-param is given, such as a stored pairing token.
+func (s *ServiceParams) SetDefaultAuth(creds string) { s.defaultAuth = creds }
 
 // HasCredential reports whether --auth or an Authorization --svc-param is set.
 func (s *ServiceParams) HasCredential() bool {

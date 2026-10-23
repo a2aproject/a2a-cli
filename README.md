@@ -73,7 +73,15 @@ a2a send -a https://agent.example.com "Hello, what can you do?"
 a2a send -a https://agent.example.com --stream "Summarize this document"
 ```
 
-See the **[full command reference](./internal/README.md)** for all commands, flags, configuration, and server mode.
+Serve a coding agent over A2A, from its project directory:
+
+```bash
+cd ~/src/app
+a2a server opencode --name coder --secret ANTHROPIC_API_KEY --private tailscale --telegram env:CODER_BOT_TOKEN
+a2a server pair --name me          # one-time code; then: a2a pair add <agent-url> <code>
+```
+
+See the **[agent server guide](./docs/agent-server.md)** and its **[architecture](./docs/agent-server-architecture.md)** for sandboxing, approvals, networks, messengers, agent-to-agent calls and webhook nodes, and the **[full command reference](./internal/README.md)** for all commands, flags, configuration, and server mode.
 
 ## Cookbook
 

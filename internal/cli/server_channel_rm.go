@@ -1,0 +1,63 @@
+// Copyright 2026 The A2A Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package cli
+
+import (
+	"errors"
+	"fmt"
+
+	"github.com/spf13/cobra"
+
+	"github.com/a2aproject/a2a-cli/internal/agentsrv"
+	"github.com/a2aproject/a2a-cli/internal/clierr"
+)
+
+func newServerChannelRmCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
+	return &cobra.Command{
+		Use:   "rm <telegram|discord|email>",
+		Short: "Remove a messenger",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			d, err := sf.agentDir()
+			if err != nil {
+				return err
+			}
+			err = agentsrv.NewClient(d).DeleteChannel(cmd.Context(), args[0])
+			if errors.Is(err, agentsrv.ErrNotRunning) {
+				conf, err := d.LoadConfig()
+				if err != nil {
+					return err
+				}
+				switch args[0] {
+				case agentsrv.ChannelTelegram:
+					conf.Channels.Telegram = nil
+				case agentsrv.ChannelDiscord:
+					conf.Channels.Discord = nil
+				case agentsrv.ChannelEmail:
+					conf.Channels.Email = nil
+				default:
+					return clierr.Usage("unknown channel " + args[0])
+				}
+				if err := d.SaveConfig(conf); err != nil {
+					return err
+				}
+			} else if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(cfg.Out, "✓ removed %s\n", args[0])
+			return err
+		},
+	}
+}

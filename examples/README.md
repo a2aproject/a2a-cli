@@ -30,6 +30,14 @@ Learn the three ways to pass a setting: a CLI flag, a session environment variab
 
 Go deeper: build messages from text, file, and data parts; stream a reply; and send async to get back a task id and watch its lifecycle. Includes a reference for the `task` commands.
 
+### 5. Serve a coding agent — [`05-agent-server/`](05-agent-server/)
+
+Turn opencode or Claude Code into an A2A agent with `a2a server <harness>`. Pair with it, send it work, approve a tool call it asks about, and let it call a second agent.
+
+### 6. Tailscale, Telegram, and a Grok bot — [`06-tailscale-telegram-grok/`](06-tailscale-telegram-grok/)
+
+Make the agent reachable from anywhere: on your tailnet with no pairing, on a public Funnel URL, and from a Telegram chat where you approve its tool calls. Then host a Grok bot as a webhook node it can delegate to, and run it as a service.
+
 ## Extend the CLI
 
 The `a2a` CLI supports plugin-style customization. See the [specification](../specification/SPEC.md) for details, and [`a2a-transport-echo/`](a2a-transport-echo/) for a working example.

@@ -263,7 +263,27 @@ Streams events to stdout until the task reaches a terminal state. Output format 
 
 ## Server Mode
 
-`a2a server` starts an A2A-compliant server backed by one of three modes.
+### Agent server
+
+`a2a server <harness>` runs a coding agent (opencode, Claude Code, or any ACP agent with `a2a server acp --command`) as an A2A server from its project directory, sandboxed in Docker and optionally reachable over Tailscale, the LAN, ngrok, Telegram, Discord and email. The first run saves its flags to `.a2a/config.yaml`; later runs are `a2a server`. See the **[agent server guide](../docs/agent-server.md)**.
+
+| Command | Description |
+|---|---|
+| `server <harness>` | Save the flags to `.a2a/config.yaml` and start the agent. `--detach`, `--service`. |
+| `server` | Start the agent of the nearest `.a2a/` directory (or `--dir`). Asks a few questions on a first run in a terminal. |
+| `server status` / `logs [-f]` / `stop [--uninstall]` | Manage the running agent. |
+| `server pair --name <who> [--role owner]` | Mint a one-time code for a caller or a messenger account. |
+| `server pair --name <id> --webhook <url>` | Host a webhook node and mint its code; without `--webhook`, a new code for an existing node. |
+| `server pair list` / `pair rm <name>` | List callers and nodes, or revoke a caller / remove a node. |
+| `server peers` | Agents found on the private network. |
+| `server contact add\|list\|rm` | Agents this agent may call with the `a2a` CLI, through the server. |
+| `server channel add\|rm <telegram\|discord\|email>` | Messengers. |
+| `pair add <agent-url> <code>` / `pair list` / `pair rm <agent-url>` | Save tokens that later commands attach to requests for that agent, or a webhook node's token. |
+| `relay reply\|task\|inbox` | Commands a webhook node runs. |
+
+### Test servers
+
+`a2a server --echo`, `--proxy` or `--exec` starts a local A2A-compliant test server backed by one of three modes.
 
 ### Common Server Flags
 
