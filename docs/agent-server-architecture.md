@@ -40,15 +40,16 @@ Code, or any `--command`) into an A2A agent:
 
 | Component | What it does | Code |
 | --- | --- | --- |
-| Listeners | localhost, private (tsnet or LAN with mDNS), public (Funnel or ngrok), the control socket, and the harness listener. | `internal/network`, `agentsrv/netsetup.go`, `agentsrv/control.go` |
+| Listeners | localhost, private (tsnet or LAN with mDNS), public (Funnel or ngrok), the control socket, and the harness listener. | `internal/network`, `agentsrv/netsetup.go`, `agentsrv/control.go`; the control API is `internal/controlapi` |
 | Auth chain | Turns a request into a principal: a channel link, Tailscale `WhoIs` on the private listener, or a pairing token. | `internal/auth` |
-| A2A handler | JSON-RPC and REST, the agent card, `/pair`, `/hitl/<token>`, `/n/<node>`, `/relay/api`. Tasks are stored in SQLite. | `agentsrv/http.go`, `internal/store` |
+| A2A handler | JSON-RPC and REST, the agent card, `/pair`, `/hitl/<token>`, `/n/<node>`, `/relay/api`. Tasks are stored in SQLite. | `agentsrv/http.go`, `internal/pairapi`, `internal/store` |
 | Router | Runs the messenger channels, maps a conversation to an A2A context, renders streaming answers and approval buttons. | `agentsrv/router.go`, `internal/channel/*` |
 | Executor | `a2aacp` from a2a-go: one ACP session per A2A context, task updates from ACP notifications, permission requests as `hitl` questions. The server wraps it to add the `[a2a agents]` line. | `agentsrv/executor.go`, `agentsrv/instructions.go` |
-| Sandbox | `docker run` with the workspace, `state/home` as `/home/agent`, dropped capabilities and limits; or the host with `--sandbox local`. Images are pulled, or built from Dockerfiles in the binary. | `internal/harness` |
-| Peers proxy | Serves contacts and nodes to the harness as A2A agents under `/<handle>/<agent>`, guards approvals, watches tasks. | `agentsrv/agents.go`, `agentsrv/peers.go` |
-| Webhook nodes | A2A agents whose tasks the server holds; it wakes them with signed POSTs, and they answer through the relay API. | `agentsrv/nodes.go`, `internal/relayapi` |
-| CLI | `a2a server ...` on the server side, `a2a pair` and `a2a relay` on the caller and node side. | `internal/cli` |
+| Approvals | Stores questions, decides who may answer, sends answers to the task here or at another agent, serves `/hitl/<token>`. | `agentsrv/approvals` |
+| Sandbox | `docker run` with the workspace, `state/home` as `/home/agent`, dropped capabilities and limits; or the host with `--sandbox local`. Images are pulled, or built from Dockerfiles in the binary. `harness.Prepare` turns a spec into the command to start. | `internal/harness` |
+| Peers proxy | Serves contacts and nodes to the harness as A2A agents under `/<handle>/<agent>`, guards approvals, watches tasks. Keeps one A2A client per contact. | `agentsrv/agents.go`, `agentsrv/peers.go` |
+| Webhook nodes | A2A agents whose tasks the server holds; it wakes them with signed POSTs, and they answer through the relay API. | `agentsrv/nodes`, `internal/relayapi` |
+| CLI | `a2a server ...` on the server side, `a2a pair` and `a2a relay` on the caller and node side. | `internal/cli`, `internal/launch` |
 
 The state is all in the agent directory:
 
@@ -56,7 +57,7 @@ The state is all in the agent directory:
 .a2a/
 ├── config.yaml        # flags of the first run; secrets as secret:NAME references
 └── state/
-    ├── server.db      # tasks, ACP sessions, tokens, links, contacts, nodes, handles, watches
+    ├── server.db      # tasks, ACP sessions, tokens, links, contacts, nodes, questions, handles, watches
     ├── secrets        # mode 0600
     ├── tsnet/         # the agent's tailnet machine
     ├── home/          # the harness's /home/agent
@@ -143,7 +144,8 @@ makes the call trustworthy happens in the server:
   `~/.config/opencode/AGENTS.md` and `~/.claude/CLAUDE.md` in `state/home`.
 
 Webhook nodes are the other direction: the server wakes the node with a POST
-signed with `X-A2A-Serve-Signature: t=<time>,v1=<HMAC-SHA256 of "<t>.<body>">`, and
+signed with `X-A2A-Serve-Signature: t=<time>,v1=<HMAC-SHA256 of "<t>.<body>">`
+(`relayapi.Verify` checks it), and
 the node answers with `a2a relay reply`, which posts events to the task. A
 task with no event for 10 minutes fails.
 
@@ -158,6 +160,12 @@ task with no event for 10 minutes fails.
   which runs inside the server process, and shouldn't hold contact tokens.
   Going through the server also keeps approvals with people and lets late
   results come back.
+- **What survives a restart.** Conversations, questions, the messages that
+  show them, agents URL handles and watches are in `server.db`, so a question
+  asked before a restart can still be answered and is not asked again. Open
+  tasks are failed on start; a webhook node's open tasks, inbox and
+  idempotency keys are kept in memory only, because none would be valid after
+  a restart. The database schema is versioned with `PRAGMA user_version`.
 - **Why one code for everything.** `/pair` redeems caller and node codes
   alike, and `a2a pair add` stores whichever token it gets, so there is one
   command to learn on each side.

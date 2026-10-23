@@ -21,6 +21,8 @@ import (
 	"errors"
 	"slices"
 	"time"
+
+	"github.com/a2aproject/a2a-cli/internal/cryptoutil"
 )
 
 // SessionStore implements the a2aacp session store: A2A context → ACP session.
@@ -195,7 +197,7 @@ type Code struct {
 // PutCode stores a code by its hash.
 func (s *Store) PutCode(ctx context.Context, code string, c Code) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO codes (hash, purpose, name, role, expires) VALUES (?, ?, ?, ?, ?)`,
-		Hash(code), c.Purpose, c.Name, c.Role, c.Expires.UnixNano())
+		cryptoutil.Hash(code), c.Purpose, c.Name, c.Role, c.Expires.UnixNano())
 	return err
 }
 
@@ -208,7 +210,7 @@ func (s *Store) TakeCode(ctx context.Context, code, purpose string) (Code, error
 	var c Code
 	var expires int64
 	err := s.db.QueryRowContext(ctx, `DELETE FROM codes WHERE hash = ? AND (? = '' OR purpose = ?) RETURNING purpose, name, role, expires`,
-		Hash(code), purpose, purpose).Scan(&c.Purpose, &c.Name, &c.Role, &expires)
+		cryptoutil.Hash(code), purpose, purpose).Scan(&c.Purpose, &c.Name, &c.Role, &expires)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Code{}, ErrNotFound
 	}
@@ -236,7 +238,7 @@ type Token struct {
 // PutToken stores a token by its hash.
 func (s *Store) PutToken(ctx context.Context, token string, t Token) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO tokens (hash, name, principal, roles, url, created) VALUES (?, ?, ?, ?, ?, ?)`,
-		Hash(token), t.Name, t.Principal, joinRoles(t.Roles), t.URL, s.now().UnixNano())
+		cryptoutil.Hash(token), t.Name, t.Principal, joinRoles(t.Roles), t.URL, s.now().UnixNano())
 	return err
 }
 
@@ -247,7 +249,7 @@ func (s *Store) LookupToken(ctx context.Context, token string) (Token, error) {
 		roles             string
 		created, lastUsed int64
 	)
-	h := Hash(token)
+	h := cryptoutil.Hash(token)
 	err := s.db.QueryRowContext(ctx, `SELECT name, principal, roles, url, created, last_used FROM tokens WHERE hash = ?`, h).
 		Scan(&t.Name, &t.Principal, &roles, &t.URL, &created, &lastUsed)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -475,6 +477,9 @@ type Question struct {
 	TaskID    string
 	ContextID string
 	Contact   string
+	// HitlID is the ID the agent gave the question; with Contact and
+	// TaskID it identifies a remote agent's question.
+	HitlID string
 	// Data is the hitl data part of the question.
 	Data       map[string]any
 	Created    time.Time
@@ -482,15 +487,27 @@ type Question struct {
 	Answer     string
 }
 
-// PutQuestion stores a question.
+// PutQuestion stores a question. It returns [ErrExists] if the remote
+// agent's question was stored before.
 func (s *Store) PutQuestion(ctx context.Context, q Question) error {
 	data, err := json.Marshal(q.Data)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO questions (id, token, task_id, context_id, contact, data, created) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		q.ID, q.Token, q.TaskID, q.ContextID, q.Contact, string(data), s.now().UnixNano())
-	return err
+	res, err := s.db.ExecContext(ctx, `INSERT INTO questions (id, token, task_id, context_id, contact, hitl_id, data, created)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (contact, task_id, hitl_id) WHERE contact != '' DO NOTHING`,
+		q.ID, q.Token, q.TaskID, q.ContextID, q.Contact, q.HitlID, string(data), s.now().UnixNano())
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrExists
+	}
+	return nil
 }
 
 // QuestionByID returns a question by its short ID.
@@ -509,8 +526,8 @@ func (s *Store) question(ctx context.Context, where string, arg string) (Questio
 		data    string
 		created int64
 	)
-	err := s.db.QueryRowContext(ctx, `SELECT id, token, task_id, context_id, contact, data, created, answered_by, answer FROM questions WHERE `+where, arg).
-		Scan(&q.ID, &q.Token, &q.TaskID, &q.ContextID, &q.Contact, &data, &created, &q.AnsweredBy, &q.Answer)
+	err := s.db.QueryRowContext(ctx, `SELECT id, token, task_id, context_id, contact, hitl_id, data, created, answered_by, answer FROM questions WHERE `+where, arg).
+		Scan(&q.ID, &q.Token, &q.TaskID, &q.ContextID, &q.Contact, &q.HitlID, &data, &created, &q.AnsweredBy, &q.Answer)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Question{}, ErrNotFound
 	}
@@ -541,6 +558,114 @@ func (s *Store) AnswerQuestion(ctx context.Context, id, by, answer string) error
 		return err
 	}
 	return ErrAnswered
+}
+
+// QuestionMessage is a channel message which shows a question, kept so that
+// it can be updated once the question is answered.
+type QuestionMessage struct {
+	QuestionID string
+	Channel    string
+	Conv       string
+	MessageID  string
+	Text       string
+}
+
+// AddQuestionMessage records a message which shows a question.
+func (s *Store) AddQuestionMessage(ctx context.Context, m QuestionMessage) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO question_messages (question_id, channel, conv, message_id, text) VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT DO UPDATE SET text = excluded.text`, m.QuestionID, m.Channel, m.Conv, m.MessageID, m.Text)
+	return err
+}
+
+// TakeQuestionMessages returns and forgets the messages which show a question.
+func (s *Store) TakeQuestionMessages(ctx context.Context, questionID string) ([]QuestionMessage, error) {
+	rows, err := s.db.QueryContext(ctx, `DELETE FROM question_messages WHERE question_id = ?
+		RETURNING question_id, channel, conv, message_id, text`, questionID)
+	if err != nil {
+		return nil, err
+	}
+	defer closeRows(rows)
+	var out []QuestionMessage
+	for rows.Next() {
+		var m QuestionMessage
+		if err := rows.Scan(&m.QuestionID, &m.Channel, &m.Conv, &m.MessageID, &m.Text); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// SetPendingQuestion makes a question the one a typed reply in a
+// conversation answers.
+func (s *Store) SetPendingQuestion(ctx context.Context, channel, conv, questionID string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO pending_questions (channel, conv, question_id) VALUES (?, ?, ?)
+		ON CONFLICT (channel, conv) DO UPDATE SET question_id = excluded.question_id`, channel, conv, questionID)
+	return err
+}
+
+// PendingQuestion returns the ID of the question a typed reply in a
+// conversation answers.
+func (s *Store) PendingQuestion(ctx context.Context, channel, conv string) (string, error) {
+	var id string
+	err := s.db.QueryRowContext(ctx, `SELECT question_id FROM pending_questions WHERE channel = ? AND conv = ?`, channel, conv).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return id, err
+}
+
+// ClearPendingQuestion forgets the pending question of a conversation.
+func (s *Store) ClearPendingQuestion(ctx context.Context, channel, conv string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM pending_questions WHERE channel = ? AND conv = ?`, channel, conv)
+	return err
+}
+
+// Handle is the short name of an agents URL: calls from the harness in one
+// context, on behalf of one user, at one depth of an agent chain.
+type Handle struct {
+	Handle     string
+	ContextID  string
+	OnBehalfOf string
+	Hops       int
+}
+
+// PutHandle stores a handle. It returns [ErrExists] if the handle is taken
+// or its claims already have one.
+func (s *Store) PutHandle(ctx context.Context, h Handle) error {
+	res, err := s.db.ExecContext(ctx, `INSERT INTO handles (handle, context_id, on_behalf_of, hops) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+		h.Handle, h.ContextID, h.OnBehalfOf, h.Hops)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrExists
+	}
+	return nil
+}
+
+// HandleByName returns a handle.
+func (s *Store) HandleByName(ctx context.Context, handle string) (Handle, error) {
+	return s.handle(ctx, `handle = ?`, handle)
+}
+
+// HandleFor returns the handle of the claims of h, ignoring h.Handle.
+func (s *Store) HandleFor(ctx context.Context, h Handle) (Handle, error) {
+	return s.handle(ctx, `context_id = ? AND on_behalf_of = ? AND hops = ?`, h.ContextID, h.OnBehalfOf, h.Hops)
+}
+
+func (s *Store) handle(ctx context.Context, where string, args ...any) (Handle, error) {
+	var h Handle
+	err := s.db.QueryRowContext(ctx, `SELECT handle, context_id, on_behalf_of, hops FROM handles WHERE `+where, args...).
+		Scan(&h.Handle, &h.ContextID, &h.OnBehalfOf, &h.Hops)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Handle{}, ErrNotFound
+	}
+	return h, err
 }
 
 // Watch is a remote task started by a2a.send that outlived the call. When

@@ -180,3 +180,34 @@ func TestServerPairAndSend(t *testing.T) {
 		t.Fatalf("agent did not stop")
 	}
 }
+
+func TestStoredTokenAttached(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		args func(url string) []string
+		want string
+	}{
+		{name: "card get positional", args: func(url string) []string { return []string{"card", "get", url} }, want: "Bearer stored"},
+		{name: "card get flag", args: func(url string) []string { return []string{"card", "get", "-a", url} }, want: "Bearer stored"},
+		{name: "send", args: func(url string) []string { return []string{"send", "-a", url, "hello"} }, want: "Bearer stored"},
+		{name: "explicit auth wins", args: func(url string) []string { return []string{"send", "-a", url, "--auth", "Bearer flag", "hello"} }, want: "Bearer flag"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			url, headers := startTestServerRecordingCardHeaders(t)
+			creds := &credstore.Store{Path: filepath.Join(t.TempDir(), "credentials.json")}
+			if err := creds.Put(credstore.Credential{URL: url, Token: "stored"}); err != nil {
+				t.Fatalf("credstore.Put() error = %v", err)
+			}
+			args := tc.args(url)
+			if _, err := runCMDWithCreds(t, creds, args...); err != nil {
+				t.Fatalf("a2a %s error = %v", strings.Join(args, " "), err)
+			}
+			if got := headers.Get("Authorization"); got != tc.want {
+				t.Fatalf("a2a %s Authorization = %q, want %q", strings.Join(args, " "), got, tc.want)
+			}
+		})
+	}
+}

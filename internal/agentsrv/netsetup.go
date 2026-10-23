@@ -37,7 +37,7 @@ const (
 
 // setupNetwork creates the private and public providers from the config.
 // They start listening in listenNetwork.
-func (s *Server) setupNetwork() error {
+func (s *Server) setupNetwork(closers *stack) error {
 	cfg := s.config()
 	var ts *network.Tailscale
 	tailscale := func() *network.Tailscale {
@@ -73,16 +73,16 @@ func (s *Server) setupNetwork() error {
 		return fmt.Errorf("unknown public network %q: want tailscale or ngrok", cfg.Network.Public)
 	}
 	if s.private != nil {
-		s.closers = append(s.closers, func(context.Context) error { return s.private.Close() })
+		closers.push(func(context.Context) error { return s.private.Close() })
 	}
 	if s.public != nil && s.public != s.private {
-		s.closers = append(s.closers, func(context.Context) error { return s.public.Close() })
+		closers.push(func(context.Context) error { return s.public.Close() })
 	}
 	return nil
 }
 
 // listenNetwork opens the private and public listeners.
-func (s *Server) listenNetwork(ctx context.Context, errc chan<- error) error {
+func (s *Server) listenNetwork(ctx context.Context, closers *stack, errc chan<- error) error {
 	if s.private != nil {
 		ln, u, err := s.private.ListenPrivate(ctx)
 		if err != nil {
@@ -96,7 +96,7 @@ func (s *Server) listenNetwork(ctx context.Context, errc chan<- error) error {
 		s.urlMu.Lock()
 		s.privateURL = u.String()
 		s.urlMu.Unlock()
-		s.serve(ctx, ln, network.ListenerPrivate, u.String(), errc)
+		closers.push(s.serveHTTP(ctx, ln, network.ListenerPrivate, u.String(), errc))
 	}
 	if s.public != nil {
 		ln, u, err := s.public.ListenPublic(ctx)
@@ -106,7 +106,7 @@ func (s *Server) listenNetwork(ctx context.Context, errc chan<- error) error {
 		s.urlMu.Lock()
 		s.publicURL = u.String()
 		s.urlMu.Unlock()
-		s.serve(ctx, ln, network.ListenerPublic, u.String(), errc)
+		closers.push(s.serveHTTP(ctx, ln, network.ListenerPublic, u.String(), errc))
 	}
 	return nil
 }

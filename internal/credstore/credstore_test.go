@@ -25,6 +25,8 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+
+	"github.com/a2aproject/a2a-cli/internal/pairapi"
 )
 
 func TestLookup(t *testing.T) {
@@ -84,7 +86,7 @@ func TestPair(t *testing.T) {
 			}
 			return
 		}
-		if err := json.NewEncoder(w).Encode(PairResponse{Token: "a2p_x", Principal: "pair:grok", Agent: "assistant"}); err != nil {
+		if err := json.NewEncoder(w).Encode(pairapi.Response{Token: "a2p_x", Principal: "pair:grok", Agent: "assistant"}); err != nil {
 			t.Error(err)
 		}
 	}))
@@ -105,7 +107,7 @@ func TestPair(t *testing.T) {
 func TestPairNode(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := PairResponse{Kind: KindNode, Token: "a2rn.x", Principal: "node:grok", Agent: "Grok", URL: "http://" + r.Host + "/n/grok"}
+		resp := pairapi.Response{Kind: KindNode, Token: "a2rn.x", Principal: "node:grok", Agent: "Grok", URL: "http://" + r.Host + "/n/grok"}
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			t.Error(err)
 		}

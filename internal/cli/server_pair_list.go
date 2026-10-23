@@ -20,7 +20,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/a2aproject/a2a-cli/internal/agentsrv"
+	"github.com/a2aproject/a2a-cli/internal/controlapi"
+	"github.com/a2aproject/a2a-cli/internal/pairapi"
 )
 
 func newServerPairListCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
@@ -44,8 +45,8 @@ func newServerPairListCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
 			}
 			if cfg.IsJSON() {
 				return cfg.PrintJSON(struct {
-					Callers []agentsrv.TokenInfo `json:"callers"`
-					Nodes   []agentsrv.NodeInfo  `json:"nodes"`
+					Callers []controlapi.TokenInfo `json:"callers"`
+					Nodes   []controlapi.NodeInfo  `json:"nodes"`
 				}{toks, nodes})
 			}
 			rows := make([][]string, 0, len(toks)+len(nodes))
@@ -54,14 +55,14 @@ func newServerPairListCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
 				if !t.LastUsed.IsZero() {
 					used = t.LastUsed.Format(time.DateTime)
 				}
-				rows = append(rows, []string{t.Name, agentsrv.PairKindCaller, t.Principal, strings.Join(t.Roles, ","), t.Created.Format(time.DateTime), used})
+				rows = append(rows, []string{t.Name, pairapi.KindCaller, t.Principal, strings.Join(t.Roles, ","), t.Created.Format(time.DateTime), used})
 			}
 			for _, n := range nodes {
 				used := "-"
 				if !n.Paired {
 					used = "not paired"
 				}
-				rows = append(rows, []string{n.ID, agentsrv.PairKindNode, "node:" + n.ID, "", n.Created.Format(time.DateTime), used})
+				rows = append(rows, []string{n.ID, pairapi.KindNode, "node:" + n.ID, "", n.Created.Format(time.DateTime), used})
 			}
 			return cfg.PrintTable([]string{"NAME", "KIND", "PRINCIPAL", "ROLES", "CREATED", "LAST USED"}, rows)
 		},

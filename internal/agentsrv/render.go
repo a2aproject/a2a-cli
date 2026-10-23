@@ -25,6 +25,7 @@ import (
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 
+	"github.com/a2aproject/a2a-cli/internal/agentsrv/approvals"
 	"github.com/a2aproject/a2a-cli/internal/auth"
 	"github.com/a2aproject/a2a-cli/internal/channel"
 )
@@ -268,7 +269,7 @@ func (rd *renderer) send(ctx context.Context, text string) channel.Ref {
 	return ref
 }
 
-func (rd *renderer) subject() string { return rd.r.s.config().Name }
+func (rd *renderer) subject() string { return rd.r.agentName() }
 
 func (rd *renderer) final(ctx context.Context, st a2a.TaskStatus) {
 	rd.mu.Lock()
@@ -331,17 +332,17 @@ func (rd *renderer) question(ctx context.Context, msg *a2a.Message) {
 		rd.send(ctx, "The agent needs more input.")
 		return
 	}
-	q := questionOfMessage(msg)
-	if q == nil || q.Type != questionPermission {
+	q := approvals.FromMessage(msg)
+	if q == nil || q.Type != approvals.TypePermission {
 		rd.send(ctx, messageText(msg))
 		return
 	}
-	if !rd.r.s.canApprove(ctx, rd.p) {
+	if !rd.r.approvals.CanApprove(ctx, rd.p) {
 		rd.send(ctx, fmt.Sprintf("⏳ Waiting for the owner to approve: %s", q.Title))
 		rd.r.follow(ctx, rd.ch, rd.conv, rd.p, taskID)
 		return
 	}
-	rec, err := rd.r.s.newQuestionRecord(ctx, taskID, contextID, "", q)
+	rec, err := rd.r.approvals.NewRecord(ctx, taskID, contextID, "", q)
 	if err != nil {
 		slog.Error("storing question", "error", err)
 		rd.send(ctx, messageText(msg))
@@ -349,19 +350,16 @@ func (rd *renderer) question(ctx context.Context, msg *a2a.Message) {
 	}
 	out := channel.Outbound{Conv: rd.conv, Text: q.Text, ReplyTo: rd.replyTo, Subject: rd.subject()}
 	if rd.caps.Buttons {
-		out.Question = &channel.Question{ID: rec.ID, Options: q.labels()}
+		out.Question = &channel.Question{ID: rec.ID, Options: q.Labels()}
 	} else {
-		out.Text += fmt.Sprintf("\n\nReply %s, or open %s", optionWords(q), rd.r.s.hitlURL(rec))
+		out.Text += fmt.Sprintf("\n\nReply %s, or open %s", q.Words(), rd.r.approvals.PageURL(rec))
 	}
 	ref, err := rd.ch.Send(ctx, out)
 	if err != nil {
 		slog.Warn("sending question", "channel", rd.ch.Name(), "error", err)
 		return
 	}
-	rd.r.remember(rec.ID, rd.ch.Name(), ref, q.Text)
-	if err := rd.r.s.store.Set(ctx, pendingKey(rd.ch.Name(), rd.conv), rec.ID); err != nil {
-		slog.Warn("recording pending question", "error", err)
-	}
+	rd.r.remember(ctx, rec.ID, rd.ch.Name(), rd.conv, ref, q.Text)
 }
 
 func (rd *renderer) fail(ctx context.Context, err error) {
@@ -386,7 +384,7 @@ func (rd *renderer) finish(ctx context.Context) {
 		rd.final(ctx, interrupted)
 		return
 	}
-	stored, err := rd.r.s.tasks.Get(auth.WithPrincipal(context.WithoutCancel(ctx), auth.Owner()), taskID)
+	stored, err := rd.r.tasks.Get(auth.WithPrincipal(context.WithoutCancel(ctx), auth.Owner()), taskID)
 	if err != nil {
 		slog.Warn("loading the task of an ended stream", "task", taskID, "error", err)
 		rd.final(ctx, interrupted)

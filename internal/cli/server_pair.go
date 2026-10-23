@@ -21,14 +21,14 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/a2aproject/a2a-cli/internal/agentsrv"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
+	"github.com/a2aproject/a2a-cli/internal/controlapi"
 	"github.com/a2aproject/a2a-cli/internal/relayapi"
 )
 
 func newServerPairCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
 	var (
-		req     agentsrv.PairCodeRequest
+		req     controlapi.PairCodeRequest
 		headers []string
 	)
 	cmd := &cobra.Command{
@@ -109,7 +109,7 @@ func parseWebhookHeaders(headers []string) (map[string]string, error) {
 	return out, nil
 }
 
-func printPairCode(cfg *globalConfig, resp *agentsrv.PairCodeResponse) error {
+func printPairCode(cfg *globalConfig, resp *controlapi.PairCodeResponse) error {
 	mins := int(time.Until(resp.Expires).Round(time.Minute).Minutes())
 	var sb strings.Builder
 	if resp.Node != nil {

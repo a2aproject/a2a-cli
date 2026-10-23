@@ -27,13 +27,15 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	"github.com/a2aproject/a2a-go/v2/a2aclient"
+
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
-	"github.com/a2aproject/a2a-cli/internal/agentsrv"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
+	"github.com/a2aproject/a2a-cli/internal/controlapi"
 	"github.com/a2aproject/a2a-cli/internal/harness"
+	"github.com/a2aproject/a2a-cli/internal/launch"
 	"github.com/a2aproject/a2a-cli/internal/localsrv"
 	"github.com/a2aproject/a2a-cli/internal/wizard"
-	"github.com/a2aproject/a2a-go/v2/a2aclient"
 )
 
 // serverFlags holds the flags of `a2a server` itself: the agent directory,
@@ -145,12 +147,12 @@ func (f *serverFlags) agentDir() (agentdir.Dir, error) {
 }
 
 // control returns a client for the running agent.
-func (f *serverFlags) control() (*agentsrv.Client, error) {
+func (f *serverFlags) control() (*controlapi.Client, error) {
 	d, err := f.agentDir()
 	if err != nil {
 		return nil, err
 	}
-	return agentsrv.NewClient(d), nil
+	return controlapi.NewClient(d), nil
 }
 
 // runConfiguredAgent starts the agent saved in .a2a/config.yaml, or asks
@@ -201,11 +203,11 @@ func saveSettings(d agentdir.Dir, s agentdir.Settings) error {
 // runAgent runs the agent in the foreground, or starts it in the background.
 func runAgent(ctx context.Context, cfg *globalConfig, d agentdir.Dir, detach, service bool) error {
 	if detach || service {
-		return agentsrv.Background(ctx, d, service, cfg.Out)
+		return launch.Background(ctx, d, service, cfg.Out)
 	}
 	ctx, stop := signalContext(ctx)
 	defer stop()
-	return agentsrv.Foreground(ctx, d, cfg.Out, cfg.verbose, func() {
+	return launch.Foreground(ctx, d, cfg.Out, cfg.verbose, func() {
 		if _, err := fmt.Fprintln(cfg.Out, "  (running in the foreground; Ctrl-C to stop, or start with --detach)"); err != nil {
 			slog.Debug("writing progress", "error", err)
 		}

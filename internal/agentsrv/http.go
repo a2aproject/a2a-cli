@@ -15,7 +15,6 @@
 package agentsrv
 
 import (
-	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -28,7 +27,9 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 
 	"github.com/a2aproject/a2a-cli/internal/auth"
+	"github.com/a2aproject/a2a-cli/internal/jsonhttp"
 	"github.com/a2aproject/a2a-cli/internal/network"
+	"github.com/a2aproject/a2a-cli/internal/pairapi"
 	"github.com/a2aproject/a2a-cli/internal/store"
 	"github.com/a2aproject/a2a-cli/skills"
 )
@@ -38,10 +39,7 @@ import (
 func (s *Server) routes(kind, baseURL string) http.Handler {
 	mux := http.NewServeMux()
 	if kind == network.ListenerHarness {
-		agents := s.peers.agentsHandler()
-		mux.Handle("/{handle}/{agent}", agents)
-		mux.Handle("/{handle}/{agent}/{rest...}", agents)
-		return mux
+		return s.peers.harnessRoutes(s.bridge.key)
 	}
 	card := func(w http.ResponseWriter, r *http.Request) {
 		a2asrv.NewStaticAgentCardHandler(s.card(kind, base(baseURL, r))).ServeHTTP(w, r)
@@ -53,7 +51,7 @@ func (s *Server) routes(kind, baseURL string) http.Handler {
 	mux.HandleFunc("GET "+a2asrv.WellKnownAgentCardPath, card)
 	mux.HandleFunc("GET /.well-known/agent.json", card)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		jsonhttp.Write(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 	mux.HandleFunc("GET /skill.md", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
@@ -64,9 +62,9 @@ func (s *Server) routes(kind, baseURL string) http.Handler {
 		writeBody(w, strings.ReplaceAll(skills.A2ARelay, "{{BASE}}", base(baseURL, r)))
 	})
 	mux.HandleFunc("GET /download/a2a", s.handleDownload)
-	mux.HandleFunc("POST /pair", func(w http.ResponseWriter, r *http.Request) { s.handlePair(w, r, base(baseURL, r)) })
-	mux.HandleFunc("/hitl/{token}", s.handleHitl)
-	s.nodes.register(mux, kind, func(r *http.Request) string { return base(baseURL, r) })
+	mux.HandleFunc("POST "+pairapi.Path, func(w http.ResponseWriter, r *http.Request) { s.handlePair(w, r, base(baseURL, r)) })
+	mux.HandleFunc("/hitl/{token}", s.approvals.HandlePage)
+	s.nodes.Register(mux, kind, func(r *http.Request) string { return base(baseURL, r) })
 	mux.Handle("POST /{$}", s.authenticate(kind, jsonrpc))
 	mux.Handle("/", s.authenticate(kind, rest))
 	return mux
@@ -90,12 +88,12 @@ func (s *Server) authenticate(kind string, next http.Handler) http.Handler {
 		p, ok, err := s.chain.Authenticate(r.Context(), auth.Request{Listener: kind, RemoteAddr: r.RemoteAddr, Header: r.Header})
 		if err != nil {
 			slog.Error("authentication failed", "error", err)
-			writeError(w, http.StatusInternalServerError, "authentication failed")
+			jsonhttp.Error(w, http.StatusInternalServerError, "authentication failed")
 			return
 		}
 		if !ok {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="a2a"`)
-			writeError(w, http.StatusUnauthorized, "this agent needs a token: ask its owner for a pairing code and run `a2a pair add <agent-url> <code>`")
+			jsonhttp.Error(w, http.StatusUnauthorized, "this agent needs a token: ask its owner for a pairing code and run `a2a pair add <agent-url> <code>`")
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(auth.WithPrincipal(r.Context(), p)))
@@ -136,104 +134,53 @@ func (s *Server) card(kind, baseURL string) *a2a.AgentCard {
 	return card
 }
 
-// PairRequest is the body of POST /pair.
-type PairRequest struct {
-	Code string `json:"code"`
-}
-
-// Kinds of tokens POST /pair returns.
-const (
-	PairKindCaller = "caller"
-	PairKindNode   = "node"
-)
-
-// PairResponse is returned by POST /pair. The token is shown once. URL is
-// where the token applies: the agent for callers, the node for nodes.
-type PairResponse struct {
-	Kind      string `json:"kind"`
-	Token     string `json:"token"`
-	Principal string `json:"principal"`
-	Agent     string `json:"agent"`
-	URL       string `json:"url"`
-}
-
 // handlePair exchanges a pair code for a caller token, or a node code for a
 // node token.
 func (s *Server) handlePair(w http.ResponseWriter, r *http.Request, baseURL string) {
 	host := remoteHost(r.RemoteAddr)
 	if !s.pairFailures.allow(host) {
 		w.Header().Set("Retry-After", "60")
-		writeError(w, http.StatusTooManyRequests, "too many invalid pairing codes; try again in a minute")
+		jsonhttp.Error(w, http.StatusTooManyRequests, "too many invalid pairing codes; try again in a minute")
 		return
 	}
-	var req PairRequest
-	if !readJSON(w, r, &req) {
+	var req pairapi.Request
+	if !jsonhttp.Read(w, r, &req) {
 		return
 	}
 	c, err := s.store.TakeCode(r.Context(), auth.NormalizeCode(req.Code), "")
 	if errors.Is(err, store.ErrNotFound) || errors.Is(err, store.ErrCodeExpired) {
 		s.pairFailures.fail(host)
-		writeError(w, http.StatusForbidden, "invalid or expired pairing code")
+		jsonhttp.Error(w, http.StatusForbidden, "invalid or expired pairing code")
 		return
 	}
 	if err != nil {
 		slog.Error("pairing failed", "error", err)
-		writeError(w, http.StatusInternalServerError, "pairing failed")
+		jsonhttp.Error(w, http.StatusInternalServerError, "pairing failed")
 		return
 	}
 	if c.Purpose == auth.PurposeNode {
-		s.nodes.pair(w, r, baseURL, c.Name)
+		s.nodes.Pair(w, r, baseURL, c.Name)
 		return
 	}
 	tok, p, err := auth.IssueToken(r.Context(), s.store, c, baseURL)
 	if err != nil {
 		slog.Error("pairing failed", "error", err)
-		writeError(w, http.StatusInternalServerError, "pairing failed")
+		jsonhttp.Error(w, http.StatusInternalServerError, "pairing failed")
 		return
 	}
 	slog.Info("paired", "principal", p.ID, "url", baseURL)
-	writeJSON(w, http.StatusOK, PairResponse{Kind: PairKindCaller, Token: tok, Principal: p.ID, Agent: s.config().Name, URL: baseURL})
+	jsonhttp.Write(w, http.StatusOK, pairapi.Response{Kind: pairapi.KindCaller, Token: tok, Principal: p.ID, Agent: s.config().Name, URL: baseURL})
 }
 
 func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	exe, err := os.Executable()
 	if err != nil {
-		writeError(w, http.StatusNotFound, "binary not available")
+		jsonhttp.Error(w, http.StatusNotFound, "binary not available")
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", `attachment; filename="a2a"`)
 	http.ServeFile(w, r, exe)
-}
-
-const maxBody = 32 << 20
-
-func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody))
-	if err := dec.Decode(v); err != nil && !errors.Is(err, io.EOF) {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
-		return false
-	}
-	return true
-}
-
-func writeJSON(w http.ResponseWriter, code int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(v); err != nil {
-		slog.Debug("writing response", "error", err)
-	}
-}
-
-// APIError is the body of an error response.
-type APIError struct {
-	Error string `json:"error"`
-}
-
-func writeError(w http.ResponseWriter, code int, msg string) {
-	writeJSON(w, code, APIError{Error: msg})
 }
 
 func writeBody(w io.Writer, body string) {

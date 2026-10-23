@@ -34,6 +34,8 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
+	"github.com/a2aproject/a2a-cli/internal/agentsrv/approvals"
+	"github.com/a2aproject/a2a-cli/internal/agentsrv/nodes"
 	"github.com/a2aproject/a2a-cli/internal/auth"
 	"github.com/a2aproject/a2a-cli/internal/channel"
 	"github.com/a2aproject/a2a-cli/internal/fsutil"
@@ -64,52 +66,63 @@ type Server struct {
 	secrets agentdir.Secrets
 	out     io.Writer
 	started time.Time
+	cancel  context.CancelFunc
 
 	cfgMu sync.Mutex
 	cfg   *agentdir.Config
 
 	store   *store.Store
 	tasks   *store.TaskStore
-	exec    a2asrv.AgentExecutor
 	handler a2asrv.RequestHandler
 	chain   *auth.Chain
 	bus     *eventBus
 
 	private network.Provider
 	public  network.Provider
+	bridge  harnessBridge
 
 	urlMu      sync.Mutex
 	localURL   string
 	privateURL string
 	publicURL  string
-	harnessURL string
-	// harnessSocket is set when the harness reaches the server through a
-	// Unix socket.
-	harnessSocket string
-	// harnessKey is required from the harness when it connects over TCP.
-	harnessKey string
 
-	router *Router
-	peers  *Peers
-	nodes  *Nodes
+	router    *Router
+	peers     *Peers
+	nodes     *nodes.Host
+	approvals *approvals.Service
 
 	// instructionsMu serializes rewrites of the harness instruction files.
 	instructionsMu sync.Mutex
 	// pairFailures limits guesses of pairing codes.
 	pairFailures *failureLimiter
+}
 
-	// ctx ends when the server stops. Work which outlives a request, such as
-	// watches, runs in it.
-	ctx     context.Context
-	cancel  context.CancelFunc
-	closers []func(context.Context) error
+// nodeWebhookRetries are the delays before each wake delivery attempt to a
+// webhook node.
+var nodeWebhookRetries = nodes.DefaultWebhookRetries
+
+// stack holds what to close when the server stops, closed in reverse order
+// of opening. Only Run owns one.
+type stack []func(context.Context) error
+
+func (st *stack) push(f func(context.Context) error) { *st = append(*st, f) }
+
+func (st stack) close() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for i := len(st) - 1; i >= 0; i-- {
+		if err := st[i](ctx); err != nil {
+			slog.Warn("shutdown", "error", err)
+		}
+	}
 }
 
 // Run starts the agent server and serves until ctx ends or the server is
-// stopped through its control socket.
+// stopped through its control socket. It opens the agent's state, builds
+// the components, then serves; on the way out, background work stops first
+// and everything opened is closed in reverse order.
 func Run(ctx context.Context, opts Options) error {
 	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 	if opts.Out == nil {
 		opts.Out = io.Discard
 	}
@@ -119,100 +132,37 @@ func Run(ctx context.Context, opts Options) error {
 		secrets: opts.Secrets,
 		out:     opts.Out,
 		started: time.Now(),
-		bus:     newEventBus(),
-		ctx:     ctx,
 		cancel:  cancel,
+		bus:     newEventBus(),
 
 		pairFailures: newFailureLimiter(10, time.Minute),
 	}
-	defer s.shutdown()
+	var closers stack
+	defer func() {
+		cancel()
+		closers.close()
+	}()
 
-	if err := s.dir.Init(); err != nil {
-		return err
-	}
-	release, err := fsutil.TryLock(s.dir.LockPath())
-	if errors.Is(err, fsutil.ErrLocked) {
-		return fmt.Errorf("an agent server is already running in %s (a2a server status)", s.dir.Root)
-	}
-	if err != nil {
-		return fmt.Errorf("locking the agent directory: %w", err)
-	}
-	s.closers = append(s.closers, func(context.Context) error { return release() })
-	st, err := store.Open(s.dir.DBPath())
+	harnessLn, err := s.open(ctx, &closers, opts.Executor == nil)
 	if err != nil {
 		return err
 	}
-	s.store = st
-	s.closers = append(s.closers, func(context.Context) error { return st.Close() })
-	s.tasks = st.Tasks("", s.viewer)
-	n, err := s.tasks.FailUnfinished(ctx, "The agent server restarted before this task finished. Send the message again.")
-	if err != nil {
+	if err := s.build(ctx, &closers, opts); err != nil {
 		return err
 	}
-	if n > 0 {
-		slog.Info("failed tasks interrupted by the previous run", "count", n)
-	}
-
-	if err := s.setupNetwork(); err != nil {
-		return err
-	}
-	s.chain = &auth.Chain{Store: st, Net: s.private, Identities: s.cfg.Network.Identities}
-	s.peers = newPeers(s)
-	s.nodes = newNodes(s)
-
-	harnessLn, err := s.listenHarness(ctx, opts.Executor == nil)
-	if err != nil {
-		return err
-	}
-	s.refreshInstructions(ctx)
-	exec := opts.Executor
-	if exec == nil {
-		if exec, err = s.newExecutor(ctx, opts.HarnessLog); err != nil {
-			return errors.Join(err, harnessLn.Close())
-		}
-	}
-	s.exec = &observedExecutor{inner: exec, s: s}
-	s.handler = a2asrv.NewHandler(s.exec,
-		a2asrv.WithTaskStore(s.tasks),
-		a2asrv.WithCallInterceptors(&callerInterceptor{s: s}),
-		a2asrv.WithCapabilityChecks(&a2a.AgentCapabilities{Streaming: true}),
-		a2asrv.WithLogger(slog.Default()),
-	)
-
 	chans := opts.Channels
 	if chans == nil {
 		if chans, err = s.buildChannels(); err != nil {
-			return errors.Join(err, harnessLn.Close())
+			return err
 		}
 	}
-	// The router exists before any listener serves, because handlers use it.
-	s.router = newRouter(ctx, s)
-	s.closers = append(s.closers, s.router.stopAll)
-
-	errc := make(chan error, 1)
-	s.serve(ctx, harnessLn, network.ListenerHarness, "", errc)
-	if err := s.listenLocal(ctx, errc); err != nil {
-		return err
-	}
-	if err := s.listenNetwork(ctx, errc); err != nil {
-		return err
-	}
-	if err := s.serveControl(ctx, errc); err != nil {
-		return err
-	}
-
-	for _, ch := range chans {
-		s.router.add(ch)
-	}
-	s.peers.resumeWatches(ctx)
-
-	if err := s.printSummary(ctx); err != nil {
+	errc, err := s.serve(ctx, &closers, harnessLn, chans)
+	if err != nil {
 		return err
 	}
 	if opts.Ready != nil {
 		opts.Ready(s)
 	}
-
 	select {
 	case <-ctx.Done():
 		return nil
@@ -221,20 +171,146 @@ func Run(ctx context.Context, opts Options) error {
 	}
 }
 
+// open locks the agent directory and opens its database, the network
+// providers and the listener the harness reaches the server through.
+func (s *Server) open(ctx context.Context, closers *stack, sandboxed bool) (net.Listener, error) {
+	if err := s.dir.Init(); err != nil {
+		return nil, err
+	}
+	release, err := fsutil.TryLock(s.dir.LockPath())
+	if errors.Is(err, fsutil.ErrLocked) {
+		return nil, fmt.Errorf("an agent server is already running in %s (a2a server status)", s.dir.Root)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("locking the agent directory: %w", err)
+	}
+	closers.push(func(context.Context) error { return release() })
+	st, err := store.Open(s.dir.DBPath())
+	if err != nil {
+		return nil, err
+	}
+	closers.push(func(context.Context) error { return st.Close() })
+	s.store = st
+	s.tasks = st.Tasks("", s.viewer)
+	n, err := s.tasks.FailUnfinished(ctx, "The agent server restarted before this task finished. Send the message again.")
+	if err != nil {
+		return nil, err
+	}
+	if n > 0 {
+		slog.Info("failed tasks interrupted by the previous run", "count", n)
+	}
+	if err := s.setupNetwork(closers); err != nil {
+		return nil, err
+	}
+	ln, bridge, err := s.listenHarness(sandboxed)
+	if err != nil {
+		return nil, err
+	}
+	closers.push(func(context.Context) error { return closeListener(ln) })
+	s.bridge = bridge
+	return ln, nil
+}
+
+// build creates the components and starts the harness. Nothing serves yet.
+func (s *Server) build(ctx context.Context, closers *stack, opts Options) error {
+	agentName := func() string { return s.config().Name }
+	s.chain = &auth.Chain{Store: s.store, Net: s.private, Identities: s.config().Network.Identities}
+	s.approvals = &approvals.Service{
+		Store:     s.store,
+		Tasks:     s.tasks,
+		Approvers: func() []string { return s.config().Approvals.Approvers },
+		BaseURL:   s.bestURL,
+		AgentName: agentName,
+	}
+	s.nodes = nodes.New(ctx, nodes.Config{
+		Store:          s.store,
+		Viewer:         s.viewer,
+		AgentName:      agentName,
+		BaseURL:        s.bestURL,
+		Authenticate:   s.authenticate,
+		WebhookRetries: nodeWebhookRetries,
+	})
+	s.router = &Router{
+		store:     s.store,
+		tasks:     s.tasks,
+		chain:     s.chain,
+		approvals: s.approvals,
+		bus:       s.bus,
+		agentName: agentName,
+		logf:      s.logf,
+	}
+	s.peers = &Peers{
+		store:     s.store,
+		private:   s.private,
+		nodes:     s.nodes,
+		approvals: s.approvals,
+		chat:      s.router,
+		agentName: agentName,
+		bridge:    s.bridge,
+		ctx:       ctx,
+		watching:  map[string]bool{},
+		clients:   map[string]*contactClient{},
+	}
+	closers.push(s.peers.close)
+
+	s.refreshInstructions(ctx)
+	exec := opts.Executor
+	if exec == nil {
+		acp, closeACP, err := s.newExecutor(ctx, opts.HarnessLog)
+		if err != nil {
+			return err
+		}
+		closers.push(closeACP)
+		exec = acp
+	}
+	s.handler = a2asrv.NewHandler(&observedExecutor{inner: exec, bus: s.bus, peers: s.peers, approvals: s.approvals},
+		a2asrv.WithTaskStore(s.tasks),
+		a2asrv.WithCallInterceptors(&callerInterceptor{approvals: s.approvals}),
+		a2asrv.WithCapabilityChecks(&a2a.AgentCapabilities{Streaming: true}),
+		a2asrv.WithLogger(slog.Default()),
+	)
+	// The handler runs the executor, which hands questions to approvals;
+	// approvals and the router send answers and turns back to the handler,
+	// and approvals asks people through the router.
+	s.router.handler = s.handler
+	s.approvals.Handler = s.handler
+	s.approvals.Notifier = s.router
+	s.approvals.Remote = s.peers
+	return nil
+}
+
+// serve starts the router, serves every listener and the control socket,
+// starts the channels and resumes watches. Errors of listeners after the
+// start arrive on the returned channel.
+func (s *Server) serve(ctx context.Context, closers *stack, harnessLn net.Listener, chans []channel.Channel) (<-chan error, error) {
+	errc := make(chan error, 1)
+	s.router.start(ctx)
+	closers.push(s.router.stopAll)
+	closers.push(s.serveHTTP(ctx, harnessLn, network.ListenerHarness, "", errc))
+	if err := s.listenLocal(ctx, closers, errc); err != nil {
+		return nil, err
+	}
+	if err := s.listenNetwork(ctx, closers, errc); err != nil {
+		return nil, err
+	}
+	if err := s.serveControl(ctx, closers, errc); err != nil {
+		return nil, err
+	}
+	for _, ch := range chans {
+		s.router.add(ch)
+	}
+	s.peers.resumeWatches(ctx)
+	return errc, s.printSummary(ctx)
+}
+
 // Stop shuts the server down.
 func (s *Server) Stop() { s.cancel() }
 
-// shutdown stops background work first, then closes listeners and the store
-// in reverse order of opening.
-func (s *Server) shutdown() {
-	s.cancel()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	for i := len(s.closers) - 1; i >= 0; i-- {
-		if err := s.closers[i](ctx); err != nil {
-			slog.Warn("shutdown", "error", err)
-		}
+func closeListener(ln net.Listener) error {
+	if err := ln.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+		return err
 	}
+	return nil
 }
 
 func (s *Server) config() *agentdir.Config {
@@ -267,7 +343,7 @@ func (s *Server) logf(format string, args ...any) {
 
 // listenLocal opens the localhost listener. The first run picks a free port
 // and saves it, so the local URL stays the same.
-func (s *Server) listenLocal(ctx context.Context, errc chan<- error) error {
+func (s *Server) listenLocal(ctx context.Context, closers *stack, errc chan<- error) error {
 	port := s.config().Port
 	ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
 	if err != nil {
@@ -283,29 +359,30 @@ func (s *Server) listenLocal(ctx context.Context, errc chan<- error) error {
 	s.urlMu.Lock()
 	s.localURL = u
 	s.urlMu.Unlock()
-	s.serve(ctx, ln, network.ListenerLocal, u, errc)
+	closers.push(s.serveHTTP(ctx, ln, network.ListenerLocal, u, errc))
 	return nil
 }
 
-// serve serves the routes of a listener kind until shutdown.
-func (s *Server) serve(ctx context.Context, ln net.Listener, kind, baseURL string, errc chan<- error) {
+// serveHTTP serves the routes of a listener kind in the background and
+// returns the function which shuts the listener down.
+func (s *Server) serveHTTP(ctx context.Context, ln net.Listener, kind, baseURL string, errc chan<- error) func(context.Context) error {
 	srv := &http.Server{
 		Handler:           s.routes(kind, baseURL),
 		ReadHeaderTimeout: 30 * time.Second,
 		BaseContext:       func(net.Listener) context.Context { return ctx },
 	}
-	s.closers = append(s.closers, func(ctx context.Context) error {
-		err := srv.Shutdown(ctx)
-		if errors.Is(err, context.DeadlineExceeded) {
-			return srv.Close()
-		}
-		return err
-	})
 	go func() {
 		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
 			reportFatal(errc, fmt.Errorf("%s listener: %w", kind, err))
 		}
 	}()
+	return func(ctx context.Context) error {
+		err := srv.Shutdown(ctx)
+		if errors.Is(err, context.DeadlineExceeded) {
+			return srv.Close()
+		}
+		return err
+	}
 }
 
 // reportFatal hands err to Run, which stops on the first one; later errors
@@ -353,39 +430,10 @@ func (s *Server) printSummary(ctx context.Context) error {
 // everyone else their own. Calls without a principal come from the server
 // itself.
 func (s *Server) viewer(ctx context.Context) (string, bool, error) {
-	if p, ok := principalOf(ctx); ok {
+	if p, ok := auth.Caller(ctx); ok {
 		return p.ID, p.Has(auth.RoleOwner), nil
 	}
 	return "", true, nil
-}
-
-func principalOf(ctx context.Context) (auth.Principal, bool) {
-	if p, ok := auth.PrincipalFrom(ctx); ok {
-		return p, true
-	}
-	if cc, ok := a2asrv.CallContextFrom(ctx); ok && cc.User != nil {
-		if p, ok := cc.User.Attributes["principal"].(auth.Principal); ok {
-			return p, true
-		}
-	}
-	return auth.Principal{}, false
-}
-
-// canApprove reports whether the principal with id may answer permission requests.
-func (s *Server) canApprove(ctx context.Context, p auth.Principal) bool {
-	if auth.CanApprove(p, s.config().Approvals.Approvers) {
-		return true
-	}
-	u, err := s.store.User(ctx, p.ID)
-	return err == nil && auth.CanApprove(auth.Principal{ID: u.ID, Roles: u.Roles}, nil)
-}
-
-// inProcess returns a context for calling the A2A handler directly as p.
-func inProcess(ctx context.Context, p auth.Principal) context.Context {
-	ctx = auth.WithPrincipal(ctx, p)
-	ctx, cc := a2asrv.NewCallContext(ctx, a2asrv.NewServiceParams(nil))
-	cc.User = a2asrv.NewAuthenticatedUser(p.ID, map[string]any{"principal": p})
-	return ctx
 }
 
 func pid() int { return os.Getpid() }

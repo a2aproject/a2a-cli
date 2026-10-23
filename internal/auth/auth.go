@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/a2aproject/a2a-cli/internal/channel"
+	"github.com/a2aproject/a2a-cli/internal/cryptoutil"
 	"github.com/a2aproject/a2a-cli/internal/network"
 	"github.com/a2aproject/a2a-cli/internal/store"
 )
@@ -248,7 +249,7 @@ const codeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 // NewCode returns an 8-character code like K7Q2-9XF4.
 func NewCode() string {
-	s := store.RandomString(8, codeAlphabet)
+	s := cryptoutil.RandomString(8, codeAlphabet)
 	return s[:4] + "-" + s[4:]
 }
 
@@ -258,7 +259,7 @@ func NormalizeCode(code string) string {
 }
 
 // NewToken returns a new pairing token.
-func NewToken() string { return TokenPrefix + store.RandomString(40, store.Alphanumeric) }
+func NewToken() string { return TokenPrefix + cryptoutil.RandomString(40, cryptoutil.Alphanumeric) }
 
 // PrincipalForCode is the principal a pairing code creates.
 func PrincipalForCode(name, role string) string {

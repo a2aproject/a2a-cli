@@ -21,8 +21,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
-	"github.com/a2aproject/a2a-cli/internal/agentsrv"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
+	"github.com/a2aproject/a2a-cli/internal/controlapi"
 )
 
 func newServerChannelRmCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
@@ -35,8 +35,8 @@ func newServerChannelRmCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			err = agentsrv.NewClient(d).DeleteChannel(cmd.Context(), args[0])
-			if errors.Is(err, agentsrv.ErrNotRunning) {
+			err = controlapi.NewClient(d).DeleteChannel(cmd.Context(), args[0])
+			if errors.Is(err, controlapi.ErrNotRunning) {
 				err = removeChannelOffline(d, args[0])
 			}
 			if err != nil {

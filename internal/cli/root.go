@@ -67,8 +67,6 @@ type globalConfig struct {
 	unixSocket   string
 	configPath   string
 
-	storedTokenOnce sync.Once
-
 	pluginsEnabled bool
 
 	bindings []clicfg.FlagBinding
@@ -165,6 +163,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 			if cfg.unixSocket != "" && cfg.httpTransport == nil {
 				cfg.httpTransport = unixSocketTransport(cfg.unixSocket)
 			}
+			attachStoredToken(cfg)
 
 			switch output.Mode(cfg.output) {
 			case output.ModeText, output.ModeJson, output.ModeJSONL:

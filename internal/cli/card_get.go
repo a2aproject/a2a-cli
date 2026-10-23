@@ -20,8 +20,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-go/v2/a2a"
+
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 )
 
 func newCardGetCmd(cfg *globalConfig) *cobra.Command {
@@ -30,18 +31,22 @@ func newCardGetCmd(cfg *globalConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get [url]",
 		Short: "Fetch and display an agent card",
-		Args:  cobra.MaximumNArgs(1),
+		// The positional URL is taken while validating args, which runs
+		// before the root's PersistentPreRunE resolves the stored token.
+		Args: func(cmd *cobra.Command, args []string) error {
+			if err := cobra.MaximumNArgs(1)(cmd, args); err != nil {
+				return err
+			}
+			if len(args) == 1 {
+				return cfg.agentCard.Set(args[0])
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
 			ctx, cancel := context.WithTimeout(ctx, cfg.timeout)
 			defer cancel()
-
-			if len(args) == 1 {
-				if err := cfg.agentCard.Set(args[0]); err != nil {
-					return err
-				}
-			}
 
 			var card *a2a.AgentCard
 			var err error

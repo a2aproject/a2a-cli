@@ -21,7 +21,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -30,7 +29,9 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2a"
 
 	"github.com/a2aproject/a2a-cli/internal/auth"
+	"github.com/a2aproject/a2a-cli/internal/controlapi"
 	"github.com/a2aproject/a2a-cli/internal/credstore"
+	"github.com/a2aproject/a2a-cli/internal/pairapi"
 	"github.com/a2aproject/a2a-cli/internal/relayapi"
 )
 
@@ -60,7 +61,7 @@ func (n *fakeNode) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	n.mu.Lock()
 	n.wakes = append(n.wakes, env)
-	if !validSignature(r.Header.Get(SignatureHeader), n.secret(), body) {
+	if relayapi.Verify(n.secret(), r.Header.Get(relayapi.SignatureHeader), body, time.Now(), time.Minute) != nil {
 		n.badSig = true
 	}
 	client := n.client
@@ -79,18 +80,6 @@ func (n *fakeNode) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
-func validSignature(header, secret string, body []byte) bool {
-	parts := strings.Split(header, ",")
-	if len(parts) != 2 {
-		return false
-	}
-	ts, err := strconv.ParseInt(strings.TrimPrefix(parts[0], "t="), 10, 64)
-	if err != nil {
-		return false
-	}
-	return Sign(secret, time.Unix(ts, 0), body) == header
-}
-
 // addNode hosts a fake node on ts and pairs it.
 func addNode(t *testing.T, ts *testServer, id string, delay time.Duration) *fakeNode {
 	t.Helper()
@@ -98,7 +87,7 @@ func addNode(t *testing.T, ts *testServer, id string, delay time.Duration) *fake
 	hs := httptest.NewServer(node)
 	t.Cleanup(hs.Close)
 	ctx := context.Background()
-	resp, err := NewClient(ts.dir).Pair(ctx, PairCodeRequest{Name: id, Webhook: hs.URL, Headers: map[string]string{"Authorization": "Bearer hook"}})
+	resp, err := controlapi.NewClient(ts.dir).Pair(ctx, controlapi.PairCodeRequest{Name: id, Webhook: hs.URL, Headers: map[string]string{"Authorization": "Bearer hook"}})
 	if err != nil {
 		t.Fatalf("Pair() error = %v", err)
 	}
@@ -147,7 +136,7 @@ func TestWebhookNodeAnswersAgent(t *testing.T) {
 		t.Fatalf("wakes = %+v, want a wake from the agent on behalf of the owner", node.wakes)
 	}
 	if node.badSig {
-		t.Fatalf("a wake had an invalid %s", SignatureHeader)
+		t.Fatalf("a wake had an invalid %s", relayapi.SignatureHeader)
 	}
 }
 
@@ -156,11 +145,11 @@ func TestContactRejectsNodeCode(t *testing.T) {
 	coder := startServer(t, serverOpts{name: "coder"})
 	assistant := startServer(t, serverOpts{name: "assistant"})
 	ctx := context.Background()
-	code, err := NewClient(coder.dir).Pair(ctx, PairCodeRequest{Name: "grok", Webhook: "https://example.com/hook"})
+	code, err := controlapi.NewClient(coder.dir).Pair(ctx, controlapi.PairCodeRequest{Name: "grok", Webhook: "https://example.com/hook"})
 	if err != nil {
 		t.Fatalf("Pair() error = %v", err)
 	}
-	if _, err := NewClient(assistant.dir).AddContact(ctx, ContactRequest{Name: "coder", URL: coder.localURL(), Code: code.Code}); err == nil {
+	if _, err := controlapi.NewClient(assistant.dir).AddContact(ctx, controlapi.ContactRequest{Name: "coder", URL: coder.localURL(), Code: code.Code}); err == nil {
 		t.Fatalf("AddContact() with a node code error = nil, want error")
 	}
 }
@@ -172,19 +161,19 @@ func TestPairNodeOrCaller(t *testing.T) {
 	ts.pair("anna", auth.RoleMember)
 	tests := []struct {
 		name     string
-		req      PairCodeRequest
+		req      controlapi.PairCodeRequest
 		wantNode bool
 		wantErr  bool
 	}{
-		{name: "new caller", req: PairCodeRequest{Name: "bob"}},
-		{name: "existing node gets a node code", req: PairCodeRequest{Name: "grok"}, wantNode: true},
-		{name: "existing node with a new webhook", req: PairCodeRequest{Name: "grok", Webhook: "https://example.com/new"}, wantNode: true},
-		{name: "role for a node", req: PairCodeRequest{Name: "grok", Role: auth.RoleOwner}, wantErr: true},
-		{name: "webhook for a caller's name", req: PairCodeRequest{Name: "anna", Webhook: "https://example.com/hook"}, wantErr: true},
+		{name: "new caller", req: controlapi.PairCodeRequest{Name: "bob"}},
+		{name: "existing node gets a node code", req: controlapi.PairCodeRequest{Name: "grok"}, wantNode: true},
+		{name: "existing node with a new webhook", req: controlapi.PairCodeRequest{Name: "grok", Webhook: "https://example.com/new"}, wantNode: true},
+		{name: "role for a node", req: controlapi.PairCodeRequest{Name: "grok", Role: auth.RoleOwner}, wantErr: true},
+		{name: "webhook for a caller's name", req: controlapi.PairCodeRequest{Name: "anna", Webhook: "https://example.com/hook"}, wantErr: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			resp, err := NewClient(ts.dir).Pair(context.Background(), tc.req)
+			resp, err := controlapi.NewClient(ts.dir).Pair(context.Background(), tc.req)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("Pair() error = %v, want error %v", err, tc.wantErr)
 			}
@@ -201,8 +190,8 @@ func TestPairRmRemovesNodeOrCaller(t *testing.T) {
 	addNode(t, ts, "grok", 0)
 	ts.pair("anna", auth.RoleMember)
 	ctx := context.Background()
-	for name, want := range map[string]string{"grok": PairKindNode, "anna": PairKindCaller} {
-		resp, err := NewClient(ts.dir).Revoke(ctx, name)
+	for name, want := range map[string]string{"grok": pairapi.KindNode, "anna": pairapi.KindCaller} {
+		resp, err := controlapi.NewClient(ts.dir).Revoke(ctx, name)
 		if err != nil {
 			t.Fatalf("Revoke(%q) error = %v", name, err)
 		}
@@ -213,7 +202,7 @@ func TestPairRmRemovesNodeOrCaller(t *testing.T) {
 	if _, err := ts.srv.store.Node(ctx, "grok"); err == nil {
 		t.Fatalf("Node() after Revoke() error = nil, want error")
 	}
-	if _, err := NewClient(ts.dir).Revoke(ctx, "nobody"); err == nil {
+	if _, err := controlapi.NewClient(ts.dir).Revoke(ctx, "nobody"); err == nil {
 		t.Fatalf("Revoke() unknown name error = nil, want error")
 	}
 }

@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package agentsrv
+// Package launch runs an agent server in the foreground, in the background or
+// as a user service, and follows its log.
+package launch
 
 import (
 	"bufio"
@@ -26,6 +28,8 @@ import (
 	"time"
 
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
+	"github.com/a2aproject/a2a-cli/internal/agentsrv"
+	"github.com/a2aproject/a2a-cli/internal/controlapi"
 	"github.com/a2aproject/a2a-cli/internal/service"
 )
 
@@ -64,11 +68,11 @@ func Foreground(ctx context.Context, dir agentdir.Dir, out io.Writer, verbose bo
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(logOut, &slog.HandlerOptions{Level: level})))
 	slog.Info("starting agent server", "name", cfg.Name, "harness", cfg.Harness, "dir", dir.Root)
-	opts := Options{Dir: dir, Config: cfg, Secrets: secrets, Out: out, HarnessLog: logOut}
+	opts := agentsrv.Options{Dir: dir, Config: cfg, Secrets: secrets, Out: out, HarnessLog: logOut}
 	if ready != nil {
-		opts.Ready = func(*Server) { ready() }
+		opts.Ready = func(*agentsrv.Server) { ready() }
 	}
-	err = Run(ctx, opts)
+	err = agentsrv.Run(ctx, opts)
 	if err != nil {
 		slog.Error("agent server stopped", "error", err)
 	}
@@ -103,7 +107,7 @@ func Background(ctx context.Context, dir agentdir.Dir, asService bool, out io.Wr
 	if err != nil {
 		return err
 	}
-	if _, err := NewClient(dir).Status(ctx); err == nil {
+	if _, err := controlapi.NewClient(dir).Status(ctx); err == nil {
 		return fmt.Errorf("the agent is already running (a2a server status); stop it first with `a2a server stop`")
 	}
 	var offset int64
@@ -157,7 +161,7 @@ func Background(ctx context.Context, dir agentdir.Dir, asService bool, out io.Wr
 // answers or the process dies.
 func waitReady(ctx context.Context, dir agentdir.Dir, offset int64, alive func() bool, out io.Writer) error {
 	deadline := time.Now().Add(15 * time.Minute)
-	client := NewClient(dir)
+	client := controlapi.NewClient(dir)
 	var tail []string
 	for {
 		lines, next, err := readFrom(dir.LogPath(), offset)

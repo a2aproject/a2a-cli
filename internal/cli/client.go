@@ -26,15 +26,16 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/a2aproject/a2a-cli/internal/clierr"
-	"github.com/a2aproject/a2a-cli/internal/flagparse"
-	"github.com/a2aproject/a2a-cli/internal/transportplugin"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
 	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
 	"github.com/a2aproject/a2a-go/v2/a2acompat/a2av0"
 	a2agrpcv0 "github.com/a2aproject/a2a-go/v2/a2agrpc/v0"
 	a2agrpc "github.com/a2aproject/a2a-go/v2/a2agrpc/v1"
+
+	"github.com/a2aproject/a2a-cli/internal/clierr"
+	"github.com/a2aproject/a2a-cli/internal/flagparse"
+	"github.com/a2aproject/a2a-cli/internal/transportplugin"
 )
 
 var compatCardResolver = func() *agentcard.Resolver {
@@ -58,13 +59,11 @@ func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclie
 	case cfg.url != "" && cfg.agentCard.IsSet():
 		return nil, clierr.Usage("--endpoint and --agent-card are mutually exclusive")
 	case cfg.url != "":
-		attachStoredToken(cfg)
 		return newClientFromEndpoint(ctx, cfg, cfg.url, extraOpts...)
 	case cfg.agentCard.IsSet():
 		if err := cfg.agentCard.Validate(); err != nil {
 			return nil, clierr.Usage(err.Error())
 		}
-		attachStoredToken(cfg)
 		return newClientFromCard(ctx, cfg, cfg.agentCard.URL(), extraOpts...)
 	default:
 		return nil, clierr.Usage("either '--agent-card <ref>' or '--endpoint <url> --transport <t>' must be provided")
@@ -72,13 +71,8 @@ func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclie
 }
 
 // attachStoredToken uses the token saved by `a2a pair add` for the target
-// agent, unless the request already carries a credential. It runs once per
-// command, however many paths reach it.
+// agent, unless the request already carries a credential.
 func attachStoredToken(cfg *globalConfig) {
-	cfg.storedTokenOnce.Do(func() { lookupStoredToken(cfg) })
-}
-
-func lookupStoredToken(cfg *globalConfig) {
 	target := cfg.url
 	if target == "" && cfg.agentCard.IsSet() {
 		target = cfg.agentCard.URL()
@@ -229,7 +223,6 @@ func stripHTTPScheme(raw string) string {
 // withServiceParams attaches the --svc-param entries (including the --auth
 // shorthand) to ctx so they ride along with every request the client makes.
 func withServiceParams(ctx context.Context, cfg *globalConfig) context.Context {
-	attachStoredToken(cfg)
 	if params := cfg.svcParams.Params(); len(params) > 0 {
 		ctx = a2aclient.AttachServiceParams(ctx, params)
 	}

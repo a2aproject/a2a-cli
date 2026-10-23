@@ -25,25 +25,35 @@ import (
 	"time"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/a2aproject/a2a-go/v2/a2asrv"
 
+	"github.com/a2aproject/a2a-cli/internal/agentsrv/approvals"
 	"github.com/a2aproject/a2a-cli/internal/auth"
 	"github.com/a2aproject/a2a-cli/internal/channel"
+	"github.com/a2aproject/a2a-cli/internal/controlapi"
 	"github.com/a2aproject/a2a-cli/internal/store"
 )
 
 // Router turns channel messages into A2A tasks of the agent and renders
 // task events back into the conversation.
 type Router struct {
-	s   *Server
+	store     *store.Store
+	tasks     *store.TaskStore
+	chain     *auth.Chain
+	approvals *approvals.Service
+	bus       *eventBus
+	agentName func() string
+	logf      func(format string, args ...any)
+	// handler is the agent's A2A handler. It is set before the router starts.
+	handler a2asrv.RequestHandler
+
+	// ctx ends when the server stops; channels and turns run in it.
 	ctx context.Context
 	in  chan channel.Inbound
 
 	mu    sync.Mutex
 	chans map[string]*runningChannel
 	convs map[string]*convMutex
-	// asked maps question IDs to the messages which show them, so that they
-	// can be updated once answered.
-	asked map[string][]askedRef
 }
 
 type runningChannel struct {
@@ -65,18 +75,13 @@ var (
 	channelRetryMax = 5 * time.Minute
 )
 
-// newRouter returns a router which dispatches channel messages until ctx ends.
-func newRouter(ctx context.Context, s *Server) *Router {
-	r := &Router{
-		s:     s,
-		ctx:   ctx,
-		in:    make(chan channel.Inbound, 64),
-		chans: map[string]*runningChannel{},
-		convs: map[string]*convMutex{},
-		asked: map[string][]askedRef{},
-	}
+// start dispatches channel messages until ctx ends.
+func (r *Router) start(ctx context.Context) {
+	r.ctx = ctx
+	r.in = make(chan channel.Inbound, 64)
+	r.chans = map[string]*runningChannel{}
+	r.convs = map[string]*convMutex{}
 	go r.dispatch(ctx)
-	return r
 }
 
 // add starts a channel, replacing a running one of the same name after it
@@ -175,16 +180,16 @@ func (r *Router) channels() []channel.Channel {
 	return out
 }
 
-func (r *Router) status() []ChannelStatus {
-	var out []ChannelStatus
+func (r *Router) status() []controlapi.ChannelStatus {
+	var out []controlapi.ChannelStatus
 	for _, ch := range r.channels() {
 		out = append(out, *r.channelStatus(ch, ""))
 	}
 	return out
 }
 
-func (r *Router) channelStatus(ch channel.Channel, hint string) *ChannelStatus {
-	st := &ChannelStatus{Name: ch.Name()}
+func (r *Router) channelStatus(ch channel.Channel, hint string) *controlapi.ChannelStatus {
+	st := &controlapi.ChannelStatus{Name: ch.Name()}
 	if d, ok := ch.(channel.Describer); ok {
 		st.Account = d.Describe()
 	}
@@ -207,9 +212,9 @@ func (r *Router) announce(ctx context.Context) error {
 		if d, ok := ch.(channel.Describer); ok {
 			line += " " + d.Describe()
 		}
-		r.s.logf("%s", line)
+		r.logf("%s", line)
 		if hint := r.ownerHint(ctx, ch); hint != "" {
-			r.s.logf("%s", hint)
+			r.logf("%s", hint)
 		}
 	}
 	return nil
@@ -217,7 +222,7 @@ func (r *Router) announce(ctx context.Context) error {
 
 // ownerHint mints an owner code for a channel nobody is linked on as owner.
 func (r *Router) ownerHint(ctx context.Context, ch channel.Channel) string {
-	links, err := r.s.store.LinksOf(ctx, auth.OwnerID)
+	links, err := r.store.LinksOf(ctx, auth.OwnerID)
 	if err != nil {
 		slog.Error("listing owner links", "error", err)
 		return ""
@@ -229,7 +234,7 @@ func (r *Router) ownerHint(ctx context.Context, ch channel.Channel) string {
 	if !ok {
 		return ""
 	}
-	code, _, err := auth.MintCode(ctx, r.s.store, auth.PurposePair, "owner", auth.RoleOwner)
+	code, _, err := auth.MintCode(ctx, r.store, auth.PurposePair, "owner", auth.RoleOwner)
 	if err != nil {
 		slog.Error("minting owner code", "error", err)
 		return ""
@@ -292,7 +297,7 @@ func (r *Router) handle(ctx context.Context, in channel.Inbound) {
 	if ch == nil {
 		return
 	}
-	first, err := r.s.store.FirstSeen(ctx, in.Channel+"|"+in.MessageID)
+	first, err := r.store.FirstSeen(ctx, in.Channel+"|"+in.MessageID)
 	if err != nil {
 		slog.Error("dedup", "error", err)
 		return
@@ -305,15 +310,15 @@ func (r *Router) handle(ctx context.Context, in channel.Inbound) {
 		return
 	}
 	if code, ok := auth.LinkCode(in.Text); ok {
-		p, err := auth.Link(ctx, r.s.store, &in, code)
+		p, err := auth.Link(ctx, r.store, &in, code)
 		if err != nil {
 			r.reply(ctx, ch, in, "That code is invalid or has expired. Ask the owner for a new one.")
 			return
 		}
-		r.reply(ctx, ch, in, fmt.Sprintf("Linked as %s. Write to talk to %s.", strings.Join(p.Roles, ", "), r.s.config().Name))
+		r.reply(ctx, ch, in, fmt.Sprintf("Linked as %s. Write to talk to %s.", strings.Join(p.Roles, ", "), r.agentName()))
 		return
 	}
-	p, ok, err := r.s.chain.Authenticate(ctx, auth.Request{Channel: &in})
+	p, ok, err := r.chain.Authenticate(ctx, auth.Request{Channel: &in})
 	if err != nil {
 		slog.Error("authenticating channel message", "error", err)
 		return
@@ -342,14 +347,14 @@ func (r *Router) handle(ctx context.Context, in channel.Inbound) {
 	defer r.lockConv(in.Channel, in.Conv)()
 	switch {
 	case isCommand(in.Text, "new"):
-		if err := r.s.store.SetContext(ctx, in.Channel, string(in.Conv), a2a.NewContextID()); err != nil {
+		if err := r.store.SetContext(ctx, in.Channel, string(in.Conv), a2a.NewContextID()); err != nil {
 			slog.Error("starting a new context", "error", err)
 			return
 		}
 		r.reply(ctx, ch, in, "Started a new conversation.")
 		return
 	case isCommand(in.Text, "start"):
-		r.reply(ctx, ch, in, fmt.Sprintf("Hi! I'm %s. Write what you need; /new starts a new conversation, /stop stops the current task.", r.s.config().Name))
+		r.reply(ctx, ch, in, fmt.Sprintf("Hi! I'm %s. Write what you need; /new starts a new conversation, /stop stops the current task.", r.agentName()))
 		return
 	}
 
@@ -362,7 +367,7 @@ func (r *Router) handle(ctx context.Context, in channel.Inbound) {
 	msg.ID = in.Channel + ":" + in.MessageID
 	msg.ContextID = contextID
 	msg.Metadata = map[string]any{"channel": in.Channel, "identity": in.Identity, "sender": in.Name}
-	if last, err := r.s.tasks.LatestInContext(ctx, contextID); err == nil && last.Status.State == a2a.TaskStateInputRequired {
+	if last, err := r.tasks.LatestInContext(ctx, contextID); err == nil && last.Status.State == a2a.TaskStateInputRequired {
 		msg.TaskID = last.ID
 	}
 	r.stream(ctx, ch, in.Conv, channel.Ref{Conv: in.Conv, ID: in.MessageID}, p, &a2a.SendMessageRequest{Message: msg})
@@ -392,7 +397,7 @@ func messageParts(in channel.Inbound) []*a2a.Part {
 }
 
 func (r *Router) contextOf(ctx context.Context, ch string, conv channel.ConvKey) (string, error) {
-	id, err := r.s.store.ContextOf(ctx, ch, string(conv))
+	id, err := r.store.ContextOf(ctx, ch, string(conv))
 	if err == nil {
 		return id, nil
 	}
@@ -400,21 +405,21 @@ func (r *Router) contextOf(ctx context.Context, ch string, conv channel.ConvKey)
 		return "", err
 	}
 	id = a2a.NewContextID()
-	return id, r.s.store.SetContext(ctx, ch, string(conv), id)
+	return id, r.store.SetContext(ctx, ch, string(conv), id)
 }
 
 func (r *Router) stop(ctx context.Context, ch channel.Channel, in channel.Inbound, p auth.Principal) {
-	contextID, err := r.s.store.ContextOf(ctx, in.Channel, string(in.Conv))
+	contextID, err := r.store.ContextOf(ctx, in.Channel, string(in.Conv))
 	if err != nil {
 		r.reply(ctx, ch, in, "Nothing is running.")
 		return
 	}
-	last, err := r.s.tasks.LatestInContext(ctx, contextID)
+	last, err := r.tasks.LatestInContext(ctx, contextID)
 	if err != nil || last.Status.State.Terminal() {
 		r.reply(ctx, ch, in, "Nothing is running.")
 		return
 	}
-	if _, err := r.s.handler.CancelTask(inProcess(ctx, p), &a2a.CancelTaskRequest{ID: last.ID}); err != nil {
+	if _, err := r.handler.CancelTask(auth.InProcess(ctx, p), &a2a.CancelTaskRequest{ID: last.ID}); err != nil {
 		r.reply(ctx, ch, in, "Couldn't stop the task: "+err.Error())
 		return
 	}
@@ -424,7 +429,7 @@ func (r *Router) stop(ctx context.Context, ch channel.Channel, in channel.Inboun
 // stream sends a message to the agent and renders the task in the conversation.
 func (r *Router) stream(ctx context.Context, ch channel.Channel, conv channel.ConvKey, replyTo channel.Ref, p auth.Principal, req *a2a.SendMessageRequest) {
 	rd := newRenderer(r, ch, conv, replyTo, p)
-	for ev, err := range r.s.handler.SendStreamingMessage(inProcess(ctx, p), req) {
+	for ev, err := range r.handler.SendStreamingMessage(auth.InProcess(ctx, p), req) {
 		if err != nil {
 			rd.fail(ctx, err)
 			return
@@ -439,7 +444,7 @@ func (r *Router) stream(ctx context.Context, ch channel.Channel, conv channel.Co
 // follow renders the rest of a task which continues after someone else
 // answered its question.
 func (r *Router) follow(ctx context.Context, ch channel.Channel, conv channel.ConvKey, p auth.Principal, taskID a2a.TaskID) {
-	events, unsubscribe := r.s.bus.subscribe(taskID)
+	events, unsubscribe := r.bus.subscribe(taskID)
 	go func() {
 		defer unsubscribe()
 		rd := newRenderer(r, ch, conv, channel.Ref{}, p)
@@ -463,7 +468,7 @@ func (r *Router) follow(ctx context.Context, ch channel.Channel, conv channel.Co
 
 // handleAction answers a question from a button click.
 func (r *Router) handleAction(ctx context.Context, ch channel.Channel, in channel.Inbound) {
-	rec, err := r.s.store.QuestionByID(ctx, in.Action.QuestionID)
+	rec, err := r.store.QuestionByID(ctx, in.Action.QuestionID)
 	if err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
 			slog.Error("loading question", "question", in.Action.QuestionID, "error", err)
@@ -474,7 +479,7 @@ func (r *Router) handleAction(ctx context.Context, ch channel.Channel, in channe
 		r.reply(ctx, ch, in, "Already answered.")
 		return
 	}
-	p, ok, err := r.s.chain.Authenticate(ctx, auth.Request{Channel: &in})
+	p, ok, err := r.chain.Authenticate(ctx, auth.Request{Channel: &in})
 	if err != nil {
 		slog.Error("authenticating channel action", "error", err)
 		return
@@ -482,7 +487,7 @@ func (r *Router) handleAction(ctx context.Context, ch channel.Channel, in channe
 	if !ok {
 		return
 	}
-	q := questionFromRecord(rec)
+	q := approvals.FromRecord(rec)
 	if in.Action.Option >= len(q.Options) {
 		return
 	}
@@ -492,16 +497,19 @@ func (r *Router) handleAction(ctx context.Context, ch channel.Channel, in channe
 // answerTyped answers a question asked in this conversation by text, for
 // channels without buttons and for people who type instead of clicking.
 func (r *Router) answerTyped(ctx context.Context, ch channel.Channel, in channel.Inbound, p auth.Principal) bool {
-	id, ok, err := r.s.store.Get(ctx, pendingKey(in.Channel, in.Conv))
-	if err != nil || !ok || id == "" {
+	id, err := r.store.PendingQuestion(ctx, in.Channel, string(in.Conv))
+	if err != nil {
+		if !errors.Is(err, store.ErrNotFound) {
+			slog.Warn("loading the pending question", "error", err)
+		}
 		return false
 	}
-	rec, err := r.s.store.QuestionByID(ctx, id)
+	rec, err := r.store.QuestionByID(ctx, id)
 	if err != nil || rec.AnsweredBy != "" {
 		return false
 	}
-	q := questionFromRecord(rec)
-	opt, ok := q.matchOption(in.Text)
+	q := approvals.FromRecord(rec)
+	opt, ok := q.Match(in.Text)
 	if !ok {
 		return false
 	}
@@ -509,28 +517,26 @@ func (r *Router) answerTyped(ctx context.Context, ch channel.Channel, in channel
 	return true
 }
 
-func pendingKey(ch string, conv channel.ConvKey) string { return "pending:" + ch + ":" + string(conv) }
-
 // answerIn answers a question from a conversation. If the question belongs
 // to the task of this conversation, the rest of the task is rendered here.
-func (r *Router) answerIn(ctx context.Context, ch channel.Channel, in channel.Inbound, p auth.Principal, rec store.Question, q *hitlQuestion, opt hitlOption) {
-	if q.Type == questionPermission && !r.s.canApprove(ctx, p) {
+func (r *Router) answerIn(ctx context.Context, ch channel.Channel, in channel.Inbound, p auth.Principal, rec store.Question, q *approvals.Question, opt approvals.Option) {
+	if q.Type == approvals.TypePermission && !r.approvals.CanApprove(ctx, p) {
 		r.reply(ctx, ch, in, "Only the owner or an approver can answer this.")
 		return
 	}
-	if err := r.s.store.Set(ctx, pendingKey(in.Channel, in.Conv), ""); err != nil {
+	if err := r.store.ClearPendingQuestion(ctx, in.Channel, string(in.Conv)); err != nil {
 		slog.Warn("clearing pending question", "error", err)
 	}
 	who := in.Name
 	if who == "" {
-		who = displayPrincipal(p.ID)
+		who = approvals.DisplayPrincipal(p.ID)
 	}
-	own, err := r.s.store.ContextOf(ctx, in.Channel, string(in.Conv))
+	own, err := r.store.ContextOf(ctx, in.Channel, string(in.Conv))
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		slog.Warn("resolving conversation context", "error", err)
 	}
 	if rec.Contact == "" && rec.ContextID == own {
-		if err := r.s.store.AnswerQuestion(ctx, rec.ID, p.ID, opt.ID); err != nil {
+		if err := r.store.AnswerQuestion(ctx, rec.ID, p.ID, opt.ID); err != nil {
 			if !errors.Is(err, store.ErrAnswered) {
 				slog.Error("answering question", "question", rec.ID, "error", err)
 				r.reply(ctx, ch, in, "Couldn't record the answer. Try again.")
@@ -539,13 +545,13 @@ func (r *Router) answerIn(ctx context.Context, ch channel.Channel, in channel.In
 			r.reply(ctx, ch, in, "Already answered.")
 			return
 		}
-		r.markAnswered(ctx, rec.ID, opt.Label, who)
-		msg := answerMessage(a2a.TaskID(rec.TaskID), rec.ContextID, q.ID, opt.ID)
+		r.MarkAnswered(ctx, rec.ID, opt.Label, who)
+		msg := approvals.AnswerMessage(a2a.TaskID(rec.TaskID), rec.ContextID, q.ID, opt.ID)
 		defer r.lockConv(in.Channel, in.Conv)()
 		r.stream(ctx, ch, in.Conv, channel.Ref{}, p, &a2a.SendMessageRequest{Message: msg})
 		return
 	}
-	if err := r.s.answer(ctx, rec, p, opt); err != nil {
+	if err := r.approvals.Answer(ctx, rec, p, opt); err != nil {
 		if errors.Is(err, store.ErrAnswered) {
 			r.reply(ctx, ch, in, "Already answered.")
 			return
@@ -553,36 +559,34 @@ func (r *Router) answerIn(ctx context.Context, ch channel.Channel, in channel.In
 		r.reply(ctx, ch, in, "Couldn't send the answer: "+err.Error())
 		return
 	}
-	r.markAnswered(ctx, rec.ID, opt.Label, who)
+	r.MarkAnswered(ctx, rec.ID, opt.Label, who)
 }
 
-// markAnswered replaces the buttons of a question with who answered it.
-func (r *Router) markAnswered(ctx context.Context, questionID, label, who string) {
-	r.mu.Lock()
-	refs := r.asked[questionID]
-	delete(r.asked, questionID)
-	r.mu.Unlock()
-	for _, ref := range refs {
-		ch := r.channel(ref.channel)
+// MarkAnswered replaces the buttons of a question with who answered it.
+func (r *Router) MarkAnswered(ctx context.Context, questionID, label, who string) {
+	msgs, err := r.store.TakeQuestionMessages(ctx, questionID)
+	if err != nil {
+		slog.Warn("loading the messages of an answered question", "question", questionID, "error", err)
+		return
+	}
+	for _, m := range msgs {
+		ch := r.channel(m.Channel)
 		if ch == nil || !ch.Caps().Edit {
 			continue
 		}
-		text := fmt.Sprintf("%s\n\n✓ %s by %s", ref.text, label, who)
-		if err := ch.Edit(ctx, ref.Ref, channel.Outbound{Conv: ref.Conv, Text: text}); err != nil {
+		text := fmt.Sprintf("%s\n\n✓ %s by %s", m.Text, label, who)
+		ref := channel.Ref{Conv: channel.ConvKey(m.Conv), ID: m.MessageID}
+		if err := ch.Edit(ctx, ref, channel.Outbound{Conv: ref.Conv, Text: text}); err != nil {
 			slog.Debug("updating answered question", "error", err)
 		}
 	}
 }
 
-// ask sends a question to users on their direct conversations, or to one
+// Ask sends a question to users on their direct conversations, or to one
 // preferred conversation if given.
-func (r *Router) ask(ctx context.Context, userIDs []string, prefChannel string, prefConv channel.ConvKey, header string, rec store.Question) {
-	q := questionFromRecord(rec)
-	text := q.Text
-	if text == "" {
-		text = q.Title
-	}
-	text = header + ":\n" + text
+func (r *Router) Ask(ctx context.Context, userIDs []string, prefChannel string, prefConv channel.ConvKey, header string, rec store.Question) {
+	q := approvals.FromRecord(rec)
+	text := header + ":\n" + q.Display()
 	type target struct {
 		ch   channel.Channel
 		conv channel.ConvKey
@@ -592,7 +596,7 @@ func (r *Router) ask(ctx context.Context, userIDs []string, prefChannel string, 
 		targets = append(targets, target{ch, prefConv})
 	} else {
 		for _, id := range userIDs {
-			links, err := r.s.store.LinksOf(ctx, id)
+			links, err := r.store.LinksOf(ctx, id)
 			if err != nil {
 				slog.Error("listing links", "error", err)
 				continue
@@ -607,49 +611,29 @@ func (r *Router) ask(ctx context.Context, userIDs []string, prefChannel string, 
 	for _, t := range targets {
 		out := channel.Outbound{Conv: t.conv, Text: text, Subject: header}
 		if t.ch.Caps().Buttons {
-			out.Question = &channel.Question{ID: rec.ID, Options: q.labels()}
+			out.Question = &channel.Question{ID: rec.ID, Options: q.Labels()}
 		} else {
-			out.Text += fmt.Sprintf("\n\nReply %s, or open %s", optionWords(q), r.s.hitlURL(rec))
+			out.Text += fmt.Sprintf("\n\nReply %s, or open %s", q.Words(), r.approvals.PageURL(rec))
 		}
 		ref, err := t.ch.Send(ctx, out)
 		if err != nil {
 			slog.Warn("sending question", "channel", t.ch.Name(), "error", err)
 			continue
 		}
-		r.remember(rec.ID, t.ch.Name(), ref, text)
-		if err := r.s.store.Set(ctx, pendingKey(t.ch.Name(), t.conv), rec.ID); err != nil {
-			slog.Warn("recording pending question", "error", err)
-		}
+		r.remember(ctx, rec.ID, t.ch.Name(), t.conv, ref, text)
 	}
 }
 
-func optionWords(q *hitlQuestion) string {
-	var words []string
-	for _, o := range q.Options {
-		switch o.ID {
-		case "once":
-			words = append(words, "approve")
-		case "always":
-			words = append(words, "always")
-		case "reject":
-			words = append(words, "deny")
-		default:
-			words = append(words, o.ID)
-		}
+// remember records a message which shows a question, so that it can be
+// updated once answered, and makes the question the one a typed reply in
+// the conversation answers.
+func (r *Router) remember(ctx context.Context, questionID, ch string, conv channel.ConvKey, ref channel.Ref, text string) {
+	if err := r.store.AddQuestionMessage(ctx, store.QuestionMessage{QuestionID: questionID, Channel: ch, Conv: string(ref.Conv), MessageID: ref.ID, Text: text}); err != nil {
+		slog.Warn("recording a question message", "error", err)
 	}
-	return strings.Join(words, ", ")
-}
-
-type askedRef struct {
-	channel.Ref
-	channel string
-	text    string
-}
-
-func (r *Router) remember(questionID, ch string, ref channel.Ref, text string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.asked[questionID] = append(r.asked[questionID], askedRef{Ref: ref, channel: ch, text: text})
+	if err := r.store.SetPendingQuestion(ctx, ch, string(conv), questionID); err != nil {
+		slog.Warn("recording pending question", "error", err)
+	}
 }
 
 // injectTurn posts text into a context as a new turn, rendered in the
@@ -657,12 +641,12 @@ func (r *Router) remember(questionID, ch string, ref channel.Ref, text string) {
 func (r *Router) injectTurn(ctx context.Context, contextID string, p auth.Principal, text string) error {
 	msg := a2a.NewMessage(a2a.MessageRoleUser, a2a.NewTextPart(text))
 	msg.ContextID = contextID
-	chName, conv, err := r.s.store.ConvOf(ctx, contextID)
+	chName, conv, err := r.store.ConvOf(ctx, contextID)
 	if err == nil {
 		if ch := r.channel(chName); ch != nil {
 			go func() {
 				defer r.lockConv(chName, channel.ConvKey(conv))()
-				if last, err := r.s.tasks.LatestInContext(ctx, contextID); err == nil && last.Status.State == a2a.TaskStateInputRequired {
+				if last, err := r.tasks.LatestInContext(ctx, contextID); err == nil && last.Status.State == a2a.TaskStateInputRequired {
 					msg.TaskID = last.ID
 				}
 				r.stream(ctx, ch, channel.ConvKey(conv), channel.Ref{}, p, &a2a.SendMessageRequest{Message: msg})
@@ -670,6 +654,6 @@ func (r *Router) injectTurn(ctx context.Context, contextID string, p auth.Princi
 			return nil
 		}
 	}
-	_, err = r.s.handler.SendMessage(inProcess(ctx, p), &a2a.SendMessageRequest{Message: msg, Config: &a2a.SendMessageConfig{ReturnImmediately: true}})
+	_, err = r.handler.SendMessage(auth.InProcess(ctx, p), &a2a.SendMessageRequest{Message: msg, Config: &a2a.SendMessageConfig{ReturnImmediately: true}})
 	return err
 }

@@ -27,6 +27,8 @@ import (
 	"time"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
+
+	"github.com/a2aproject/a2a-cli/internal/jsonhttp"
 )
 
 // maxResponse bounds the responses of the node API, which hold an inbox of
@@ -74,11 +76,7 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 		return err
 	}
 	if resp.StatusCode/100 != 2 {
-		var apiErr APIError
-		if json.Unmarshal(data, &apiErr) == nil && apiErr.Error != "" {
-			return fmt.Errorf("agent server: %s", apiErr.Error)
-		}
-		return fmt.Errorf("agent server: %s: %s", resp.Status, strings.TrimSpace(string(data)))
+		return fmt.Errorf("agent server: %s", jsonhttp.ErrorMessage(resp.Status, data))
 	}
 	if out == nil {
 		return nil

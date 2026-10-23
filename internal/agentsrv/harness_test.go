@@ -35,6 +35,8 @@ import (
 
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
 	"github.com/a2aproject/a2a-cli/internal/channel"
+	"github.com/a2aproject/a2a-cli/internal/controlapi"
+	"github.com/a2aproject/a2a-cli/internal/harness"
 )
 
 var fakeACP string
@@ -53,7 +55,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	watchInterval, watchMaxInterval = 200*time.Millisecond, time.Second
-	webhookRetries = []time.Duration{0, 100 * time.Millisecond}
+	nodeWebhookRetries = []time.Duration{0, 100 * time.Millisecond}
 	channelRetryMin = 10 * time.Millisecond
 	code := m.Run()
 	if err := os.RemoveAll(dir); err != nil {
@@ -101,7 +103,7 @@ func startServer(t *testing.T, o serverOpts) *testServer {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg := &agentdir.Config{Name: o.name, Harness: "fake", Command: []string{fakeACP}, Sandbox: SandboxLocal}
+	cfg := &agentdir.Config{Name: o.name, Harness: "fake", Command: []string{fakeACP}, Sandbox: harness.SandboxLocal}
 	if dir.Exists() {
 		if cfg, err = dir.LoadConfig(); err != nil {
 			t.Fatal(err)
@@ -156,7 +158,7 @@ func (ts *testServer) localURL() string {
 func (ts *testServer) pair(name, role string) string {
 	ts.t.Helper()
 	ctx := context.Background()
-	code, err := NewClient(ts.dir).Pair(ctx, PairCodeRequest{Name: name, Role: role})
+	code, err := controlapi.NewClient(ts.dir).Pair(ctx, controlapi.PairCodeRequest{Name: name, Role: role})
 	if err != nil {
 		ts.t.Fatalf("Pair() error = %v", err)
 	}
@@ -382,6 +384,38 @@ func (f *fakeChannel) waitFor(t *testing.T, conv string, pred func(channel.Outbo
 	}
 	t.Fatalf("no matching message in %s; messages:\n%s", conv, strings.Join(all, "\n"))
 	return "", channel.Outbound{}
+}
+
+// waitEdited waits until the message with ID id contains text. The message
+// may have been sent by an earlier channel of the same agent.
+func (f *fakeChannel) waitEdited(t *testing.T, id, text string) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		f.mu.Lock()
+		got := f.msgs[id].Text
+		f.mu.Unlock()
+		if strings.Contains(got, text) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("message %s = %q, want it to contain %q", id, got, text)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// questions counts the messages with buttons.
+func (f *fakeChannel) questions() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, id := range f.order {
+		if f.msgs[id].Question != nil {
+			n++
+		}
+	}
+	return n
 }
 
 func hasText(s string) func(channel.Outbound) bool {

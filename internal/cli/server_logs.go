@@ -17,7 +17,7 @@ package cli
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/a2aproject/a2a-cli/internal/agentsrv"
+	"github.com/a2aproject/a2a-cli/internal/launch"
 )
 
 func newServerLogsCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
@@ -36,7 +36,7 @@ func newServerLogsCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
 			}
 			ctx, stop := signalContext(cmd.Context())
 			defer stop()
-			return agentsrv.FollowLog(ctx, d, lines, follow, cfg.Out)
+			return launch.FollowLog(ctx, d, lines, follow, cfg.Out)
 		},
 	}
 	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "Keep printing new lines")

@@ -26,11 +26,6 @@ import (
 // token from.
 const EnvNodeToken = "A2A_RELAY_TOKEN"
 
-// APIError is the body of an error response.
-type APIError struct {
-	Error string `json:"error"`
-}
-
 // APIBase turns an agent URL into its node API base.
 func APIBase(agentURL string) string {
 	u := strings.TrimSuffix(agentURL, "/")

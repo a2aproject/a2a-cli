@@ -17,13 +17,11 @@ package harness
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -35,9 +33,6 @@ import (
 type Runner interface {
 	// Command returns the process which runs c.
 	Command(ctx context.Context, c Command) (*exec.Cmd, error)
-	// HostAddr is the address of the host as seen from the harness, where
-	// the server listens for the harness's calls to other agents.
-	HostAddr(ctx context.Context) (bind, dial string, err error)
 }
 
 // LocalRunner runs the harness directly on the host, for trusted setups or
@@ -52,11 +47,6 @@ func (LocalRunner) Command(ctx context.Context, c Command) (*exec.Cmd, error) {
 	cmd.Dir = c.Dir
 	cmd.Env = append(os.Environ(), c.Env...)
 	return cmd, nil
-}
-
-// HostAddr implements [Runner].
-func (LocalRunner) HostAddr(context.Context) (string, string, error) {
-	return "127.0.0.1", "127.0.0.1", nil
 }
 
 // Limits are container resource limits.
@@ -93,12 +83,11 @@ var _ Runner = (*DockerRunner)(nil)
 // ContainerHome is the home directory of the harness in the container.
 const ContainerHome = "/home/agent"
 
-// Paths in the container where the server mounts the socket the harness
-// reaches it through, and the a2a CLI.
+// Paths in the container where the directory of the socket the harness
+// reaches the server through, and the a2a CLI, are mounted.
 const (
-	SandboxDir    = "/run/a2a"
-	SandboxSocket = SandboxDir + "/a2a.sock"
-	SandboxCLI    = "/usr/local/bin/a2a"
+	SandboxDir = "/run/a2a"
+	SandboxCLI = "/usr/local/bin/a2a"
 )
 
 // startScript removes a container left behind by a crash, which would keep
@@ -190,20 +179,6 @@ func hiddenDsts(mounts []agentdir.Mount, hidden []string) []string {
 	}
 	return out
 }
-
-// HostAddr implements [Runner]. Docker Desktop forwards host.docker.internal
-// to the host's loopback. On Linux the host isn't reliably reachable from a
-// container (rootless Docker has its own network namespace), so harnesses
-// reach the server through a Unix socket mounted into the container instead.
-func (r *DockerRunner) HostAddr(context.Context) (string, string, error) {
-	if runtime.GOOS == "linux" {
-		return "", "", ErrNoHostNetwork
-	}
-	return "127.0.0.1", "host.docker.internal", nil
-}
-
-// ErrNoHostNetwork is returned by HostAddr when the harness can't reach the host over TCP.
-var ErrNoHostNetwork = errors.New("the host is not reachable over TCP from the sandbox")
 
 // Stop removes the container if it is still running.
 func (r *DockerRunner) Stop(ctx context.Context) error {

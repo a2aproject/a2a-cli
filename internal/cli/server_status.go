@@ -24,7 +24,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/a2aproject/a2a-cli/internal/agentsrv"
+	"github.com/a2aproject/a2a-cli/internal/controlapi"
 )
 
 func newServerStatusCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
@@ -37,8 +37,8 @@ func newServerStatusCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			st, err := agentsrv.NewClient(d).Status(cmd.Context())
-			if errors.Is(err, agentsrv.ErrNotRunning) {
+			st, err := controlapi.NewClient(d).Status(cmd.Context())
+			if errors.Is(err, controlapi.ErrNotRunning) {
 				conf, cerr := d.LoadConfig()
 				if cerr != nil {
 					return cerr
@@ -60,7 +60,7 @@ func newServerStatusCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
 	}
 }
 
-func printStatus(cfg *globalConfig, st *agentsrv.Status) error {
+func printStatus(cfg *globalConfig, st *controlapi.Status) error {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "%s (%s) running for %s, pid %d\n", st.Name, st.Harness, time.Since(st.Started).Round(time.Second), st.PID)
 	fmt.Fprintf(&sb, "  dir      %s\n  local    %s\n", st.Dir, st.Local)

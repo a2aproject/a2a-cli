@@ -19,7 +19,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/a2aproject/a2a-cli/internal/agentsrv"
+	"github.com/a2aproject/a2a-cli/internal/pairapi"
 )
 
 func newServerPairRmCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
@@ -36,7 +36,7 @@ func newServerPairRmCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if resp.Kind == agentsrv.PairKindNode {
+			if resp.Kind == pairapi.KindNode {
 				_, err = fmt.Fprintf(cfg.Out, "✓ removed node %s; the agent can no longer wake it\n", args[0])
 				return err
 			}

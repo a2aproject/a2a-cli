@@ -22,14 +22,15 @@ import (
 	"iter"
 	"log/slog"
 	"net/http"
-	"path/filepath"
 	"time"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 
+	"github.com/a2aproject/a2a-cli/internal/agentsrv/approvals"
 	"github.com/a2aproject/a2a-cli/internal/auth"
 	"github.com/a2aproject/a2a-cli/internal/credstore"
+	"github.com/a2aproject/a2a-cli/internal/jsonhttp"
 	"github.com/a2aproject/a2a-cli/internal/localsrv"
 	"github.com/a2aproject/a2a-cli/internal/store"
 )
@@ -48,7 +49,7 @@ const harnessKeyAgent = "a2a server (harness key)"
 // credentials file of the harness home, where the CLI attaches it to
 // requests for agentsBase only. Keys of earlier runs are removed.
 func saveHarnessKey(home, agentsBase, key string) error {
-	cs := &credstore.Store{Path: filepath.Join(home, ".config", "a2a-cli", "credentials.json")}
+	cs := credstore.At(home)
 	creds, err := cs.List()
 	if err != nil {
 		return err
@@ -68,10 +69,8 @@ func saveHarnessKey(home, agentsBase, key string) error {
 // <agents URL>/<name> is an A2A agent. The handle in the path stands for the
 // conversation, the user and the hop count.
 func (p *Peers) agentsURL(ctx context.Context, c callClaims) (string, error) {
-	p.s.urlMu.Lock()
-	base, socket := p.s.harnessURL, p.s.harnessSocket
-	p.s.urlMu.Unlock()
-	if socket != "" {
+	base := p.bridge.url
+	if p.bridge.socket != "" {
 		base = socketHost
 	}
 	if base == "" {
@@ -84,30 +83,36 @@ func (p *Peers) agentsURL(ctx context.Context, c callClaims) (string, error) {
 	return base + "/" + h, nil
 }
 
+// harnessRoutes serves the agents URLs on the harness listener.
+func (p *Peers) harnessRoutes(key string) http.Handler {
+	mux := http.NewServeMux()
+	agents := p.agentsHandler(key)
+	mux.Handle("/{handle}/{agent}", agents)
+	mux.Handle("/{handle}/{agent}/{rest...}", agents)
+	return mux
+}
+
 // agentsHandler serves the agents the harness may call, at
 // /{handle}/{agent}/..., as A2A agents proxied by this server: contacts are
 // called with this agent's identity, nodes in-process. Over a Unix socket
-// only the harness can connect; over TCP it sends the harness key.
-func (p *Peers) agentsHandler() http.Handler {
+// only the harness can connect; over TCP it sends key.
+func (p *Peers) agentsHandler(key string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		p.s.urlMu.Lock()
-		key := p.s.harnessKey
-		p.s.urlMu.Unlock()
 		if key != "" {
 			tok, ok := auth.BearerToken(r.Header.Get("Authorization"))
 			if !ok || subtle.ConstantTimeCompare([]byte(tok), []byte(key)) != 1 {
-				writeError(w, http.StatusUnauthorized, "harness key required")
+				jsonhttp.Error(w, http.StatusUnauthorized, "harness key required")
 				return
 			}
 		}
 		handle, name := r.PathValue("handle"), r.PathValue("agent")
 		claims, ok := p.claimsOf(r.Context(), handle)
 		if !ok {
-			writeError(w, http.StatusNotFound, "unknown agents URL: use the one from the latest [a2a agents] line")
+			jsonhttp.Error(w, http.StatusNotFound, "unknown agents URL: use the one from the latest [a2a agents] line")
 			return
 		}
 		if claims.Hops+1 > auth.MaxHops {
-			writeError(w, http.StatusForbidden, fmt.Sprintf("too many agents in this chain (%d); answer without calling another agent", claims.Hops))
+			jsonhttp.Error(w, http.StatusForbidden, fmt.Sprintf("too many agents in this chain (%d); answer without calling another agent", claims.Hops))
 			return
 		}
 		rest := "/" + r.PathValue("rest")
@@ -115,23 +120,22 @@ func (p *Peers) agentsHandler() http.Handler {
 		ok, err := p.callable(r.Context(), name)
 		if err != nil {
 			slog.Error("looking up a callable agent", "agent", name, "error", err)
-			writeError(w, http.StatusInternalServerError, "looking up "+name+" failed")
+			jsonhttp.Error(w, http.StatusInternalServerError, "looking up "+name+" failed")
 			return
 		}
 		if !ok {
-			writeError(w, http.StatusNotFound, fmt.Sprintf("%q is not an agent you can call; the [a2a agents] line lists them", name))
+			jsonhttp.Error(w, http.StatusNotFound, fmt.Sprintf("%q is not an agent you can call; the [a2a agents] line lists them", name))
 			return
 		}
 		if r.Method == http.MethodGet && (rest == "/" || rest == "/.well-known/agent-card.json") {
 			a2asrv.NewStaticAgentCardHandler(proxyCard(name, base)).ServeHTTP(w, r)
 			return
 		}
-		h, principal, closeFn, err := p.agentHandler(r.Context(), claims, name)
+		h, principal, err := p.agentHandler(r.Context(), claims, name)
 		if err != nil {
-			writeError(w, http.StatusBadGateway, err.Error())
+			jsonhttp.Error(w, http.StatusBadGateway, err.Error())
 			return
 		}
-		defer closeFn()
 		guarded := &guardedHandler{RequestHandler: h, p: p, claims: claims, agent: name}
 		r2 := r.Clone(r.Context())
 		r2.URL.Path, r2.URL.RawPath = rest, ""
@@ -151,7 +155,7 @@ func (p *Peers) callable(ctx context.Context, name string) (bool, error) {
 	if node, err := p.isNode(ctx, name); err != nil || node {
 		return node, err
 	}
-	_, err := p.s.store.Contact(ctx, name)
+	_, err := p.store.Contact(ctx, name)
 	if errors.Is(err, store.ErrNotFound) {
 		return false, nil
 	}
@@ -175,24 +179,22 @@ func proxyCard(name, base string) *a2a.AgentCard {
 
 // agentHandler returns the A2A handler of a node or a contact. A node is
 // served in-process, as principal.
-func (p *Peers) agentHandler(ctx context.Context, c callClaims, name string) (a2asrv.RequestHandler, *auth.Principal, func(), error) {
+func (p *Peers) agentHandler(ctx context.Context, c callClaims, name string) (a2asrv.RequestHandler, *auth.Principal, error) {
 	node, err := p.isNode(ctx, name)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	if node {
 		pr := p.nodeCaller(c.OnBehalfOf, c.Hops)
-		return p.s.nodes.handler(name), &pr, func() {}, nil
+		return p.nodes.Handler(name), &pr, nil
 	}
-	client, err := p.contactClient(ctx, name, c.OnBehalfOf, c.Hops)
+	client, err := p.contactClient(ctx, name)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-	return &localsrv.ClientHandler{Client: client}, nil, func() {
-		if err := client.Destroy(); err != nil {
-			slog.Debug("closing a2a client", "error", err)
-		}
-	}, nil
+	return &localsrv.ClientHandler{Client: client, Context: func(ctx context.Context) context.Context {
+		return onBehalfOf(ctx, c.OnBehalfOf, c.Hops)
+	}}, nil, nil
 }
 
 // guardedHandler keeps approvals with the user: the harness can't answer
@@ -255,7 +257,7 @@ func (g *guardedHandler) checkAnswer(ctx context.Context, req *a2a.SendMessageRe
 	if task.Status.State != a2a.TaskStateInputRequired {
 		return nil
 	}
-	if q := questionOfStatus(task.Status); q != nil && q.Type == questionPermission {
+	if q := approvals.FromStatus(task.Status); q != nil && q.Type == approvals.TypePermission {
 		g.after(ctx, task)
 		return fmt.Errorf("%w: this is an approval for the user, who was asked in their chat; don't answer it, the result will be posted into this conversation", a2a.ErrUnauthorized)
 	}
@@ -270,14 +272,14 @@ func (g *guardedHandler) after(ctx context.Context, task *a2a.Task) {
 		return
 	}
 	if state == a2a.TaskStateInputRequired {
-		q := questionOfStatus(task.Status)
-		if q == nil || q.Type != questionPermission {
+		q := approvals.FromStatus(task.Status)
+		if q == nil || q.Type != approvals.TypePermission {
 			return
 		}
-		g.p.relay(g.p.s.ctx, g.claims, g.agent, task, q)
+		g.p.relay(g.p.ctx, g.claims, g.agent, task, q)
 	}
 	w := store.Watch{Contact: g.agent, TaskID: string(task.ID), RemoteContextID: task.ContextID, OriginContextID: g.claims.ContextID, OnBehalfOf: g.claims.OnBehalfOf}
-	if err := g.p.s.store.PutWatch(ctx, w); err != nil {
+	if err := g.p.store.PutWatch(ctx, w); err != nil {
 		slog.Error("storing watch", "agent", g.agent, "task", task.ID, "error", err)
 		return
 	}

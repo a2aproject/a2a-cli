@@ -19,13 +19,13 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/a2aproject/a2a-cli/internal/agentsrv"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
+	"github.com/a2aproject/a2a-cli/internal/controlapi"
 	"github.com/a2aproject/a2a-cli/internal/relayapi"
 )
 
 func newServerContactAddCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
-	var req agentsrv.ContactRequest
+	var req controlapi.ContactRequest
 	cmd := &cobra.Command{
 		Use:   "add <name>",
 		Short: "Let the agent call another agent",

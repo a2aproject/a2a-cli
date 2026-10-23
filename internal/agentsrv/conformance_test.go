@@ -24,7 +24,9 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2a"
 
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
+	"github.com/a2aproject/a2a-cli/internal/agentsrv/approvals"
 	"github.com/a2aproject/a2a-cli/internal/auth"
+	"github.com/a2aproject/a2a-cli/internal/controlapi"
 )
 
 // The conformance suite runs every scenario a harness profile must pass
@@ -85,8 +87,8 @@ func TestConformanceApprovals(t *testing.T) {
 			if task.Status.State != a2a.TaskStateInputRequired {
 				t.Fatalf("task state = %s, want input-required", task.Status.State)
 			}
-			q := questionOfStatus(task.Status)
-			if q == nil || q.Type != questionPermission || len(q.Options) != 3 {
+			q := approvals.FromStatus(task.Status)
+			if q == nil || q.Type != approvals.TypePermission || len(q.Options) != 3 {
 				t.Fatalf("question = %+v, want a permission question with 3 options", q)
 			}
 			wantResult(t, send(t, c, userText(tc.reply, string(task.ID), task.ContextID)), a2a.TaskStateCompleted, tc.want)
@@ -207,7 +209,7 @@ func TestMemberCannotApproveAndOwnerIsAsked(t *testing.T) {
 	ch := newFakeChannel("fake")
 	ts := startServer(t, serverOpts{channel: ch})
 	ctx := context.Background()
-	code, err := NewClient(ts.dir).Pair(ctx, PairCodeRequest{Name: "owner", Role: auth.RoleOwner})
+	code, err := controlapi.NewClient(ts.dir).Pair(ctx, controlapi.PairCodeRequest{Name: "owner", Role: auth.RoleOwner})
 	if err != nil {
 		t.Fatal(err)
 	}

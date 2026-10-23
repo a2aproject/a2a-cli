@@ -20,7 +20,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/a2aproject/a2a-cli/internal/agentsrv"
+	"github.com/a2aproject/a2a-cli/internal/controlapi"
+	"github.com/a2aproject/a2a-cli/internal/launch"
 	"github.com/a2aproject/a2a-cli/internal/service"
 )
 
@@ -39,7 +40,7 @@ func newServerStopCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			name := agentsrv.ServiceName(d, conf)
+			name := launch.ServiceName(d, conf)
 			if uninstall {
 				if !service.Installed(name) {
 					return fmt.Errorf("%s is not installed as a service", conf.Name)
@@ -50,8 +51,8 @@ func newServerStopCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
 				_, err := fmt.Fprintf(cfg.Out, "✓ removed the %s service\n", conf.Name)
 				return err
 			}
-			err = agentsrv.NewClient(d).Stop(cmd.Context())
-			if errors.Is(err, agentsrv.ErrNotRunning) {
+			err = controlapi.NewClient(d).Stop(cmd.Context())
+			if errors.Is(err, controlapi.ErrNotRunning) {
 				_, err := fmt.Fprintf(cfg.Out, "%s is not running\n", conf.Name)
 				return err
 			}

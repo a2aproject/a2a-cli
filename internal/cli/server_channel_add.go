@@ -21,8 +21,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
-	"github.com/a2aproject/a2a-cli/internal/agentsrv"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
+	"github.com/a2aproject/a2a-cli/internal/controlapi"
 )
 
 func newServerChannelAddCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
@@ -44,16 +44,16 @@ func newServerChannelAddCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
 			}
 			var s agentdir.Settings
 			switch args[0] {
-			case agentsrv.ChannelTelegram:
+			case agentdir.ChannelTelegram:
 				s.Telegram = token
-			case agentsrv.ChannelDiscord:
+			case agentdir.ChannelDiscord:
 				s.Discord = token
-			case agentsrv.ChannelEmail:
+			case agentdir.ChannelEmail:
 				s.Email = &email
 			default:
 				return clierr.Usage("unknown channel " + args[0] + ": want telegram, discord or email")
 			}
-			if args[0] != agentsrv.ChannelEmail && token == "" {
+			if args[0] != agentdir.ChannelEmail && token == "" {
 				return clierr.Usage("--token is required")
 			}
 			if err := saveSettings(d, s); err != nil {
@@ -63,8 +63,8 @@ func newServerChannelAddCmd(cfg *globalConfig, sf *serverFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			st, err := agentsrv.NewClient(d).AddChannel(cmd.Context(), agentsrv.ChannelRequestFromConfig(conf, args[0]))
-			if errors.Is(err, agentsrv.ErrNotRunning) {
+			st, err := controlapi.NewClient(d).AddChannel(cmd.Context(), controlapi.ChannelRequestFromConfig(conf, args[0]))
+			if errors.Is(err, controlapi.ErrNotRunning) {
 				_, err := fmt.Fprintf(cfg.Out, "✓ saved %s; it starts with the agent (a2a server)\n", args[0])
 				return err
 			}

@@ -26,6 +26,8 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 
+	"github.com/a2aproject/a2a-cli/internal/auth"
+	"github.com/a2aproject/a2a-cli/internal/harness"
 	"github.com/a2aproject/a2a-cli/skills"
 )
 
@@ -54,11 +56,11 @@ type AgentRef struct {
 
 // callableAgents returns the contacts and hosted nodes.
 func (p *Peers) callableAgents(ctx context.Context) ([]AgentRef, error) {
-	contacts, err := p.s.store.Contacts(ctx)
+	contacts, err := p.store.Contacts(ctx)
 	if err != nil {
 		return nil, err
 	}
-	nodes, err := p.s.store.Nodes(ctx)
+	nodes, err := p.store.Nodes(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +78,7 @@ func (p *Peers) callableAgents(ctx context.Context) ([]AgentRef, error) {
 // call into the global instruction files in the harness home. A local
 // harness uses your own home, which is left alone.
 func (s *Server) writeInstructions(ctx context.Context) error {
-	if s.config().Sandbox == SandboxLocal {
+	if s.config().Sandbox == harness.SandboxLocal {
 		return nil
 	}
 	s.instructionsMu.Lock()
@@ -146,11 +148,11 @@ func withSection(text, body string) string {
 // withAgentsLine returns execCtx with the agents line added before the
 // caller's message, for a new prompt. Answers to the harness's own
 // questions are left alone, because the harness parses them.
-func (s *Server) withAgentsLine(ctx context.Context, execCtx *a2asrv.ExecutorContext) *a2asrv.ExecutorContext {
+func (p *Peers) withAgentsLine(ctx context.Context, execCtx *a2asrv.ExecutorContext) *a2asrv.ExecutorContext {
 	if execCtx.Message == nil || (execCtx.StoredTask != nil && execCtx.StoredTask.Status.State == a2a.TaskStateInputRequired) {
 		return execCtx
 	}
-	agents, err := s.peers.callableAgents(ctx)
+	agents, err := p.callableAgents(ctx)
 	if err != nil {
 		slog.Warn("listing callable agents", "error", err)
 		return execCtx
@@ -159,12 +161,12 @@ func (s *Server) withAgentsLine(ctx context.Context, execCtx *a2asrv.ExecutorCon
 		return execCtx
 	}
 	claims := callClaims{ContextID: execCtx.ContextID}
-	if p, ok := principalOf(ctx); ok {
-		claims.OnBehalfOf, claims.Hops = p.User(), p.Hops
+	if caller, ok := auth.Caller(ctx); ok {
+		claims.OnBehalfOf, claims.Hops = caller.User(), caller.Hops
 	} else if execCtx.User != nil {
 		claims.OnBehalfOf = execCtx.User.Name
 	}
-	u, err := s.peers.agentsURL(ctx, claims)
+	u, err := p.agentsURL(ctx, claims)
 	if err != nil {
 		slog.Warn("creating the agents URL", "error", err)
 		return execCtx

@@ -16,6 +16,7 @@ package agentsrv
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -31,19 +32,20 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
 
 	"github.com/a2aproject/a2a-cli/internal/auth"
+	"github.com/a2aproject/a2a-cli/internal/controlapi"
 	"github.com/a2aproject/a2a-cli/internal/credstore"
-	"github.com/a2aproject/a2a-cli/internal/network"
+	"github.com/a2aproject/a2a-cli/internal/store"
 )
 
 // addContact pairs caller with callee as a contact named name.
 func addContact(t *testing.T, caller, callee *testServer, name, role string) {
 	t.Helper()
 	ctx := context.Background()
-	code, err := NewClient(callee.dir).Pair(ctx, PairCodeRequest{Name: caller.srv.config().Name, Role: role})
+	code, err := controlapi.NewClient(callee.dir).Pair(ctx, controlapi.PairCodeRequest{Name: caller.srv.config().Name, Role: role})
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := NewClient(caller.dir).AddContact(ctx, ContactRequest{Name: name, URL: callee.localURL(), Code: code.Code})
+	c, err := controlapi.NewClient(caller.dir).AddContact(ctx, controlapi.ContactRequest{Name: name, URL: callee.localURL(), Code: code.Code})
 	if err != nil {
 		t.Fatalf("AddContact() error = %v", err)
 	}
@@ -108,6 +110,109 @@ func TestRemoteApprovalIsRelayedToCallerChat(t *testing.T) {
 	}
 }
 
+func TestRelayedApprovalSurvivesRestart(t *testing.T) {
+	t.Parallel()
+	coder := startServer(t, serverOpts{name: "coder"})
+	assistant := startServer(t, serverOpts{name: "assistant", channel: newFakeChannel("fake")})
+	addContact(t, assistant, coder, "coder", auth.RoleOwner)
+	linkOwner(t, assistant, "tg:1", "dm1")
+
+	assistant.ch.write("tg:1", "dm1", "call coder ask")
+	ref, q := assistant.ch.waitFor(t, "dm1", hasQuestion)
+	root := assistant.dir.Root
+	assistant.stop()
+
+	restarted := startServer(t, serverOpts{name: "assistant", dir: root, channel: newFakeChannel("fake")})
+	restarted.ch.waitReady(t)
+	time.Sleep(3 * watchMaxInterval)
+	if n := restarted.ch.questions(); n != 0 {
+		t.Fatalf("questions asked again after the restart = %d, want 0", n)
+	}
+	restarted.ch.click("tg:1", "dm1", ref, q.Question, 0)
+	restarted.ch.waitEdited(t, ref, "✓ Allow by owner")
+}
+
+func TestContactClientIsShared(t *testing.T) {
+	t.Parallel()
+	coder := startServer(t, serverOpts{name: "coder"})
+	assistant := startServer(t, serverOpts{name: "assistant"})
+	addContact(t, assistant, coder, "coder", auth.RoleOwner)
+	p, ctx := assistant.srv.peers, context.Background()
+
+	first, err := p.contactClient(ctx, "coder")
+	if err != nil {
+		t.Fatalf("contactClient() error = %v", err)
+	}
+	for _, user := range []string{auth.OwnerID, "pair:anna"} {
+		tg, err := p.target(ctx, "coder", user, 1)
+		if err != nil {
+			t.Fatalf("target() error = %v", err)
+		}
+		if got := tg.(remoteTarget).c; got != first {
+			t.Fatalf("target() for %s built a new client, want the contact's client", user)
+		}
+	}
+
+	c, err := p.store.Contact(ctx, "coder")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.Token = coder.pair("assistant-again", auth.RoleOwner)
+	if err := p.store.PutContact(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	second, err := p.contactClient(ctx, "coder")
+	if err != nil {
+		t.Fatalf("contactClient() after a token change error = %v", err)
+	}
+	if second == first {
+		t.Fatalf("contactClient() after a token change = the old client, want a new one")
+	}
+
+	if err := p.store.DeleteContact(ctx, "coder"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.contactClient(ctx, "coder"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("contactClient() of a removed contact error = %v, want %v", err, store.ErrNotFound)
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.clients) != 0 {
+		t.Fatalf("clients after removing the contact = %d, want 0", len(p.clients))
+	}
+}
+
+func TestContactCountsHops(t *testing.T) {
+	t.Parallel()
+	coder := startServer(t, serverOpts{name: "coder"})
+	assistant := startServer(t, serverOpts{name: "assistant"})
+	addContact(t, assistant, coder, "coder", auth.RoleOwner)
+	p, ctx := assistant.srv.peers, context.Background()
+	tests := []struct {
+		name    string
+		hops    int
+		wantErr bool
+	}{
+		{name: "first hop", hops: 0},
+		{name: "past the limit", hops: auth.MaxHops, wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tg, err := p.target(ctx, "coder", auth.OwnerID, tc.hops)
+			if err != nil {
+				t.Fatalf("target() error = %v", err)
+			}
+			_, err = tg.send(ctx, userText("hello", "", ""))
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("send() at %d hops error = %v, want error %v", tc.hops, err, tc.wantErr)
+			}
+			if err != nil && !strings.Contains(err.Error(), "too many agents") {
+				t.Fatalf("send() error = %v, want the hop limit", err)
+			}
+		})
+	}
+}
+
 func TestAgentsURLHandles(t *testing.T) {
 	t.Parallel()
 	ts := startServer(t, serverOpts{})
@@ -144,7 +249,7 @@ func TestAgentsURLHandles(t *testing.T) {
 func harnessClient(ts *testServer) *http.Client {
 	var d net.Dialer
 	return &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-		return d.DialContext(ctx, "unix", ts.srv.harnessSocket)
+		return d.DialContext(ctx, "unix", ts.srv.bridge.socket)
 	}}}
 }
 
@@ -213,10 +318,7 @@ func TestAgentsProxyOverTCPNeedsKey(t *testing.T) {
 	t.Parallel()
 	ts := startServer(t, serverOpts{name: "assistant"})
 	addNode(t, ts, "grok", 0)
-	ts.srv.urlMu.Lock()
-	ts.srv.harnessKey = "harness-key"
-	ts.srv.urlMu.Unlock()
-	hs := httptest.NewServer(ts.srv.routes(network.ListenerHarness, ""))
+	hs := httptest.NewServer(ts.srv.peers.harnessRoutes("harness-key"))
 	t.Cleanup(hs.Close)
 	h, err := ts.srv.peers.handle(context.Background(), callClaims{ContextID: "c1", OnBehalfOf: auth.OwnerID})
 	if err != nil {

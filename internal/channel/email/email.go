@@ -41,7 +41,7 @@ import (
 	"golang.org/x/net/publicsuffix"
 
 	"github.com/a2aproject/a2a-cli/internal/channel"
-	"github.com/a2aproject/a2a-cli/internal/store"
+	"github.com/a2aproject/a2a-cli/internal/cryptoutil"
 )
 
 // Config configures the mailbox of the agent.
@@ -448,7 +448,7 @@ func (c *Channel) Send(ctx context.Context, m channel.Outbound) (channel.Ref, er
 	if root != "" && !strings.HasPrefix(strings.ToLower(subject), "re:") {
 		subject = "Re: " + subject
 	}
-	msgID := store.RandomString(24, store.Alphanumeric) + "@" + domainOf(c.cfg.Address)
+	msgID := cryptoutil.RandomString(24, cryptoutil.Alphanumeric) + "@" + domainOf(c.cfg.Address)
 	h := mailHeader(c.cfg.Address, to)
 	h.SetSubject(subject)
 	h.SetMessageID(msgID)

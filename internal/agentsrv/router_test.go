@@ -23,12 +23,13 @@ import (
 
 	"github.com/a2aproject/a2a-cli/internal/auth"
 	"github.com/a2aproject/a2a-cli/internal/channel"
+	"github.com/a2aproject/a2a-cli/internal/controlapi"
 )
 
 // linkOwner links identity as the owner in conversation conv.
 func linkOwner(t *testing.T, ts *testServer, identity, conv string) {
 	t.Helper()
-	code, err := NewClient(ts.dir).Pair(context.Background(), PairCodeRequest{Name: "owner", Role: auth.RoleOwner})
+	code, err := controlapi.NewClient(ts.dir).Pair(context.Background(), controlapi.PairCodeRequest{Name: "owner", Role: auth.RoleOwner})
 	if err != nil {
 		t.Fatal(err)
 	}

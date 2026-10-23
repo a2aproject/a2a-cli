@@ -78,7 +78,7 @@ func (s *Server) buildChannel(cfg *agentdir.Config, secrets agentdir.Secrets, ki
 		if err != nil {
 			return nil, fmt.Errorf("discord: %w", err)
 		}
-		return discord.New(tok, s.store), nil
+		return discord.New(tok, s.store.ChannelState()), nil
 	case ChannelEmail:
 		ec := cfg.Channels.Email
 		if ec == nil {
@@ -94,13 +94,7 @@ func (s *Server) buildChannel(cfg *agentdir.Config, secrets agentdir.Secrets, ki
 		return email.New(email.Config{
 			Address: ec.Address, IMAP: ec.IMAP, SMTP: ec.SMTP, Username: ec.Username, Password: pw,
 			Mailbox: ec.Mailbox, TrustedAuthServ: ec.TrustedAuthServ,
-		}, s.store), nil
+		}, s.store.ChannelState()), nil
 	}
 	return nil, fmt.Errorf("unknown channel %q: want telegram, discord or email", kind)
-}
-
-// ChannelRequestFromConfig is the request which starts the channel of kind
-// as configured in conf.
-func ChannelRequestFromConfig(conf *agentdir.Config, kind string) ChannelRequest {
-	return ChannelRequest{Kind: kind, Token: conf.ChannelToken(kind), Email: conf.Channels.Email}
 }

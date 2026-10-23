@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv/taskstore"
@@ -331,5 +332,106 @@ func TestSessions(t *testing.T) {
 	got, ok, err := ss.Get(ctx, "c")
 	if err != nil || !ok || got != "s2" {
 		t.Fatalf("Get() = %q, %v, %v, want s2, true, nil", got, ok, err)
+	}
+}
+
+func TestRemoteQuestionStoredOnce(t *testing.T) {
+	t.Parallel()
+	s := openStore(t)
+	ctx := context.Background()
+	tests := []struct {
+		name    string
+		q       Question
+		wantErr error
+	}{
+		{name: "remote", q: Question{ID: "q1", Token: "t1", TaskID: "task", Contact: "peer", HitlID: "tool1"}},
+		{name: "same remote question", q: Question{ID: "q2", Token: "t2", TaskID: "task", Contact: "peer", HitlID: "tool1"}, wantErr: ErrExists},
+		{name: "next remote question", q: Question{ID: "q3", Token: "t3", TaskID: "task", Contact: "peer", HitlID: "tool2"}},
+		{name: "local", q: Question{ID: "q4", Token: "t4", TaskID: "task", HitlID: "tool1"}},
+		{name: "same local question", q: Question{ID: "q5", Token: "t5", TaskID: "task", HitlID: "tool1"}},
+	}
+	for _, tc := range tests {
+		if err := s.PutQuestion(ctx, tc.q); !errors.Is(err, tc.wantErr) {
+			t.Fatalf("PutQuestion(%s) error = %v, want %v", tc.name, err, tc.wantErr)
+		}
+	}
+}
+
+func TestQuestionMessages(t *testing.T) {
+	t.Parallel()
+	s := openStore(t)
+	ctx := context.Background()
+	if err := s.PutQuestion(ctx, Question{ID: "q1", Token: "t1", TaskID: "task"}); err != nil {
+		t.Fatalf("PutQuestion() error = %v", err)
+	}
+	want := []QuestionMessage{
+		{QuestionID: "q1", Channel: "telegram", Conv: "1", MessageID: "10", Text: "approve?"},
+		{QuestionID: "q1", Channel: "discord", Conv: "2", MessageID: "20", Text: "approve?"},
+	}
+	for _, m := range want {
+		if err := s.AddQuestionMessage(ctx, m); err != nil {
+			t.Fatalf("AddQuestionMessage() error = %v", err)
+		}
+	}
+	got, err := s.TakeQuestionMessages(ctx, "q1")
+	if err != nil {
+		t.Fatalf("TakeQuestionMessages() error = %v", err)
+	}
+	if diff := cmp.Diff(want, got, cmpopts.SortSlices(func(a, b QuestionMessage) bool { return a.Channel < b.Channel })); diff != "" {
+		t.Fatalf("TakeQuestionMessages() wrong result (-want +got) diff = %s", diff)
+	}
+	if got, err := s.TakeQuestionMessages(ctx, "q1"); err != nil || len(got) != 0 {
+		t.Fatalf("TakeQuestionMessages() again = %v, %v, want none", got, err)
+	}
+}
+
+func TestPendingQuestion(t *testing.T) {
+	t.Parallel()
+	s := openStore(t)
+	ctx := context.Background()
+	if _, err := s.PendingQuestion(ctx, "telegram", "1"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("PendingQuestion() error = %v, want %v", err, ErrNotFound)
+	}
+	for _, id := range []string{"q1", "q2"} {
+		if err := s.SetPendingQuestion(ctx, "telegram", "1", id); err != nil {
+			t.Fatalf("SetPendingQuestion() error = %v", err)
+		}
+	}
+	if id, err := s.PendingQuestion(ctx, "telegram", "1"); err != nil || id != "q2" {
+		t.Fatalf("PendingQuestion() = %q, %v, want q2", id, err)
+	}
+	if err := s.ClearPendingQuestion(ctx, "telegram", "1"); err != nil {
+		t.Fatalf("ClearPendingQuestion() error = %v", err)
+	}
+	if _, err := s.PendingQuestion(ctx, "telegram", "1"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("PendingQuestion() after clearing error = %v, want %v", err, ErrNotFound)
+	}
+}
+
+func TestHandles(t *testing.T) {
+	t.Parallel()
+	s := openStore(t)
+	ctx := context.Background()
+	h := Handle{Handle: "k3", ContextID: "c1", OnBehalfOf: "user:owner", Hops: 1}
+	if err := s.PutHandle(ctx, h); err != nil {
+		t.Fatalf("PutHandle() error = %v", err)
+	}
+	for name, dup := range map[string]Handle{
+		"taken handle": {Handle: "k3", ContextID: "c2"},
+		"same claims":  {Handle: "zz", ContextID: "c1", OnBehalfOf: "user:owner", Hops: 1},
+	} {
+		if err := s.PutHandle(ctx, dup); !errors.Is(err, ErrExists) {
+			t.Fatalf("PutHandle(%s) error = %v, want %v", name, err, ErrExists)
+		}
+	}
+	got, err := s.HandleFor(ctx, Handle{ContextID: "c1", OnBehalfOf: "user:owner", Hops: 1})
+	if err != nil {
+		t.Fatalf("HandleFor() error = %v", err)
+	}
+	if diff := cmp.Diff(h, got); diff != "" {
+		t.Fatalf("HandleFor() wrong result (-want +got) diff = %s", diff)
+	}
+	if _, err := s.HandleFor(ctx, Handle{ContextID: "c1"}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("HandleFor() of other claims error = %v, want %v", err, ErrNotFound)
 	}
 }

@@ -18,12 +18,10 @@
 package credstore
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -33,10 +31,11 @@ import (
 	"time"
 
 	"github.com/a2aproject/a2a-cli/internal/fsutil"
+	"github.com/a2aproject/a2a-cli/internal/pairapi"
 )
 
 // KindNode marks the token of a webhook node; other credentials are caller tokens.
-const KindNode = "node"
+const KindNode = pairapi.KindNode
 
 // Credential is a token for one agent URL, or for one webhook node.
 type Credential struct {
@@ -59,7 +58,12 @@ func Default() (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolving home directory: %w", err)
 	}
-	return &Store{Path: filepath.Join(home, ".config", "a2a-cli", "credentials.json")}, nil
+	return At(home), nil
+}
+
+// At returns the store under the home directory home.
+func At(home string) *Store {
+	return &Store{Path: filepath.Join(home, ".config", "a2a-cli", "credentials.json")}
 }
 
 // List returns the stored credentials.
@@ -183,47 +187,11 @@ func Normalize(raw string) string {
 	return u.String()
 }
 
-// PairResponse is what an agent server returns for a pairing code. URL is
-// where the token applies: the agent, or the node for node tokens.
-type PairResponse struct {
-	Kind      string `json:"kind"`
-	Token     string `json:"token"`
-	Principal string `json:"principal"`
-	Agent     string `json:"agent"`
-	URL       string `json:"url"`
-}
-
 // Pair exchanges a pairing code at agentURL for a credential.
 func Pair(ctx context.Context, hc *http.Client, agentURL, code string) (Credential, error) {
-	body, err := json.Marshal(map[string]string{"code": code})
-	if err != nil {
-		return Credential{}, err
-	}
 	base := Normalize(agentURL)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/pair", bytes.NewReader(body))
+	pr, err := pairapi.Pair(ctx, hc, base, code)
 	if err != nil {
-		return Credential{}, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := hc.Do(req)
-	if err != nil {
-		return Credential{}, err
-	}
-	data, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err := errors.Join(readErr, resp.Body.Close()); err != nil {
-		return Credential{}, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		var apiErr struct {
-			Error string `json:"error"`
-		}
-		if json.Unmarshal(data, &apiErr) == nil && apiErr.Error != "" {
-			return Credential{}, fmt.Errorf("pairing with %s: %s", base, apiErr.Error)
-		}
-		return Credential{}, fmt.Errorf("pairing with %s: %s", base, resp.Status)
-	}
-	var pr PairResponse
-	if err := json.Unmarshal(data, &pr); err != nil {
 		return Credential{}, err
 	}
 	c := Credential{URL: base, Token: pr.Token, Agent: pr.Agent, Principal: pr.Principal, Created: time.Now().UTC()}
