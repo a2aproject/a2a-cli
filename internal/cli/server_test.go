@@ -141,9 +141,9 @@ func TestServerPairAndSend(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a2a server pair --webhook error = %v", err)
 	}
-	code = regexp.MustCompile(`a2a pair add (\S+) ([A-Z0-9]{4}-[A-Z0-9]{4})`).FindStringSubmatch(out)
+	code = regexp.MustCompile(`of the agent at (\S+)\.\n.*\n.*Your pairing code is ([A-Z0-9]{4}-[A-Z0-9]{4})\.`).FindStringSubmatch(out)
 	if code == nil {
-		t.Fatalf("a2a server pair --webhook = %q, want the pair command", out)
+		t.Fatalf("a2a server pair --webhook = %q, want the node's instructions", out)
 	}
 	if out, err := runCMDWithCreds(t, creds, "pair", "add", code[1], code[2]); err != nil || !strings.Contains(out, "node grok") {
 		t.Fatalf("a2a pair add with a node code = %q, %v, want the node token", out, err)

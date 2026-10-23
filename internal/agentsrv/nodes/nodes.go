@@ -271,8 +271,10 @@ func (n *Host) NewCode(ctx context.Context, id string) (*controlapi.PairCodeResp
 		return nil, err
 	}
 	info := n.Info(node)
+	base := n.cfg.BaseURL()
 	return &controlapi.PairCodeResponse{
-		Code: code, Expires: expires, URL: n.cfg.BaseURL(), PairCommand: controlapi.PairCommand(n.cfg.BaseURL(), code), Node: &info,
+		Code: code, Expires: expires, URL: base, PairCommand: controlapi.PairCommand(base, code), Node: &info,
+		Instructions: controlapi.NodeInstructions(base, node.Name, code),
 	}, nil
 }
 

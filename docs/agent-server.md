@@ -267,7 +267,7 @@ routine. A node is a pairing with a webhook:
 ```sh
 a2a server pair --name grok --webhook https://<grok routine webhook URL> \
   --webhook-header "Authorization: Bearer env:GROK_WEBHOOK_TOKEN"
-# → node code 8HD2-PQ7M; the node runs: a2a pair add <agent-url> 8HD2-PQ7M
+# → a message for the agent behind the webhook: its skill URL and a pairing code
 a2a server pair --name grok          # a new code, if the node lost its token
 a2a server pair list                 # callers and nodes
 a2a server pair rm grok

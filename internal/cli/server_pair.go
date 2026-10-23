@@ -113,8 +113,12 @@ func printPairCode(cfg *globalConfig, resp *controlapi.PairCodeResponse) error {
 	mins := int(time.Until(resp.Expires).Round(time.Minute).Minutes())
 	var sb strings.Builder
 	if resp.Node != nil {
-		fmt.Fprintf(&sb, "→ node code %s (%d min, single use); %s is reachable for the agent as %q\n  node: %s\n  node URL: %s\n",
-			resp.Code, mins, resp.Node.Name, resp.Node.ID, resp.PairCommand, resp.Node.URL)
+		fmt.Fprintf(&sb, "→ webhook node %s; the agent calls it as %q\n  send this to the agent behind the webhook (the code works once, for %d min):\n\n",
+			resp.Node.Name, resp.Node.ID, mins)
+		for l := range strings.SplitSeq(resp.Instructions, "\n") {
+			sb.WriteString("    " + l + "\n")
+		}
+		fmt.Fprintf(&sb, "\n  you can call it yourself at %s\n", resp.Node.URL)
 	} else {
 		fmt.Fprintf(&sb, "→ code %s (%d min, single use)\n  caller: %s\n", resp.Code, mins, resp.PairCommand)
 	}

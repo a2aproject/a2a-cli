@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -27,6 +28,7 @@ import (
 	"time"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/google/go-cmp/cmp"
 
 	"github.com/a2aproject/a2a-cli/internal/auth"
 	"github.com/a2aproject/a2a-cli/internal/controlapi"
@@ -93,6 +95,10 @@ func addNode(t *testing.T, ts *testServer, id string, delay time.Duration) *fake
 	}
 	if resp.Node == nil || resp.PairCommand != "a2a pair add "+ts.localURL()+" "+resp.Code {
 		t.Fatalf("Pair() = %+v, want a node code and its pair command", resp)
+	}
+	wantInstructions := fmt.Sprintf("You are the webhook node %q of the agent at %s.\nRead %s/relay/skill.md and follow it.\nYour pairing code is %s.", id, ts.localURL(), ts.localURL(), resp.Code)
+	if diff := cmp.Diff(wantInstructions, resp.Instructions); diff != "" {
+		t.Fatalf("Pair() wrong instructions (-want +got) diff = %s", diff)
 	}
 	paired, err := credstore.Pair(ctx, http.DefaultClient, ts.localURL(), resp.Code)
 	if err != nil {

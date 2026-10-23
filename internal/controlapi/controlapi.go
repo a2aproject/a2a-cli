@@ -29,6 +29,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/a2aproject/a2a-cli/internal/agentdir"
@@ -84,6 +85,9 @@ type PairCodeResponse struct {
 	Hints []string `json:"hints,omitempty"`
 	// Node is set for node codes.
 	Node *NodeInfo `json:"node,omitempty"`
+	// Instructions, set for node codes, is the message for the agent behind
+	// the webhook: where the node's skill is and the code to pair with.
+	Instructions string `json:"instructions,omitempty"`
 }
 
 // RevokeResponse tells what `pair rm` removed.
@@ -149,6 +153,13 @@ type NodeInfo struct {
 // PairCommand is the command a caller or a node runs to pair with code.
 func PairCommand(agentURL, code string) string {
 	return fmt.Sprintf("a2a pair add %s %s", agentURL, code)
+}
+
+// NodeInstructions is the message which tells the agent behind webhook node
+// to pair with the agent at agentURL using code.
+func NodeInstructions(agentURL, node, code string) string {
+	agentURL = strings.TrimRight(agentURL, "/")
+	return fmt.Sprintf("You are the webhook node %q of the agent at %s.\nRead %s/relay/skill.md and follow it.\nYour pairing code is %s.", node, agentURL, agentURL, code)
 }
 
 // ChannelRequestFromConfig is the request which starts the channel of kind

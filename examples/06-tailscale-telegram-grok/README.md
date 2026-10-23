@@ -143,29 +143,27 @@ a2a server pair --name grok \
 ```
 
 ```
-→ node code 8HD2-PQ7M (15 min, single use); grok is reachable for the agent as "grok"
-  node: a2a pair add https://coder.your-tailnet.ts.net 8HD2-PQ7M
-  node URL: https://coder.your-tailnet.ts.net/n/grok
+→ webhook node grok; the agent calls it as "grok"
+  send this to the agent behind the webhook (the code works once, for 15 min):
+
+    You are the webhook node "grok" of the agent at https://coder.your-tailnet.ts.net.
+    Read https://coder.your-tailnet.ts.net/relay/skill.md and follow it.
+    Your pairing code is 8HD2-PQ7M.
+
+  you can call it yourself at https://coder.your-tailnet.ts.net/n/grok
 ```
 
-The commands use the public URL, because Grok calls the agent from the
+The message uses the public URL, because Grok calls the agent from the
 internet.
 
 ## 7. Set up the Grok side
 
-The agent serves everything the bot needs to know at
-`https://coder.your-tailnet.ts.net/relay/skill.md`: how to download the
-`a2a` CLI from the agent, pair, read a wake, and reply. The download is the
-server's own binary, so it runs for the bot when the server runs on Linux;
-otherwise the bot needs a Linux build of `a2a`, or it can use the plain HTTPS
-API at the end of the skill. Give your Grok bot
-instructions along these lines:
-
-```
-You are the webhook node "grok" of the agent at https://coder.your-tailnet.ts.net.
-Read https://coder.your-tailnet.ts.net/relay/skill.md and follow it.
-Your pairing code is 8HD2-PQ7M.
-```
+Paste the message from step 6 into your Grok bot's instructions. The skill it
+points to has everything the bot needs: how to download the `a2a` CLI from
+the agent, pair with the code, read a wake, and reply. You don't run any
+pairing command yourself. The download is the server's own binary, so it runs
+for the bot when the server runs on Linux; otherwise the bot needs a Linux
+build of `a2a`, or it can use the plain HTTPS API at the end of the skill.
 
 On its first run, the bot pairs with `a2a pair add` and gets a node token.
 Store that token where the bot keeps secrets, as `A2A_RELAY_TOKEN`: it
