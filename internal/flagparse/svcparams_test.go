@@ -146,3 +146,52 @@ func TestServiceParamsEmpty(t *testing.T) {
 		t.Fatalf("sp.Params() = %v, want nil", sp.Params())
 	}
 }
+
+func TestServiceParamsDefaults(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		args           []string
+		want           a2aclient.ServiceParams
+		wantCredential bool
+	}{
+		{
+			name:           "defaults apply without flags",
+			want:           a2aclient.ServiceParams{"authorization": {"Bearer helper"}, "x-tenant": {"a", "b"}},
+			wantCredential: true,
+		},
+		{
+			name:           "auth overrides the default Authorization",
+			args:           []string{"--auth", "Bearer flag"},
+			want:           a2aclient.ServiceParams{"authorization": {"Bearer flag"}, "x-tenant": {"a", "b"}},
+			wantCredential: true,
+		},
+		{
+			name:           "svc-param overrides a default of the same key in any case",
+			args:           []string{"--svc-param", "X-TENANT=c"},
+			want:           a2aclient.ServiceParams{"authorization": {"Bearer helper"}, "x-tenant": {"c"}},
+			wantCredential: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var sp ServiceParams
+			fs := pflag.NewFlagSet("test", pflag.ContinueOnError)
+			sp.Attach(fs)
+			if err := fs.Parse(tt.args); err != nil {
+				t.Fatalf("fs.Parse(%v) error = %v, want nil", tt.args, err)
+			}
+			sp.SetDefault("Authorization", "Bearer helper")
+			sp.SetDefault("X-Tenant", "a", "b")
+			if diff := cmp.Diff(tt.want, sp.Params()); diff != "" {
+				t.Fatalf("sp.Params() wrong result (-want +got) diff = %s", diff)
+			}
+			if got := sp.SendsCredential(); got != tt.wantCredential {
+				t.Fatalf("sp.SendsCredential() = %v, want %v", got, tt.wantCredential)
+			}
+		})
+	}
+}

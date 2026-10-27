@@ -37,6 +37,8 @@ These apply to every client-mode command. Each command selects the agent it talk
 | `--output <fmt>` | `-o` | Output format: `text` (default), `json` (indented), or `jsonl` (one compact JSON object per line). |
 | `--svc-param <k=v>` | | Service parameter (repeatable). The chosen transport defines how it's passed. Split on the first `=`. |
 | `--auth <creds>` | | Shorthand for `--svc-param "Authorization=<creds>"`. |
+| `--credential-helper <spec>` | | Credential helper returning the headers for an agent: `[scope=]command [args...]`. Repeatable. See [Credentials](#credentials). |
+| `--unix-socket <spec>` | | Send HTTP requests through a Unix socket: `<path>` for every host, or `<host>=<path>` for one host. |
 | `--tenant <id>` | | Tenant identifier. Passed on every request. |
 | `--timeout <dur>` | | Request timeout. Default `30s`. |
 | `--verbose` | `-v` | Verbose output to stderr. |
@@ -258,6 +260,30 @@ Prints the updated task status.
 a2a task subscribe -a <url> <task-id>
 ```
 Streams events to stdout until the task reaches a terminal state. Output format matches `send --stream`.
+
+---
+
+## Credentials
+
+A credential helper is a program that returns the HTTP headers to send to an agent. a2a implements the [Bazel credential helper protocol](https://github.com/EngFlow/credential-helper-spec), so helpers written for Bazel work unchanged: a2a runs `<command> [args...] get`, writes `{"uri": "<agent URL>"}` to its stdin, and reads `{"headers": {"Authorization": ["Bearer …"]}, "expires": "<RFC 3339>"}` from its stdout.
+
+Configure helpers with `--credential-helper`, `A2ACLI_CREDENTIAL_HELPER`, or `credential-helper` in a config file:
+
+```yaml
+# ~/.config/a2a-cli/config.yaml
+credential-helper:
+  - a2a-serve credential               # every host
+  - "*.corp.example.com=/usr/local/bin/corp-helper"
+```
+
+Each value is `[scope=]command [args...]`. A scope is a host (`example.com`), or `*.example.com` for the domain and its subdomains. For each agent, the helper with the most specific matching scope runs; among equal scopes the last one wins. Its headers are sent with the card request and every A2A call, unless `--auth` or `--svc-param` set the same header. A helper that exits non-zero fails the command; a helper with no credentials for the URL prints `{}`.
+
+### `auth get` - Inspect credentials
+
+```bash
+a2a auth get https://agent.example.com            # header names, values redacted
+a2a auth get https://agent.example.com --reveal   # header values
+```
 
 ---
 
