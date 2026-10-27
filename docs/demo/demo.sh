@@ -17,9 +17,10 @@
 #     --font-dir <nerd-font-dir> --font-family "JetBrainsMono Nerd Font" \
 #     docs/demo/a2a-demo.cast docs/demo/a2a-demo.gif
 #
-# Requires: a2a on PATH, python3, bash. Run from the repo root.
+# Requires: a2a and a2a-serve on PATH, python3, bash. Run from the repo root.
 
 set -euo pipefail
+export A2ACLI_PLUGINS_ENABLED=true
 
 # Drive the demo from the repo root so the relative example-script paths below
 # resolve no matter which directory the recording is launched from. Relative
@@ -93,9 +94,9 @@ run "a2a version"
 
 note "Turn an ordinary script into a demo A2A server -- no A2A code."
 note "see cookbook lesson 01 to learn about --echo & --exec options"
-a2a server --exec "bash $EX/content-generator.sh" --port 8080 >/tmp/a2a-demo-a.log 2>&1 &
+a2a serve --exec "bash $EX/content-generator.sh" --port 8080 >/tmp/a2a-demo-a.log 2>&1 &
 SRV_A=$!
-a2a server --exec "python3 -u $EX/a2a_unaware_agent.py" --chunk=$'\n' --port 8081 >/tmp/a2a-demo-b.log 2>&1 &
+a2a serve --exec "python3 -u $EX/a2a_unaware_agent.py" --chunk=$'\n' --port 8081 >/tmp/a2a-demo-b.log 2>&1 &
 SRV_B=$!
 sleep 2.5
 

@@ -23,7 +23,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 
-	"github.com/a2aproject/a2a-cli/internal/localsrv"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	"github.com/a2aproject/a2a-go/v2/a2asrv/push"
@@ -326,7 +325,7 @@ func startPushTestServer(t *testing.T) string {
 
 	capabilities := a2a.AgentCapabilities{Streaming: true, PushNotifications: true}
 	handler := a2asrv.NewHandler(
-		localsrv.NewEchoExecutor(),
+		newEchoExecutor(),
 		a2asrv.WithCapabilityChecks(&capabilities),
 		a2asrv.WithPushNotifications(push.NewInMemoryStore(), push.NewHTTPPushSender(nil)),
 	)

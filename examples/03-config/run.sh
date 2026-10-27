@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Lesson 3, end to end: the three ways to set a value, and `config show`.
-# Requires the `a2a` CLI on your PATH (go install github.com/a2aproject/a2a-cli@latest).
+# Requires the `a2a` CLI (go install github.com/a2aproject/a2a-cli@latest) and the
+# a2a-serve plugin (go install github.com/a2aproject/a2a-serve@latest) on your PATH.
 set -uo pipefail
+export A2ACLI_PLUGINS_ENABLED=true
 cd "$(dirname "$0")"
 
 # Use the a2a CLI; if it is installed as a2a-cli, alias it.
@@ -12,7 +14,7 @@ PORT=8090
 URL="http://localhost:$PORT"
 
 # Start a throwaway echo server in the background; stop it on exit.
-a2a server --echo --port "$PORT" --quiet &
+a2a serve --echo --port "$PORT" --quiet &
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null; rm -f .env' EXIT
 

@@ -27,6 +27,11 @@ See the [project README](https://github.com/a2aproject/a2a-cli#installation) for
 a2a version
 ```
 
+The walkthrough below starts a local agent with `a2a serve`, which the
+[a2a-serve](https://github.com/a2aproject/a2a-serve) command plugin provides:
+`go install github.com/a2aproject/a2a-serve@latest`, then
+`a2a plugin set-enabled true`.
+
 ## Installation
 
 Fetch the one skill file into the place your agent loads skills from. Many agents
@@ -59,7 +64,7 @@ task.
 
 > Using the a2a-cli skill, start a local echo A2A agent in the background on port 9090.
 
-Your agent should run `a2a server --echo --port 9090 &`. Confirm it is up:
+Your agent should run `a2a serve --echo --port 9090 &`. Confirm it is up:
 
 ```bash
 a2a card get http://localhost:9090
@@ -80,7 +85,7 @@ cat .a2a-cli-logs/tasks.jsonl
 Stop the background agent when done:
 
 ```bash
-pkill -f "a2a server --echo"
+pkill -f "a2a serve --echo"
 ```
 
 ## Usage

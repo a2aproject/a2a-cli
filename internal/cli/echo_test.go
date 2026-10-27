@@ -12,49 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package localsrv
+package cli
 
 import (
 	"context"
 	"iter"
 
-	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
+
+	"github.com/a2aproject/a2a-cli/internal/output"
 )
 
-// ServeEcho runs a local server whose agent echoes each incoming message back
-// to the caller as an artifact.
-func ServeEcho(ctx context.Context, cfg Config) error {
-	if cfg.AgentName == "" {
-		cfg.AgentName = "Echo Agent"
-	}
-	if cfg.AgentDesc == "" {
-		cfg.AgentDesc = "Echoes the user's message back as a response"
-	}
-
-	card, err := createAgentCard(cfg.CardParams)
-	if err != nil {
-		return err
-	}
-
-	handler := a2asrv.NewHandler(&echoExecutor{})
-
-	if !cfg.Quiet {
-		cfg.Logger("echo mode, transport=%s protocol=%s", cfg.Transport, cfg.ProtocolVersion)
-	}
-
-	return serve(ctx, cfg, handler, card)
-}
-
+// echoExecutor echoes each message back as an artifact.
 type echoExecutor struct{}
 
-// NewEchoExecutor returns an AgentExecutor that echoes messages back to the caller.
-func NewEchoExecutor() a2asrv.AgentExecutor {
-	return &echoExecutor{}
-}
+func newEchoExecutor() a2asrv.AgentExecutor { return echoExecutor{} }
 
-func (e *echoExecutor) Execute(_ context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
+func (echoExecutor) Execute(_ context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
 	return func(yield func(a2a.Event, error) bool) {
 		if execCtx.StoredTask == nil {
 			if !yield(a2a.NewSubmittedTask(execCtx, execCtx.Message), nil) {
@@ -64,8 +39,7 @@ func (e *echoExecutor) Execute(_ context.Context, execCtx *a2asrv.ExecutorContex
 		if !yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateWorking, nil), nil) {
 			return
 		}
-		text := output.MessageText(execCtx.Message)
-		evt := a2a.NewArtifactEvent(execCtx, a2a.NewTextPart(text))
+		evt := a2a.NewArtifactEvent(execCtx, a2a.NewTextPart(output.MessageText(execCtx.Message)))
 		evt.LastChunk = true
 		if !yield(evt, nil) {
 			return
@@ -74,7 +48,7 @@ func (e *echoExecutor) Execute(_ context.Context, execCtx *a2asrv.ExecutorContex
 	}
 }
 
-func (e *echoExecutor) Cancel(_ context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
+func (echoExecutor) Cancel(_ context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
 	return func(yield func(a2a.Event, error) bool) {
 		yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateCanceled, nil), nil)
 	}

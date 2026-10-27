@@ -36,6 +36,9 @@ Install the CLI (see the [repo README](../../README.md)):
 go install github.com/a2aproject/a2a-cli@latest
 # go install names the binary `a2a-cli`; rename it to `a2a`
 mv "$(command -v a2a-cli)" "$(dirname "$(command -v a2a-cli)")/a2a"
+# the a2a-serve command plugin provides `a2a serve`
+go install github.com/a2aproject/a2a-serve@latest
+a2a plugin set-enabled true
 ```
 
 ## Step 1 — warm up with the echo server
@@ -43,7 +46,7 @@ mv "$(command -v a2a-cli)" "$(dirname "$(command -v a2a-cli)")/a2a"
 Start the simplest possible server in **terminal A**:
 
 ```bash
-a2a server --echo --port 8080
+a2a serve --echo --port 8080
 ```
 
 Send it a message from **terminal B** and get the same text back:
@@ -69,11 +72,11 @@ Wrap one of the scripts in a server:
 
 ```bash
 # Bash script — returns the whole output as one response
-a2a server --exec "bash content-generator.sh" --port 8080
+a2a serve --exec "bash content-generator.sh" --port 8080
 
 # Python script — streams one piece per line.
 # -u keeps output unbuffered so pieces arrive promptly; --chunk splits on newline.
-a2a server --exec "python3 -u a2a_unaware_agent.py" --chunk=$'\n' --port 8080
+a2a serve --exec "python3 -u a2a_unaware_agent.py" --chunk=$'\n' --port 8080
 ```
 
 Leave the server running.

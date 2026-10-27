@@ -37,7 +37,6 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/clicfg"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
-	"github.com/a2aproject/a2a-cli/internal/localsrv"
 	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-cli/internal/polling"
 	"github.com/a2aproject/a2a-cli/internal/testutil"
@@ -548,7 +547,7 @@ func partsFromArgs(t *testing.T, args ...string) *sendFlags {
 func TestSendStreaming(t *testing.T) {
 	t.Parallel()
 	url := startTestServer(t)
-	nonStreamingServerURL := startTestServerWith(t, a2a.AgentCapabilities{Streaming: false}, localsrv.NewEchoExecutor())
+	nonStreamingServerURL := startTestServerWith(t, a2a.AgentCapabilities{Streaming: false}, newEchoExecutor())
 
 	testCases := []struct {
 		name               string
@@ -677,7 +676,7 @@ func TestSendOutputInvalidFormat(t *testing.T) {
 
 func TestSendStreamingFallbackUsesDefaultPoller(t *testing.T) {
 	t.Parallel()
-	nonStreamingURL := startTestServerWith(t, a2a.AgentCapabilities{Streaming: false}, localsrv.NewEchoExecutor())
+	nonStreamingURL := startTestServerWith(t, a2a.AgentCapabilities{Streaming: false}, newEchoExecutor())
 
 	out, err := runCMDWithConfig(t, deps{cfgLoader: clicfg.LoadEmpty},
 		"send", "-a", nonStreamingURL, "-o", "json", "--stream", "stream me", "--poll-interval", "5ms")
@@ -936,29 +935,6 @@ func TestGetTaskWait_Timeout(t *testing.T) {
 	}
 }
 
-func TestServe_ModeValidation(t *testing.T) {
-	t.Parallel()
-	for _, tt := range []struct {
-		name           string
-		args           []string
-		wantErrContain string
-	}{
-		{"no mode", []string{"server"}, "specify --echo, --proxy <url>, or --exec"},
-		{"multiple modes", []string{"server", "--echo", "--exec", "cat"}, "mutually exclusive"},
-	} {
-		t.Run(tt.name+" fails", func(t *testing.T) {
-			t.Parallel()
-			_, err := runCMD(t, tt.args...)
-			if err == nil {
-				t.Fatalf("runCMD(%v) error = nil, want error containing %q", tt.args, tt.wantErrContain)
-			}
-			if !strings.Contains(err.Error(), tt.wantErrContain) {
-				t.Fatalf("runCMD(%v) error = %v, want error containing %q", tt.args, err, tt.wantErrContain)
-			}
-		})
-	}
-}
-
 func TestConfigApplied(t *testing.T) {
 	t.Parallel()
 	url := startTestServer(t)
@@ -1080,7 +1056,7 @@ func TestInsecureCredentialWarning(t *testing.T) {
 
 func startTestServer(t *testing.T) string {
 	t.Helper()
-	return startTestServerWith(t, a2a.AgentCapabilities{Streaming: true}, localsrv.NewEchoExecutor())
+	return startTestServerWith(t, a2a.AgentCapabilities{Streaming: true}, newEchoExecutor())
 }
 
 func startTestServerWith(t *testing.T, capabilities a2a.AgentCapabilities, executor a2asrv.AgentExecutor) string {
@@ -1326,7 +1302,7 @@ func startTestServerRecordingCardHeaders(t *testing.T) (string, *http.Header) {
 	t.Helper()
 
 	capabilities := a2a.AgentCapabilities{Streaming: true}
-	handler := a2asrv.NewHandler(localsrv.NewEchoExecutor(), a2asrv.WithCapabilityChecks(&capabilities))
+	handler := a2asrv.NewHandler(newEchoExecutor(), a2asrv.WithCapabilityChecks(&capabilities))
 
 	mux := http.NewServeMux()
 	mux.Handle("/", a2asrv.NewRESTHandler(handler))

@@ -22,9 +22,10 @@
 # TRIM_TAIL=1 drops the final tmux-teardown frame so the GIF rests on the
 # finished demo (needs ImageMagick 'convert').
 #
-# Requires: a2a on PATH, tmux, python3, bash. TRIM_TAIL also needs convert.
+# Requires: a2a and a2a-serve on PATH, tmux, python3, bash. TRIM_TAIL also needs convert.
 
 set -euo pipefail
+export A2ACLI_PLUGINS_ENABLED=true
 
 # Drive the demo from the repo root so the relative example-script path below
 # resolves regardless of where the recording is launched from, and so the
@@ -51,7 +52,7 @@ AFTER_NOTE=1.2     # pause to read a comment
 # example dir below, so the script name (and the card's "Wraps command:" line)
 # stays short; the default port 8080 is omitted for the same reason. $'\n' must
 # reach the pane's shell literally, so keep it backslash-escaped.
-SERVER_CMD="a2a server --exec \"python3 -u a2a_unaware_agent.py\" --chunk=\$'\\n'"
+SERVER_CMD="a2a serve --exec \"python3 -u a2a_unaware_agent.py\" --chunk=\$'\\n'"
 
 cleanup() { "${TM[@]}" kill-server 2>/dev/null || true; }
 trap cleanup EXIT

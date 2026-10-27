@@ -13,14 +13,14 @@ In lesson 1 you started a server. Now learn the client side: read an agent's car
 
 ## Prerequisites
 
-The `a2a` CLI installed (see the [repo README](../../README.md)). This lesson uses the built-in **echo** server, so there is nothing to write and you do not need to have finished lesson 1 first.
+The `a2a` CLI installed (see the [repo README](../../README.md)), and the [a2a-serve](https://github.com/a2aproject/a2a-serve) plugin, which provides `a2a serve` (`go install github.com/a2aproject/a2a-serve@latest`, then `a2a plugin set-enabled true`). This lesson uses the built-in **echo** server, so there is nothing to write and you do not need to have finished lesson 1 first.
 
 ## Start the agent (terminal A)
 
 The echo server sends your message straight back — a simple partner for learning the client:
 
 ```bash
-a2a server --echo --port 8090 --name "Echo Agent"
+a2a serve --echo --port 8090 --name "Echo Agent"
 ```
 
 Leave it running. Do everything below in **terminal B**.

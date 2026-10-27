@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Lesson 4, end to end: multi-part messages, streaming, and async.
-# Requires the `a2a` CLI on your PATH (go install github.com/a2aproject/a2a-cli@latest).
+# Requires the `a2a` CLI (go install github.com/a2aproject/a2a-cli@latest) and the
+# a2a-serve plugin (go install github.com/a2aproject/a2a-serve@latest) on your PATH.
 set -uo pipefail
+export A2ACLI_PLUGINS_ENABLED=true
 cd "$(dirname "$0")"
 
 # Use the a2a CLI; if it is installed as a2a-cli, alias it.
@@ -13,7 +15,7 @@ URL="http://localhost:$PORT"
 export A2ACLI_AGENT_CARD="$URL"   # so the client commands can skip -a
 
 # Start the lesson 1 script as a server in the background; stop it on exit.
-a2a server --exec "python3 -u ../01-exec-demo/a2a_unaware_agent.py" --name "Word Numberer" --port "$PORT" --quiet &
+a2a serve --exec "python3 -u ../01-exec-demo/a2a_unaware_agent.py" --name "Word Numberer" --port "$PORT" --quiet &
 SERVER_PID=$!
 trap 'kill "$SERVER_PID" 2>/dev/null' EXIT
 

@@ -13,10 +13,10 @@ In lesson 2 you set the agent card in a `.env` file. That is one of three ways t
 
 ## Prerequisites
 
-The `a2a` CLI installed (see the [repo README](../../README.md)). For the `send` step, start a throwaway echo server in **terminal A**:
+The `a2a` CLI installed (see the [repo README](../../README.md)), and the [a2a-serve](https://github.com/a2aproject/a2a-serve) plugin, which provides `a2a serve` (`go install github.com/a2aproject/a2a-serve@latest`, then `a2a plugin set-enabled true`). For the `send` step, start a throwaway echo server in **terminal A**:
 
 ```bash
-a2a server --echo --port 8090
+a2a serve --echo --port 8090
 ```
 
 An echo server sends your message straight back, so you can see requests land. Do everything below in **terminal B**.

@@ -1,0 +1,23 @@
+{
+  "supportedInterfaces": [
+    {
+      "url": "http://127.0.0.1:8090",
+      "protocolBinding": "HTTP+JSON",
+      "protocolVersion": "1.0"
+    }
+  ],
+  "capabilities": {
+    "pushNotifications": false,
+    "streaming": true
+  },
+  "defaultInputModes": [
+    "text"
+  ],
+  "defaultOutputModes": [
+    "text"
+  ],
+  "description": "Echoes the user's message back as a response",
+  "name": "Echo Agent",
+  "skills": [],
+  "version": "1.0.0"
+}

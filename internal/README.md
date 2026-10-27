@@ -289,7 +289,7 @@ a2a auth get https://agent.example.com --reveal   # header values
 
 ## Server Mode
 
-`a2a server` starts an A2A-compliant server backed by one of three modes.
+Servers are provided by the [a2a-serve](https://github.com/a2aproject/a2a-serve) [command plugin](#command-plugins): install it with `go install github.com/a2aproject/a2a-serve@latest`, enable plugins with `a2a plugin set-enabled true`, and it runs as `a2a serve`. Besides serving coding agents, `a2a serve` starts a local A2A-compliant test server backed by one of three modes.
 
 ### Common Server Flags
 
@@ -310,24 +310,24 @@ a2a auth get https://agent.example.com --reveal   # header values
 ### `--echo` - Echo Mode
 
 ```bash
-a2a server --echo
-a2a server --echo --port 9090 --name "Echo Agent"
+a2a serve --echo
+a2a serve --echo --port 9090 --name "Echo Agent"
 ```
 Returns the user's message text as the agent response. A "ping" for agents — useful for connectivity testing and client development.
 
 ### `--proxy` - Proxy Mode
 
-Forward all requests to an upstream A2A agent. Logs traffic to stderr. Useful for debugging agent interactions, injecting service parameters, or acting as an authenticated gateway. `--proxy` is a boolean flag; the upstream agent is selected with the global `-a, --agent-card` or `-e, --endpoint` flags.
+Forward all requests to an upstream A2A agent. Logs traffic to stderr. Useful for debugging agent interactions, injecting service parameters, or acting as an authenticated gateway. `--proxy` takes the agent card URL of the upstream agent.
 
 ```bash
 # Basic proxy with traffic logging
-a2a server --proxy -a https://upstream-agent.com
+a2a serve --proxy https://upstream-agent.com
 
 # Inject auth for an upstream that requires it
-a2a server --proxy -a https://upstream-agent.com --auth "<token>"
+a2a serve --proxy https://upstream-agent.com --auth "<token>"
 
 # Add tracing headers
-a2a server --proxy -a https://upstream-agent.com \
+a2a serve --proxy https://upstream-agent.com \
   --svc-param "X-Request-Source=a2a-proxy" \
   --svc-param "X-Trace-ID=debug-session-1"
 ```
@@ -338,8 +338,8 @@ The proxy creates an `a2aclient.Client` for the upstream agent and forwards each
 
 Run any command as an A2A agent. Message text goes to stdin, stdout becomes the response artifact. The subprocess does not need to know anything about A2A.
 ```bash
-a2a server --exec "python -u a2a_unaware_agent.py"
-a2a server --exec "./content-generator.sh"
+a2a serve --exec "python -u a2a_unaware_agent.py"
+a2a serve --exec "./content-generator.sh"
 ```
 
 #### Subprocess Interface
@@ -363,13 +363,13 @@ Status: working → [process runs] → Artifact (full output) → Status: comple
 
 ```bash
 # Emit 3 chunks with 500ms delay - useful for verifying client streaming
-a2a server --exec "for i in 1 2 3; do echo \$i; sleep 0.5; done" --chunk=$'\n'
+a2a serve --exec "for i in 1 2 3; do echo \$i; sleep 0.5; done" --chunk=$'\n'
 
 # Space-delimited chunks
-a2a server --exec "echo 'alpha beta gamma'" --chunk=' '
+a2a serve --exec "echo 'alpha beta gamma'" --chunk=' '
 
 # Paragraph-level chunks
-a2a server --exec "cat essay.txt" --chunk=$'\n\n'
+a2a serve --exec "cat essay.txt" --chunk=$'\n\n'
 ```
 
 The event sequence with `--chunk`:

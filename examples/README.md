@@ -6,7 +6,7 @@
 
 This is a short, hands-on course. Each lesson is a small folder you can run on its own, and each one builds on the last. As you progress you will see how capable the `a2a` CLI is and get to know its richer features.
 
-To get started you need only the `a2a` CLI installed. Every lesson starts its own example agent, so you can jump straight to any one of them.
+To get started you need the `a2a` CLI and the [a2a-serve](https://github.com/a2aproject/a2a-serve) plugin, which provides `a2a serve` (`go install github.com/a2aproject/a2a-serve@latest`, then `a2a plugin set-enabled true`). Every lesson starts its own example agent, so you can jump straight to any one of them.
 
 ## Lessons
 

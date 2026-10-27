@@ -31,8 +31,6 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	"github.com/google/go-cmp/cmp"
-
-	"github.com/a2aproject/a2a-cli/internal/localsrv"
 )
 
 // authRecorder records the Authorization header of every request.
@@ -59,7 +57,7 @@ func (r *authRecorder) all() []string {
 func startAuthRecordingServer(t *testing.T) (string, *authRecorder) {
 	t.Helper()
 	capabilities := a2a.AgentCapabilities{Streaming: true}
-	handler := a2asrv.NewHandler(localsrv.NewEchoExecutor(), a2asrv.WithCapabilityChecks(&capabilities))
+	handler := a2asrv.NewHandler(newEchoExecutor(), a2asrv.WithCapabilityChecks(&capabilities))
 	mux := http.NewServeMux()
 	mux.Handle("/", a2asrv.NewRESTHandler(handler))
 	rec := &authRecorder{}

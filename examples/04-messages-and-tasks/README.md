@@ -13,14 +13,14 @@ You can already talk to an agent. This lesson explores two richer areas. First, 
 
 ## Prerequisites
 
-The `a2a` CLI installed (see the [repo README](../../README.md)). This lesson reuses the Python script from [lesson 1](../01-exec-demo/), whose short per-word delay makes streaming easy to watch. You do not need to have finished the earlier lessons first.
+The `a2a` CLI installed (see the [repo README](../../README.md)), and the [a2a-serve](https://github.com/a2aproject/a2a-serve) plugin, which provides `a2a serve` (`go install github.com/a2aproject/a2a-serve@latest`, then `a2a plugin set-enabled true`). This lesson reuses the Python script from [lesson 1](../01-exec-demo/), whose short per-word delay makes streaming easy to watch. You do not need to have finished the earlier lessons first.
 
 ## Start the agent
 
 Run the agent in **terminal A**:
 
 ```bash
-a2a server --exec "python3 -u ../01-exec-demo/a2a_unaware_agent.py" --name "Word Numberer" --port 8080
+a2a serve --exec "python3 -u ../01-exec-demo/a2a_unaware_agent.py" --name "Word Numberer" --port 8080
 ```
 
 Set the card once in **terminal B** so the commands below stay short:

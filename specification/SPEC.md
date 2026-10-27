@@ -137,7 +137,7 @@ Six principles the rest of this document implements. They are normative where th
 | `completion` | 2 | Emit a shell completion script for the named shell |
 | `config show` | 2 | Inspect configuration (read-only): show the effective settings and the source each value resolved from (§8.3) |
 | `conformance` | 2 | Smoke-check a live agent against the A2A TCK |
-| `server` | 3 | Run a local a2a server as echo-demo, proxying or command execution |
+| `serve` | 3 | Run a local a2a server as echo-demo, proxying or command execution; provided by the a2a-serve command plugin |
 | `help` | 1 | Show usage for the tool or a specific command |
 | `send` | 1 | Send a message to start or continue an interaction |
 | `task cancel` | 1 | Cancel an active task |
