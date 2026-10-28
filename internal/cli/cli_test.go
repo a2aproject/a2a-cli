@@ -226,8 +226,8 @@ func TestCardGet_TimeoutBoundsHTTPRequests(t *testing.T) {
 		t.Fatal("card get did not issue any request through the configured HTTP transport")
 	}
 	for _, d := range deadlines {
-		if !d.IsZero() && d.Before(start.Add(20*time.Minute)) {
-			t.Fatalf("request deadline = %v after start, want no deadline or the 25m --timeout", d.Sub(start))
+		if d.IsZero() || d.Before(start.Add(20*time.Minute)) {
+			t.Fatalf("request deadline = %v after start, want the 25m --timeout", d.Sub(start))
 		}
 	}
 }
@@ -986,8 +986,8 @@ func TestGetTaskWait_Timeout(t *testing.T) {
 	if err == nil {
 		t.Fatal("a2a task get --wait against a never-terminal task should time out")
 	}
-	if !strings.Contains(err.Error(), "timed out") {
-		t.Fatalf("a2a task get --wait error = %v, want a timeout error", err)
+	if got := clierr.Classify(err).Code; got != clierr.CodeTimeout {
+		t.Fatalf("a2a task get --wait error = %v (code %q), want code %q", err, got, clierr.CodeTimeout)
 	}
 }
 
@@ -1021,13 +1021,13 @@ func TestServeProxy_Timeout(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	_, err := runCMD(t, "server", "--proxy", "-a", server.URL, "--timeout", "10ms")
+	_, err := runCMD(t, "server", "--proxy", "-a", server.URL, "--port", "0", "--timeout", "10ms")
 	if err == nil {
 		t.Fatal("a2a server --proxy should time out resolving upstream card")
 	}
 	var classified *clierr.Error
 	if !errors.As(err, &classified) {
-		t.Fatalf("runCMD(server --proxy) error = %T, want *clierr.Error", err)
+		t.Fatalf("runCMD(server --proxy) error = %v, want *clierr.Error", err)
 	}
 	if classified.Code != clierr.CodeTimeout {
 		t.Fatalf("runCMD(server --proxy) Code = %q, want %q", classified.Code, clierr.CodeTimeout)
