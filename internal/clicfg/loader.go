@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/joho/godotenv"
 	"gopkg.in/yaml.v3"
 )
@@ -83,7 +84,7 @@ func loadLocal(opts LoadOpts) (*loadedFile, error) {
 	if opts.ConfigPath != "" {
 		values, err := loadConfigFile(opts.ConfigPath)
 		if err != nil {
-			return nil, fmt.Errorf("reading --config %q: %w", opts.ConfigPath, err)
+			return nil, clierr.Usage(fmt.Sprintf("reading --config %q: %v", opts.ConfigPath, err))
 		}
 		return &loadedFile{path: opts.ConfigPath, values: values}, nil
 	}
