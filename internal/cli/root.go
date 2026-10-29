@@ -210,7 +210,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	pf.BoolVarP(&cfg.verbose, "verbose", "v", false, "Verbose output to stderr")
 	pf.BoolVar(&cfg.insecureGRPC, "insecure", false, "Use insecure (plaintext) gRPC transport credentials")
 	pf.StringVar(&cfg.unixSocket, "unix-socket", "", "Send HTTP requests through a Unix socket: <path> for every host, or <host>=<path> for one host")
-	pf.StringArrayVar(&cfg.credentialHelpers, "credential-helper", nil, "Credential helper returning the headers for an agent: [scope=]command [args...] (repeatable; see a2a auth --help)")
+	pf.StringArrayVar(&cfg.credentialHelpers, "credential-helper", nil, "Credential helper returning the headers for an agent: [scope=]command [args...] (repeatable; see a2a auth get --help)")
 	pf.StringVar(&cfg.configPath, "config", "", "Load configuration from an explicit file (.yaml, .json, or .env) in place of the local .env")
 	annotations := map[string][]string{
 		"unix-socket":       {clicfg.AnnotationNotFromDiscoveredFile},

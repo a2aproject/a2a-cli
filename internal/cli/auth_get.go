@@ -32,6 +32,13 @@ func newAuthGetCmd(cfg *globalConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get <agent-url>",
 		Short: "Print the headers the credential helper returns for an agent",
+		Long: `Print the headers the credential helper returns for an agent.
+
+A credential helper (--credential-helper) follows the Bazel credential helper
+protocol: https://github.com/EngFlow/credential-helper-spec. Its value is
+"[scope=]command [args...]", where scope is a host such as example.com, or
+*.example.com for a domain and its subdomains. The most specific helper for
+the agent's host runs.`,
 		Example: `  a2a auth get https://agent.example.com
   a2a auth get https://agent.example.com --reveal`,
 		Args: cobra.ExactArgs(1),

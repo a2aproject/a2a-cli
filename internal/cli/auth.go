@@ -21,22 +21,7 @@ import (
 func newAuthCmd(cfg *globalConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth",
-		Short: "Work with the credentials sent to agents",
-		Long: `Work with the credentials sent to agents.
-
-A credential helper (--credential-helper, A2ACLI_CREDENTIAL_HELPER, or
-credential-helper in the config file) is a program that returns the HTTP
-headers to send to an agent, following the Bazel credential helper protocol:
-https://github.com/EngFlow/credential-helper-spec. Its value is
-"[scope=]command [args...]", where scope is a host such as example.com, or
-*.example.com for a domain and its subdomains. For each request, the most
-specific helper for the request's host runs as "command args... get", and
-its headers are sent unless --auth or --svc-param set the same header.
-
-The helper receives the card reference for the card request and the
-interface URL for A2A calls, not the full URL of each request.
-credential-helper is not read from a .env found by walking up from the
-working directory; pass that file with --config to use it.`,
+		Short: "Manage the credentials sent to agents",
 	}
 	cmd.AddCommand(newAuthGetCmd(cfg))
 	return cmd
