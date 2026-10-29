@@ -159,6 +159,8 @@ func flagValueString(f *pflag.Flag) string {
 // ConfigValue is a flag value that reads configuration values itself, such
 // as lists of objects that have no string form.
 type ConfigValue interface {
+	// SetConfig sets the value from a raw config value: a string from an
+	// environment variable or .env, or a decoded YAML or JSON value.
 	SetConfig(raw any) error
 }
 
