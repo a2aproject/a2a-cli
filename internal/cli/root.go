@@ -161,6 +161,14 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 			}
 			cfg.bindings = bindings
 			cfg.store = store
+			for _, b := range bindings {
+				if b.Ignored == "" {
+					continue
+				}
+				if _, err := fmt.Fprintf(cfg.stderr(), "warning: ignoring %s from %s; pass --config %s to use it\n", b.Name, b.Ignored, b.Ignored); err != nil {
+					return err
+				}
+			}
 			if err := cfg.initHTTPTransport(); err != nil {
 				return err
 			}

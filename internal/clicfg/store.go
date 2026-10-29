@@ -88,12 +88,22 @@ func (s *Store) lookupValue(key string) (any, Source, bool) {
 // LookupFlag returns the configuration value for a flag, checking environment variables
 // by envVar and config files by flag name or envVar.
 func (s *Store) LookupFlag(name, envVar string) (any, Source, bool) {
+	return s.lookupFlag(name, envVar, false)
+}
+
+// LookupFlagSkipDiscovered is [Store.LookupFlag] without a .env found by
+// walking up from the working directory.
+func (s *Store) LookupFlagSkipDiscovered(name, envVar string) (any, Source, bool) {
+	return s.lookupFlag(name, envVar, true)
+}
+
+func (s *Store) lookupFlag(name, envVar string, skipDiscovered bool) (any, Source, bool) {
 	if envVar != "" {
 		if v, ok := s.lookupEnv(envVar); ok {
 			return v, Source{Kind: SourceEnv}, true
 		}
 	}
-	if s.local != nil {
+	if s.local != nil && !(skipDiscovered && s.local.discovered) {
 		if v, ok := s.local.lookup(name, envVar); ok {
 			return v, Source{Kind: SourceLocalFile, Path: s.local.path, Discovered: s.local.discovered}, true
 		}

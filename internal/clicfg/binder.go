@@ -31,7 +31,7 @@ const (
 	// AnnotationWholeValue keeps a string value of a repeatable flag as one
 	// entry instead of splitting it on commas.
 	AnnotationWholeValue = "a2a-cli/whole-value"
-	// AnnotationNotFromDiscoveredFile rejects a value from a .env found by
+	// AnnotationNotFromDiscoveredFile ignores a value from a .env found by
 	// walking up from the working directory, for flags that a cloned
 	// repository must not be able to set.
 	AnnotationNotFromDiscoveredFile = "a2a-cli/not-from-discovered-file"
@@ -45,6 +45,9 @@ type FlagBinding struct {
 	Source    string
 	Path      string
 	Sensitive bool
+	// Ignored is the path of a discovered .env whose value for the flag was
+	// ignored because of [AnnotationNotFromDiscoveredFile].
+	Ignored string
 }
 
 // Bind fills every eligible flag that was not set on the command line from
@@ -79,17 +82,14 @@ func Bind(flags *pflag.FlagSet, store *Store) ([]FlagBinding, error) {
 		}
 
 		value, source, ok := store.LookupFlag(binding.Name, binding.EnvVar)
+		if ok && source.Discovered && hasAnnotation(f, AnnotationNotFromDiscoveredFile) {
+			binding.Ignored = source.Path
+			value, source, ok = store.LookupFlagSkipDiscovered(binding.Name, binding.EnvVar)
+		}
 		if !ok {
 			binding.Source = "default"
 			binding.Value = flagValueString(f)
 			bindings = append(bindings, binding)
-			return
-		}
-
-		if source.Discovered && hasAnnotation(f, AnnotationNotFromDiscoveredFile) {
-			errs = append(errs, clierr.Usage(fmt.Sprintf(
-				"--%s is not read from %s, a .env found from the working directory; pass --config %s to use it, or set it in the environment or ~/.config/a2a-cli/config.yaml",
-				f.Name, source.Path, source.Path)))
 			return
 		}
 

@@ -224,20 +224,23 @@ func TestCredentialHelperInvalidSpec(t *testing.T) {
 	}
 }
 
-func TestCredentialFlagsRejectedFromDiscoveredEnv(t *testing.T) {
+func TestCredentialFlagsIgnoredFromDiscoveredEnv(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name string
 		env  string
+		flag string
 	}{
-		{name: "credential helper", env: "A2ACLI_CREDENTIAL_HELPER=helper"},
-		{name: "unix socket", env: "A2ACLI_UNIX_SOCKET=/tmp/a2a.sock"},
+		{name: "credential helper", env: "A2ACLI_CREDENTIAL_HELPER=false", flag: "credential-helper"},
+		{name: "unix socket", env: "A2ACLI_UNIX_SOCKET=/nonexistent/a2a.sock", flag: "unix-socket"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			url, rec := startAuthRecordingServer(t)
 			dir := t.TempDir()
-			if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(tc.env+"\n"), 0o600); err != nil {
+			envPath := filepath.Join(dir, ".env")
+			if err := os.WriteFile(envPath, []byte(tc.env+"\n"), 0o600); err != nil {
 				t.Fatal(err)
 			}
 			loader := cfgLoaderFunc(func(opts clicfg.LoadOpts) (*clicfg.Store, error) {
@@ -247,10 +250,16 @@ func TestCredentialFlagsRejectedFromDiscoveredEnv(t *testing.T) {
 				opts.LookupEnv = func(string) (string, bool) { return "", false }
 				return clicfg.Load(opts)
 			})
-			args := []string{"card", "get", "https://agent.example.com"}
-			_, err := runCMDWithConfig(t, deps{cfgLoader: loader}, args...)
-			if ce := clierr.Classify(err); ce.Code != clierr.CodeUsage {
-				t.Fatalf("a2a %s error = %v, want a usage error", strings.Join(args, " "), err)
+			args := []string{"card", "get", url}
+			_, stderr, err := runCMDCapturingStderrWithConfig(t, deps{cfgLoader: loader}, args...)
+			if err != nil {
+				t.Fatalf("a2a %s error = %v", strings.Join(args, " "), err)
+			}
+			if want := "warning: ignoring " + tc.flag + " from " + envPath; !strings.Contains(stderr, want) {
+				t.Fatalf("a2a %s stderr = %q, want %q", strings.Join(args, " "), stderr, want)
+			}
+			if len(rec.all()) == 0 {
+				t.Fatalf("a2a %s sent no requests", strings.Join(args, " "))
 			}
 		})
 	}

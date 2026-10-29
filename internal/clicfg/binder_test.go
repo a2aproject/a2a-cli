@@ -169,19 +169,55 @@ func TestApplyConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects a protected flag from a discovered .env", func(t *testing.T) {
+	t.Run("ignores a protected flag from a discovered .env", func(t *testing.T) {
 		t.Parallel()
-		fs, _ := newFlags()
-		dir := t.TempDir()
-		writeDotenv(t, filepath.Join(dir, ".env"), map[string]string{"A2ACLI_CREDENTIAL_HELPER": "helper"})
-		s, err := Load(LoadOpts{WorkingDir: dir, GlobalPath: filepath.Join(dir, "none.env"), LookupEnv: makeEnv(nil)})
-		if err != nil {
-			t.Fatalf("config.Load() error = %v", err)
+		tests := []struct {
+			name string
+			user string
+			want []string
+		}{
+			{name: "unset", want: []string{}},
+			{name: "falls back to the user config", user: "credential-helper:\n  - user-helper\n", want: []string{"user-helper"}},
 		}
+		for _, tc := range tests {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				fs, _ := newFlags()
+				dir := t.TempDir()
+				envPath := filepath.Join(dir, ".env")
+				writeDotenv(t, envPath, map[string]string{"A2ACLI_CREDENTIAL_HELPER": "helper"})
+				userPath := filepath.Join(dir, "config.yaml")
+				if tc.user != "" {
+					if err := os.WriteFile(userPath, []byte(tc.user), 0o600); err != nil {
+						t.Fatalf("os.WriteFile(%q) error = %v", userPath, err)
+					}
+				}
+				s, err := Load(LoadOpts{WorkingDir: dir, GlobalPath: filepath.Join(dir, "none.env"), UserPath: userPath, LookupEnv: makeEnv(nil)})
+				if err != nil {
+					t.Fatalf("config.Load() error = %v", err)
+				}
 
-		_, err = Bind(fs, s)
-		if ce := clierr.Classify(err); ce.Code != clierr.CodeUsage || !strings.Contains(err.Error(), "--config") {
-			t.Fatalf("Bind() error = %v, want a usage error suggesting --config", err)
+				bindings, err := Bind(fs, s)
+				if err != nil {
+					t.Fatalf("Bind() error = %v", err)
+				}
+				got, err := fs.GetStringArray("credential-helper")
+				if err != nil {
+					t.Fatalf("fs.GetStringArray() error = %v", err)
+				}
+				if diff := cmp.Diff(tc.want, got); diff != "" {
+					t.Fatalf("credential-helper wrong result (-want +got) diff = %s", diff)
+				}
+				var ignored string
+				for _, b := range bindings {
+					if b.Name == "credential-helper" {
+						ignored = b.Ignored
+					}
+				}
+				if ignored != envPath {
+					t.Fatalf("Bind() credential-helper Ignored = %q, want %q", ignored, envPath)
+				}
+			})
 		}
 	})
 
