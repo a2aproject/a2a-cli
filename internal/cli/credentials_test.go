@@ -17,6 +17,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"iter"
 	"net"
 	"net/http"
@@ -83,29 +84,51 @@ func startAuthRecordingServerWithInterface(t *testing.T, iface func(serverURL st
 	return server.URL, rec
 }
 
-// writeCredentialHelper returns a helper spec that answers "get" with the
-// Authorization header "Bearer <uri>". The script runs with sh: executing a
-// file written while parallel tests fork can fail with ETXTBSY
+// credentialHelperPath is a helper that answers "get" with the Authorization
+// header "Bearer <uri>". TestMain writes it before tests run in parallel:
+// executing a file written while other tests fork can fail with ETXTBSY
 // (golang/go#22315).
-func writeCredentialHelper(t *testing.T) string {
+var credentialHelperPath string
+
+func TestMain(m *testing.M) {
+	os.Exit(runTests(m))
+}
+
+func runTests(m *testing.M) int {
+	dir, err := os.MkdirTemp("", "a2a-cli-test")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer func() {
+		if err := os.RemoveAll(dir); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
+	}()
+	credentialHelperPath = filepath.Join(dir, "helper")
+	script := `#!/bin/sh
+[ "$1" = get ] || exit 2
+uri=$(sed 's/.*"uri":"\([^"]*\)".*/\1/')
+printf '{"headers":{"Authorization":["Bearer %s"]}}' "$uri"
+`
+	if err := os.WriteFile(credentialHelperPath, []byte(script), 0o700); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	return m.Run()
+}
+
+func credentialHelper(t *testing.T) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("helper scripts need a POSIX shell")
 	}
-	path := filepath.Join(t.TempDir(), "helper")
-	script := `[ "$1" = get ] || exit 2
-uri=$(sed 's/.*"uri":"\([^"]*\)".*/\1/')
-printf '{"headers":{"Authorization":["Bearer %s"]}}' "$uri"
-`
-	if err := os.WriteFile(path, []byte(script), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return "sh " + path
+	return credentialHelperPath
 }
 
 func TestCredentialHelper(t *testing.T) {
 	t.Parallel()
-	helper := writeCredentialHelper(t)
+	helper := credentialHelper(t)
 	tests := []struct {
 		name     string
 		args     func(url string) []string
@@ -177,9 +200,38 @@ func TestCredentialHelper(t *testing.T) {
 	}
 }
 
+func TestCredentialHelperFromConfigFile(t *testing.T) {
+	t.Parallel()
+	url, rec := startAuthRecordingServer(t)
+	dir := t.TempDir()
+	userPath := filepath.Join(dir, "config.yaml")
+	yaml := fmt.Sprintf("credential-helper:\n  - scope: 127.0.0.1\n    command: [sh, %q]\n", credentialHelper(t))
+	if err := os.WriteFile(userPath, []byte(yaml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loader := cfgLoaderFunc(func(opts clicfg.LoadOpts) (*clicfg.Store, error) {
+		opts.WorkingDir = dir
+		opts.GlobalPath = filepath.Join(dir, "none.env")
+		opts.UserPath = userPath
+		opts.LookupEnv = func(string) (string, bool) { return "", false }
+		return clicfg.Load(opts)
+	})
+	args := []string{"send", "-a", url, "hello"}
+	if _, err := runCMDWithConfig(t, deps{cfgLoader: loader}, args...); err != nil {
+		t.Fatalf("a2a %s error = %v", strings.Join(args, " "), err)
+	}
+	want := []recordedRequest{
+		{Path: a2asrv.WellKnownAgentCardPath, Auth: "Bearer " + url},
+		{Path: "/message:send", Auth: "Bearer " + url},
+	}
+	if diff := cmp.Diff(want, rec.all()); diff != "" {
+		t.Fatalf("a2a %s wrong result (-want +got) diff = %s", strings.Join(args, " "), diff)
+	}
+}
+
 func TestCredentialHelperScopedToRequestHost(t *testing.T) {
 	t.Parallel()
-	helper := writeCredentialHelper(t)
+	helper := credentialHelper(t)
 	url, rec := startAuthRecordingServerWithInterface(t, func(serverURL string) string {
 		return strings.Replace(serverURL, "127.0.0.1", "localhost", 1)
 	})
@@ -217,7 +269,7 @@ func TestCredentialHelperOnlyRunsForRequests(t *testing.T) {
 
 func TestCredentialHelperInvalidSpec(t *testing.T) {
 	t.Parallel()
-	args := []string{"send", "-a", "https://agent.example.com", "--credential-helper", `sh -c "unterminated`, "hello"}
+	args := []string{"send", "-a", "https://agent.example.com", "--credential-helper", "example.com=", "hello"}
 	_, err := runCMD(t, args...)
 	if ce := clierr.Classify(err); ce.Code != clierr.CodeUsage {
 		t.Fatalf("a2a %s error = %v, want a usage error", strings.Join(args, " "), err)
@@ -267,7 +319,7 @@ func TestCredentialFlagsIgnoredFromDiscoveredEnv(t *testing.T) {
 
 func TestAuthGet(t *testing.T) {
 	t.Parallel()
-	helper := writeCredentialHelper(t)
+	helper := credentialHelper(t)
 	tests := []struct {
 		name    string
 		args    []string

@@ -1143,7 +1143,7 @@ func TestInsecureCredentialWarning(t *testing.T) {
 		},
 		{
 			name:     "insecure with a credential helper warns",
-			args:     []string{"send", "-a", url, "--insecure", "--credential-helper", writeCredentialHelper(t), "hi"},
+			args:     []string{"send", "-a", url, "--insecure", "--credential-helper", credentialHelper(t), "hi"},
 			wantWarn: true,
 		},
 	}

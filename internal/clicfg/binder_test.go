@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/a2aproject/a2a-cli/internal/clierr"
+	"github.com/a2aproject/a2a-cli/internal/credhelper"
 	"github.com/google/go-cmp/cmp"
 	"github.com/spf13/pflag"
 )
@@ -78,11 +79,8 @@ func TestApplyConfig(t *testing.T) {
 		vals["agent-card"] = fs.String("agent-card", "", "")
 		vals["tenant"] = fs.String("tenant", "", "")
 		fs.StringArray("transport", nil, "")
-		fs.StringArray("credential-helper", nil, "")
-		fs.Lookup("credential-helper").Annotations = map[string][]string{
-			AnnotationWholeValue:            {"true"},
-			AnnotationNotFromDiscoveredFile: {"true"},
-		}
+		fs.Var(&credhelper.Flag{}, "credential-helper", "")
+		fs.Lookup("credential-helper").Annotations = map[string][]string{AnnotationNotFromDiscoveredFile: {"true"}}
 		fs.Bool("insecure", false, "")
 		fs.Bool("stream", false, "")
 		fs.String("config", "", "")
@@ -155,16 +153,13 @@ func TestApplyConfig(t *testing.T) {
 	t.Run("keeps a credential helper with commas as one entry", func(t *testing.T) {
 		t.Parallel()
 		fs, _ := newFlags()
-		s := store(t, map[string]string{"A2ACLI_CREDENTIAL_HELPER": "helper --scopes=a,b"})
+		s := store(t, map[string]string{"A2ACLI_CREDENTIAL_HELPER": "/opt/helper,v2"})
 
 		if _, err := Bind(fs, s); err != nil {
 			t.Fatalf("applyConfig() error = %v", err)
 		}
-		got, err := fs.GetStringArray("credential-helper")
-		if err != nil {
-			t.Fatalf("fs.GetStringArray() error = %v", err)
-		}
-		if diff := cmp.Diff([]string{"helper --scopes=a,b"}, got); diff != "" {
+		got := fs.Lookup("credential-helper").Value.(pflag.SliceValue).GetSlice()
+		if diff := cmp.Diff([]string{"/opt/helper,v2"}, got); diff != "" {
 			t.Fatalf("credential-helper wrong result (-want +got) diff = %s", diff)
 		}
 	})
@@ -177,7 +172,7 @@ func TestApplyConfig(t *testing.T) {
 			want []string
 		}{
 			{name: "unset", want: []string{}},
-			{name: "falls back to the user config", user: "credential-helper:\n  - user-helper\n", want: []string{"user-helper"}},
+			{name: "falls back to the user config", user: "credential-helper:\n  - command: [user-helper, --flag]\n", want: []string{"user-helper --flag"}},
 		}
 		for _, tc := range tests {
 			t.Run(tc.name, func(t *testing.T) {
@@ -201,10 +196,7 @@ func TestApplyConfig(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Bind() error = %v", err)
 				}
-				got, err := fs.GetStringArray("credential-helper")
-				if err != nil {
-					t.Fatalf("fs.GetStringArray() error = %v", err)
-				}
+				got := fs.Lookup("credential-helper").Value.(pflag.SliceValue).GetSlice()
 				if diff := cmp.Diff(tc.want, got); diff != "" {
 					t.Fatalf("credential-helper wrong result (-want +got) diff = %s", diff)
 				}
@@ -235,10 +227,7 @@ func TestApplyConfig(t *testing.T) {
 		if _, err := Bind(fs, s); err != nil {
 			t.Fatalf("Bind() error = %v", err)
 		}
-		got, err := fs.GetStringArray("credential-helper")
-		if err != nil {
-			t.Fatalf("fs.GetStringArray() error = %v", err)
-		}
+		got := fs.Lookup("credential-helper").Value.(pflag.SliceValue).GetSlice()
 		if diff := cmp.Diff([]string{"helper"}, got); diff != "" {
 			t.Fatalf("credential-helper wrong result (-want +got) diff = %s", diff)
 		}

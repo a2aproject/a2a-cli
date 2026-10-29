@@ -26,16 +26,10 @@ import (
 
 const envPrefix = "A2ACLI_"
 
-// Flag annotations that change how [Bind] reads a flag from configuration.
-const (
-	// AnnotationWholeValue keeps a string value of a repeatable flag as one
-	// entry instead of splitting it on commas.
-	AnnotationWholeValue = "a2a-cli/whole-value"
-	// AnnotationNotFromDiscoveredFile ignores a value from a .env found by
-	// walking up from the working directory, for flags that a cloned
-	// repository must not be able to set.
-	AnnotationNotFromDiscoveredFile = "a2a-cli/not-from-discovered-file"
-)
+// AnnotationNotFromDiscoveredFile is a flag annotation that makes [Bind]
+// ignore a value from a .env found by walking up from the working directory,
+// for flags that a cloned repository must not be able to set.
+const AnnotationNotFromDiscoveredFile = "a2a-cli/not-from-discovered-file"
 
 // FlagBinding records how a single flag was resolved.
 type FlagBinding struct {
@@ -113,6 +107,9 @@ func Bind(flags *pflag.FlagSet, store *Store) ([]FlagBinding, error) {
 			value = redactServiceParams(value)
 		}
 		binding.Value = formatValue(value)
+		if _, ok := f.Value.(ConfigValue); ok {
+			binding.Value = flagValueString(f)
+		}
 		bindings = append(bindings, binding)
 	})
 
@@ -159,7 +156,16 @@ func flagValueString(f *pflag.Flag) string {
 	return f.Value.String()
 }
 
+// ConfigValue is a flag value that reads configuration values itself, such
+// as lists of objects that have no string form.
+type ConfigValue interface {
+	SetConfig(raw any) error
+}
+
 func setFlagValue(f *pflag.Flag, raw any) error {
+	if cv, ok := f.Value.(ConfigValue); ok {
+		return cv.SetConfig(raw)
+	}
 	if slice, ok := toStringSlice(raw); ok {
 		if sv, ok := f.Value.(pflag.SliceValue); ok {
 			return sv.Replace(slice)
@@ -175,9 +181,6 @@ func setFlagValue(f *pflag.Flag, raw any) error {
 	switch v := raw.(type) {
 	case string:
 		if sv, ok := f.Value.(pflag.SliceValue); ok {
-			if hasAnnotation(f, AnnotationWholeValue) {
-				return sv.Replace([]string{v})
-			}
 			parts := strings.Split(v, ",")
 			for i := range parts {
 				parts[i] = strings.TrimSpace(parts[i])

@@ -41,18 +41,12 @@ func (g *globalConfig) initHTTPTransport() error {
 	return nil
 }
 
-// initCredentials parses --credential-helper. Helpers run only when a
+// initCredentials sets up --credential-helper. Helpers run only when a
 // request is made to a host in their scope.
-func (g *globalConfig) initCredentials() error {
-	if len(g.credentialHelpers) == 0 {
-		return nil
+func (g *globalConfig) initCredentials() {
+	if helpers := g.credentialHelpers.Helpers(); len(helpers) > 0 {
+		g.credentials = &credhelper.Source{Helpers: helpers, Logf: g.logf}
 	}
-	helpers, err := credhelper.ParseAll(g.credentialHelpers)
-	if err != nil {
-		return clierr.Usage(err.Error())
-	}
-	g.credentials = &credhelper.Source{Helpers: helpers, Logf: g.logf}
-	return nil
 }
 
 // cardHeaders returns the helper headers for the card request to ref that

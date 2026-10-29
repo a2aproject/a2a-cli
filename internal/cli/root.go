@@ -78,7 +78,7 @@ type globalConfig struct {
 	unixSocket   string
 	configPath   string
 
-	credentialHelpers []string
+	credentialHelpers credhelper.Flag
 	credentials       *credhelper.Source
 
 	pluginsEnabled bool
@@ -183,9 +183,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 			if err := cfg.initHTTPTransport(); err != nil {
 				return err
 			}
-			if err := cfg.initCredentials(); err != nil {
-				return err
-			}
+			cfg.initCredentials()
 
 			switch output.Mode(cfg.output) {
 			case output.ModeText, output.ModeJson, output.ModeJSONL:
@@ -210,17 +208,11 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	pf.BoolVarP(&cfg.verbose, "verbose", "v", false, "Verbose output to stderr")
 	pf.BoolVar(&cfg.insecureGRPC, "insecure", false, "Use insecure (plaintext) gRPC transport credentials")
 	pf.StringVar(&cfg.unixSocket, "unix-socket", "", "Send HTTP requests through a Unix socket: <path> for every host, or <host>=<path> for one host")
-	pf.StringArrayVar(&cfg.credentialHelpers, "credential-helper", nil, "Credential helper returning the headers for an agent: [scope=]command [args...] (repeatable; see a2a auth get --help)")
+	pf.Var(&cfg.credentialHelpers, "credential-helper", "Credential helper returning the headers for an agent: [scope=]path (repeatable; see a2a auth get --help)")
 	pf.StringVar(&cfg.configPath, "config", "", "Load configuration from an explicit file (.yaml, .json, or .env) in place of the local .env")
-	annotations := map[string][]string{
-		"unix-socket":       {clicfg.AnnotationNotFromDiscoveredFile},
-		"credential-helper": {clicfg.AnnotationNotFromDiscoveredFile, clicfg.AnnotationWholeValue},
-	}
-	for name, keys := range annotations {
-		for _, key := range keys {
-			if err := pf.SetAnnotation(name, key, []string{"true"}); err != nil {
-				return nil, err
-			}
+	for _, name := range []string{"unix-socket", "credential-helper"} {
+		if err := pf.SetAnnotation(name, clicfg.AnnotationNotFromDiscoveredFile, []string{"true"}); err != nil {
+			return nil, err
 		}
 	}
 

@@ -27,11 +27,9 @@ import (
 	"os/exec"
 	"strings"
 	"time"
-
-	"github.com/google/shlex"
 )
 
-// Helper is a configured credential helper, from "[scope=]command [args...]".
+// Helper is a configured credential helper.
 type Helper struct {
 	// Spec is the configured value, for messages.
 	Spec string
@@ -53,27 +51,56 @@ type request struct {
 	URI string `json:"uri"`
 }
 
-// Parse parses "[scope=]command [args...]". The scope is the text before the
-// first '=' when it looks like a host pattern; the command is split like a
-// shell would.
+// Parse parses "[scope=]path", the form Bazel's --credential_helper takes.
+// The scope is the text before the first '=' when it looks like a host
+// pattern.
 func Parse(spec string) (Helper, error) {
 	h := Helper{Spec: spec}
-	rest := strings.TrimSpace(spec)
-	if scope, cmd, ok := strings.Cut(rest, "="); ok && isScope(scope) {
-		if strings.Contains(scope, ":") {
-			return Helper{}, fmt.Errorf("credential helper %q: scope %q must be a host without a port", spec, scope)
+	path := strings.TrimSpace(spec)
+	if scope, rest, ok := strings.Cut(path, "="); ok && isScope(scope) {
+		if err := checkScope(scope); err != nil {
+			return Helper{}, fmt.Errorf("credential helper %q: %w", spec, err)
 		}
-		h.Scope, rest = strings.ToLower(scope), cmd
+		h.Scope, path = strings.ToLower(scope), strings.TrimSpace(rest)
 	}
-	args, err := shlex.Split(rest)
-	if err != nil {
-		return Helper{}, fmt.Errorf("credential helper %q: %w", spec, err)
+	if path == "" {
+		return Helper{}, fmt.Errorf("credential helper %q: no path", spec)
 	}
-	if len(args) == 0 {
+	h.Command = []string{path}
+	return h, nil
+}
+
+// Entry is a credential helper from a config file.
+type Entry struct {
+	Scope   string   `json:"scope"`
+	Command []string `json:"command"`
+}
+
+// Helper validates e.
+func (e Entry) Helper() (Helper, error) {
+	spec := strings.Join(e.Command, " ")
+	if e.Scope != "" {
+		spec = e.Scope + "=" + spec
+	}
+	if len(e.Command) == 0 || e.Command[0] == "" {
 		return Helper{}, fmt.Errorf("credential helper %q: no command", spec)
 	}
-	h.Command = args
-	return h, nil
+	if e.Scope != "" {
+		if !isScope(e.Scope) {
+			return Helper{}, fmt.Errorf("credential helper %q: scope %q must be a host or *.domain", spec, e.Scope)
+		}
+		if err := checkScope(e.Scope); err != nil {
+			return Helper{}, fmt.Errorf("credential helper %q: %w", spec, err)
+		}
+	}
+	return Helper{Spec: spec, Scope: strings.ToLower(e.Scope), Command: e.Command}, nil
+}
+
+func checkScope(scope string) error {
+	if strings.Contains(scope, ":") {
+		return fmt.Errorf("scope %q must be a host without a port", scope)
+	}
+	return nil
 }
 
 func isScope(s string) bool {
@@ -82,19 +109,6 @@ func isScope(s string) bool {
 	}
 	host := strings.TrimPrefix(s, "*.")
 	return host != "" && !strings.Contains(host, "*")
-}
-
-// ParseAll parses every spec.
-func ParseAll(specs []string) ([]Helper, error) {
-	helpers := make([]Helper, 0, len(specs))
-	for _, s := range specs {
-		h, err := Parse(s)
-		if err != nil {
-			return nil, err
-		}
-		helpers = append(helpers, h)
-	}
-	return helpers, nil
 }
 
 // Select returns the helper for rawURL: the one with the most specific
