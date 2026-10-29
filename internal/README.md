@@ -37,8 +37,8 @@ These apply to every client-mode command. Each command selects the agent it talk
 | `--output <fmt>` | `-o` | Output format: `text` (default), `json` (indented), or `jsonl` (one compact JSON object per line). |
 | `--svc-param <k=v>` | | Service parameter (repeatable). The chosen transport defines how it's passed. Split on the first `=`. |
 | `--auth <creds>` | | Shorthand for `--svc-param "Authorization=<creds>"`. |
-| `--credential-helper <spec>` | | Credential helper returning the headers for an agent: `[scope=]command [args...]`. Repeatable. See [Credentials](#credentials). |
-| `--unix-socket <spec>` | | Send HTTP requests through a Unix socket: `<path>` for every host, or `<host>=<path>` for one host. Applies to the card request and the REST and JSON-RPC transports, not gRPC. |
+| `--credential-helper <spec>` | | Credential helper returning the headers for an agent: `[scope=]command [args...]`. Repeatable. Not read from the local `.env`. See [Credentials](#credentials). |
+| `--unix-socket <spec>` | | Send HTTP requests through a Unix socket: `<path>` for every host, or `<host>=<path>` for one host. Applies to the card request and the REST and JSON-RPC transports, not gRPC. Not read from the local `.env`. |
 | `--tenant <id>` | | Tenant identifier. Passed on every request. |
 | `--timeout <dur>` | | Request timeout. Default `30s`. |
 | `--verbose` | `-v` | Verbose output to stderr. |
@@ -265,7 +265,7 @@ Streams events to stdout until the task reaches a terminal state. Output format 
 
 ## Credentials
 
-A credential helper is a program that returns the HTTP headers to send to an agent. a2a implements the [Bazel credential helper protocol](https://github.com/EngFlow/credential-helper-spec), so helpers written for Bazel work unchanged: a2a runs `<command> [args...] get`, writes `{"uri": "<request URL>"}` to its stdin, and reads `{"headers": {"Authorization": ["Bearer …"]}, "expires": "<RFC 3339>"}` from its stdout.
+A credential helper is a program that returns the HTTP headers to send to an agent. a2a implements the [Bazel credential helper protocol](https://github.com/EngFlow/credential-helper-spec), so helpers written for Bazel work unchanged: a2a runs `<command> [args...] get`, writes `{"uri": "<agent URL>"}` to its stdin, and reads `{"headers": {"Authorization": ["Bearer …"]}, "expires": "<RFC 3339>"}` from its stdout.
 
 Configure helpers with `--credential-helper`, `A2ACLI_CREDENTIAL_HELPER` (one helper; commas are not separators), or `credential-helper` in a config file:
 
@@ -276,9 +276,9 @@ credential-helper:
   - "*.corp.example.com=/usr/local/bin/corp-helper"
 ```
 
-Each value is `[scope=]command [args...]`. A scope is a host without a port (`example.com`), or `*.example.com` for the domain and its subdomains. Helpers are chosen per request: the card request uses the helper for the card URL, and A2A calls use the helper for the interface URL the client connects to, so headers never reach a host outside the helper's scope. The helper with the most specific matching scope runs; among equal scopes the last one wins. Its headers are sent unless `--auth` or `--svc-param` set the same header. a2a runs a helper once per URL and reuses its headers until they expire. `--timeout` bounds each run. A helper that exits non-zero fails the command; a helper with no credentials for the URL prints `{}`.
+Each value is `[scope=]command [args...]`. A scope is a host without a port (`example.com`), or `*.example.com` for the domain and its subdomains. Helpers are chosen per request: the card request uses the helper for the card reference as given (`--agent-card` or the positional URL), and A2A calls use the helper for the interface URL the client connects to, so headers never reach a host outside the helper's scope. That URL is also the `uri` the helper receives. Unlike Bazel, which sends the full URL of each request, a2a does not append the `/.well-known/agent-card.json` path or the A2A method path. The helper with the most specific matching scope runs; among equal scopes the last one wins. Its headers are sent unless `--auth` or `--svc-param` set the same header. a2a runs a helper once per URL and reuses its headers until they expire. `--timeout` bounds each run. A helper that exits non-zero fails the command; a helper with no credentials for the URL prints `{}`.
 
-> **Warning:** a2a executes the configured helper command. The local `.env` is found by walking up from the current directory, so a `.env` in a cloned repository can set `A2ACLI_CREDENTIAL_HELPER`. Check the `.env` of untrusted directories, or run `a2a config list` to see where `credential-helper` comes from.
+a2a executes the configured helper command, so `credential-helper` and `--unix-socket` are not read from the local `.env` found by walking up from the current directory: a `.env` in a cloned repository could otherwise run a command or redirect requests. a2a fails with a usage error when that `.env` sets either one. Set them with the flag, the environment, `~/.config/a2a-cli/config.yaml`, or a file passed with `--config`.
 
 ### `auth get` - Inspect credentials
 

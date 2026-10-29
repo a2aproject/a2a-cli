@@ -26,6 +26,17 @@ import (
 
 const envPrefix = "A2ACLI_"
 
+// Flag annotations that change how [Bind] reads a flag from configuration.
+const (
+	// AnnotationWholeValue keeps a string value of a repeatable flag as one
+	// entry instead of splitting it on commas.
+	AnnotationWholeValue = "a2a-cli/whole-value"
+	// AnnotationNotFromDiscoveredFile rejects a value from a .env found by
+	// walking up from the working directory, for flags that a cloned
+	// repository must not be able to set.
+	AnnotationNotFromDiscoveredFile = "a2a-cli/not-from-discovered-file"
+)
+
 // FlagBinding records how a single flag was resolved.
 type FlagBinding struct {
 	Name      string
@@ -72,6 +83,13 @@ func Bind(flags *pflag.FlagSet, store *Store) ([]FlagBinding, error) {
 			binding.Source = "default"
 			binding.Value = flagValueString(f)
 			bindings = append(bindings, binding)
+			return
+		}
+
+		if source.Discovered && hasAnnotation(f, AnnotationNotFromDiscoveredFile) {
+			errs = append(errs, clierr.Usage(fmt.Sprintf(
+				"--%s is not read from %s, a .env found from the working directory; pass --config %s to use it, or set it in the environment or ~/.config/a2a-cli/config.yaml",
+				f.Name, source.Path, source.Path)))
 			return
 		}
 
@@ -157,7 +175,7 @@ func setFlagValue(f *pflag.Flag, raw any) error {
 	switch v := raw.(type) {
 	case string:
 		if sv, ok := f.Value.(pflag.SliceValue); ok {
-			if !splitsOnComma(f.Name) {
+			if hasAnnotation(f, AnnotationWholeValue) {
 				return sv.Replace([]string{v})
 			}
 			parts := strings.Split(v, ",")
@@ -174,10 +192,9 @@ func setFlagValue(f *pflag.Flag, raw any) error {
 	}
 }
 
-// splitsOnComma reports whether a single string value of a repeatable flag
-// holds a comma-separated list. Credential helper commands may contain commas.
-func splitsOnComma(name string) bool {
-	return name != "credential-helper"
+func hasAnnotation(f *pflag.Flag, key string) bool {
+	_, ok := f.Annotations[key]
+	return ok
 }
 
 func flagToEnvVar(name string) string {

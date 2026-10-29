@@ -193,6 +193,17 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	pf.StringVar(&cfg.unixSocket, "unix-socket", "", "Send HTTP requests through a Unix socket: <path> for every host, or <host>=<path> for one host")
 	pf.StringArrayVar(&cfg.credentialHelpers, "credential-helper", nil, "Credential helper returning the headers for an agent: [scope=]command [args...] (repeatable; see a2a auth --help)")
 	pf.StringVar(&cfg.configPath, "config", "", "Load configuration from an explicit file (.yaml, .json, or .env) in place of the local .env")
+	annotations := map[string][]string{
+		"unix-socket":       {clicfg.AnnotationNotFromDiscoveredFile},
+		"credential-helper": {clicfg.AnnotationNotFromDiscoveredFile, clicfg.AnnotationWholeValue},
+	}
+	for name, keys := range annotations {
+		for _, key := range keys {
+			if err := pf.SetAnnotation(name, key, []string{"true"}); err != nil {
+				return nil, err
+			}
+		}
+	}
 
 	cmd.AddCommand(
 		newCardCmd(cfg),

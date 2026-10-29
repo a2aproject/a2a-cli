@@ -79,6 +79,10 @@ func TestApplyConfig(t *testing.T) {
 		vals["tenant"] = fs.String("tenant", "", "")
 		fs.StringArray("transport", nil, "")
 		fs.StringArray("credential-helper", nil, "")
+		fs.Lookup("credential-helper").Annotations = map[string][]string{
+			AnnotationWholeValue:            {"true"},
+			AnnotationNotFromDiscoveredFile: {"true"},
+		}
 		fs.Bool("insecure", false, "")
 		fs.Bool("stream", false, "")
 		fs.String("config", "", "")
@@ -161,6 +165,45 @@ func TestApplyConfig(t *testing.T) {
 			t.Fatalf("fs.GetStringArray() error = %v", err)
 		}
 		if diff := cmp.Diff([]string{"helper --scopes=a,b"}, got); diff != "" {
+			t.Fatalf("credential-helper wrong result (-want +got) diff = %s", diff)
+		}
+	})
+
+	t.Run("rejects a protected flag from a discovered .env", func(t *testing.T) {
+		t.Parallel()
+		fs, _ := newFlags()
+		dir := t.TempDir()
+		writeDotenv(t, filepath.Join(dir, ".env"), map[string]string{"A2ACLI_CREDENTIAL_HELPER": "helper"})
+		s, err := Load(LoadOpts{WorkingDir: dir, GlobalPath: filepath.Join(dir, "none.env"), LookupEnv: makeEnv(nil)})
+		if err != nil {
+			t.Fatalf("config.Load() error = %v", err)
+		}
+
+		_, err = Bind(fs, s)
+		if ce := clierr.Classify(err); ce.Code != clierr.CodeUsage || !strings.Contains(err.Error(), "--config") {
+			t.Fatalf("Bind() error = %v, want a usage error suggesting --config", err)
+		}
+	})
+
+	t.Run("reads a protected flag from an explicit --config", func(t *testing.T) {
+		t.Parallel()
+		fs, _ := newFlags()
+		dir := t.TempDir()
+		cfgPath := filepath.Join(dir, ".env")
+		writeDotenv(t, cfgPath, map[string]string{"A2ACLI_CREDENTIAL_HELPER": "helper"})
+		s, err := Load(LoadOpts{ConfigPath: cfgPath, WorkingDir: dir, GlobalPath: filepath.Join(dir, "none.env"), LookupEnv: makeEnv(nil)})
+		if err != nil {
+			t.Fatalf("config.Load() error = %v", err)
+		}
+
+		if _, err := Bind(fs, s); err != nil {
+			t.Fatalf("Bind() error = %v", err)
+		}
+		got, err := fs.GetStringArray("credential-helper")
+		if err != nil {
+			t.Fatalf("fs.GetStringArray() error = %v", err)
+		}
+		if diff := cmp.Diff([]string{"helper"}, got); diff != "" {
 			t.Fatalf("credential-helper wrong result (-want +got) diff = %s", diff)
 		}
 	})

@@ -32,6 +32,7 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/a2aproject/a2a-cli/internal/clicfg"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/localsrv"
 )
@@ -82,23 +83,24 @@ func startAuthRecordingServerWithInterface(t *testing.T, iface func(serverURL st
 	return server.URL, rec
 }
 
-// writeCredentialHelper writes a helper that answers "get" with the
-// Authorization header "Bearer <uri>".
+// writeCredentialHelper returns a helper spec that answers "get" with the
+// Authorization header "Bearer <uri>". The script runs with sh: executing a
+// file written while parallel tests fork can fail with ETXTBSY
+// (golang/go#22315).
 func writeCredentialHelper(t *testing.T) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("helper scripts need a POSIX shell")
 	}
 	path := filepath.Join(t.TempDir(), "helper")
-	script := `#!/bin/sh
-[ "$1" = get ] || exit 2
+	script := `[ "$1" = get ] || exit 2
 uri=$(sed 's/.*"uri":"\([^"]*\)".*/\1/')
 printf '{"headers":{"Authorization":["Bearer %s"]}}' "$uri"
 `
-	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+	if err := os.WriteFile(path, []byte(script), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return path
+	return "sh " + path
 }
 
 func TestCredentialHelper(t *testing.T) {
@@ -219,6 +221,38 @@ func TestCredentialHelperInvalidSpec(t *testing.T) {
 	_, err := runCMD(t, args...)
 	if ce := clierr.Classify(err); ce.Code != clierr.CodeUsage {
 		t.Fatalf("a2a %s error = %v, want a usage error", strings.Join(args, " "), err)
+	}
+}
+
+func TestCredentialFlagsRejectedFromDiscoveredEnv(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		env  string
+	}{
+		{name: "credential helper", env: "A2ACLI_CREDENTIAL_HELPER=helper"},
+		{name: "unix socket", env: "A2ACLI_UNIX_SOCKET=/tmp/a2a.sock"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(tc.env+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			loader := cfgLoaderFunc(func(opts clicfg.LoadOpts) (*clicfg.Store, error) {
+				opts.WorkingDir = dir
+				opts.GlobalPath = filepath.Join(dir, "none.env")
+				opts.UserPath = filepath.Join(dir, "none.yaml")
+				opts.LookupEnv = func(string) (string, bool) { return "", false }
+				return clicfg.Load(opts)
+			})
+			args := []string{"card", "get", "https://agent.example.com"}
+			_, err := runCMDWithConfig(t, deps{cfgLoader: loader}, args...)
+			if ce := clierr.Classify(err); ce.Code != clierr.CodeUsage {
+				t.Fatalf("a2a %s error = %v, want a usage error", strings.Join(args, " "), err)
+			}
+		})
 	}
 }
 

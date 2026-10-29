@@ -40,6 +40,9 @@ type Source struct {
 	Kind SourceKind
 	// Path is set for file-backed sources.
 	Path string
+	// Discovered is set when the file is a .env found by walking up from the
+	// working directory rather than one named by --config.
+	Discovered bool
 }
 
 // String implements Stringer.
@@ -92,7 +95,7 @@ func (s *Store) LookupFlag(name, envVar string) (any, Source, bool) {
 	}
 	if s.local != nil {
 		if v, ok := s.local.lookup(name, envVar); ok {
-			return v, Source{Kind: SourceLocalFile, Path: s.local.path}, true
+			return v, Source{Kind: SourceLocalFile, Path: s.local.path, Discovered: s.local.discovered}, true
 		}
 	}
 	if s.user != nil {
@@ -109,8 +112,9 @@ func (s *Store) LookupFlag(name, envVar string) (any, Source, bool) {
 }
 
 type loadedFile struct {
-	path   string
-	values map[string]any
+	path       string
+	values     map[string]any
+	discovered bool
 }
 
 func (f *loadedFile) lookup(name, envVar string) (any, bool) {

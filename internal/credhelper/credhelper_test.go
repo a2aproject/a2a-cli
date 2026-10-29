@@ -101,16 +101,18 @@ func TestSelect(t *testing.T) {
 	}
 }
 
+// writeHelper returns a helper spec running script with sh. Executing a file
+// written while parallel tests fork can fail with ETXTBSY (golang/go#22315).
 func writeHelper(t *testing.T, script string) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("helper scripts need a POSIX shell")
 	}
 	path := filepath.Join(t.TempDir(), "helper")
-	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+script), 0o700); err != nil {
+	if err := os.WriteFile(path, []byte(script), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return path
+	return "sh " + path
 }
 
 func TestGet(t *testing.T) {

@@ -104,7 +104,7 @@ func loadLocal(opts LoadOpts) (*loadedFile, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &loadedFile{path: path, values: toStringAnyMap(values)}, nil
+	return &loadedFile{path: path, values: toStringAnyMap(values), discovered: true}, nil
 }
 
 func loadGlobal(opts LoadOpts) (*loadedFile, error) {

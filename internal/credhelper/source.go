@@ -71,6 +71,8 @@ func expired(resp *Response) bool {
 
 // Interceptor adds the headers from the helper for each call's interface URL
 // as service parameters, unless the call already carries the same parameter.
+// The helper receives the interface URL rather than the URL of the method,
+// which the interceptor does not see.
 type Interceptor struct {
 	a2aclient.PassthroughInterceptor
 	Source *Source
