@@ -1059,6 +1059,11 @@ func TestInsecureCredentialWarning(t *testing.T) {
 			args:     []string{"send", "-a", url, "--insecure", "hi"},
 			wantWarn: false,
 		},
+		{
+			name:     "insecure with a credential helper warns",
+			args:     []string{"send", "-a", url, "--insecure", "--credential-helper", writeCredentialHelper(t), "hi"},
+			wantWarn: true,
+		},
 	}
 
 	for _, tt := range tests {

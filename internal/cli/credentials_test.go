@@ -32,31 +32,44 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/localsrv"
 )
 
-// authRecorder records the Authorization header of every request.
+type recordedRequest struct {
+	Path string
+	Auth string
+}
+
+// authRecorder records the path and Authorization header of every request.
 type authRecorder struct {
 	mu   sync.Mutex
-	seen []string
+	seen []recordedRequest
 }
 
 func (r *authRecorder) wrap(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		r.mu.Lock()
-		r.seen = append(r.seen, req.Header.Get("Authorization"))
+		r.seen = append(r.seen, recordedRequest{Path: req.URL.Path, Auth: req.Header.Get("Authorization")})
 		r.mu.Unlock()
 		h.ServeHTTP(w, req)
 	})
 }
 
-func (r *authRecorder) all() []string {
+func (r *authRecorder) all() []recordedRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return append([]string(nil), r.seen...)
+	return append([]recordedRequest(nil), r.seen...)
 }
 
 func startAuthRecordingServer(t *testing.T) (string, *authRecorder) {
+	t.Helper()
+	return startAuthRecordingServerWithInterface(t, func(serverURL string) string { return serverURL })
+}
+
+// startAuthRecordingServerWithInterface serves a card advertising the
+// interface URL that iface derives from the server URL.
+func startAuthRecordingServerWithInterface(t *testing.T, iface func(serverURL string) string) (string, *authRecorder) {
 	t.Helper()
 	capabilities := a2a.AgentCapabilities{Streaming: true}
 	handler := a2asrv.NewHandler(localsrv.NewEchoExecutor(), a2asrv.WithCapabilityChecks(&capabilities))
@@ -65,7 +78,7 @@ func startAuthRecordingServer(t *testing.T) (string, *authRecorder) {
 	rec := &authRecorder{}
 	server := httptest.NewServer(rec.wrap(mux))
 	t.Cleanup(server.Close)
-	mux.Handle(a2asrv.WellKnownAgentCardPath, a2asrv.NewStaticAgentCardHandler(newAgentCard(server.URL, capabilities)))
+	mux.Handle(a2asrv.WellKnownAgentCardPath, a2asrv.NewStaticAgentCardHandler(newAgentCard(iface(server.URL), capabilities)))
 	return server.URL, rec
 }
 
@@ -154,11 +167,58 @@ func TestCredentialHelper(t *testing.T) {
 				t.Fatalf("a2a %s sent no requests", strings.Join(args, " "))
 			}
 			for _, got := range seen {
-				if want := tc.wantAuth(url); got != want {
-					t.Fatalf("a2a %s Authorization = %q, want %q", strings.Join(args, " "), got, want)
+				if want := tc.wantAuth(url); got.Auth != want {
+					t.Fatalf("a2a %s Authorization for %s = %q, want %q", strings.Join(args, " "), got.Path, got.Auth, want)
 				}
 			}
 		})
+	}
+}
+
+func TestCredentialHelperScopedToRequestHost(t *testing.T) {
+	t.Parallel()
+	helper := writeCredentialHelper(t)
+	url, rec := startAuthRecordingServerWithInterface(t, func(serverURL string) string {
+		return strings.Replace(serverURL, "127.0.0.1", "localhost", 1)
+	})
+	args := []string{"send", "-a", url, "--credential-helper", "127.0.0.1=" + helper, "hello"}
+	if _, err := runCMD(t, args...); err != nil {
+		t.Fatalf("a2a %s error = %v", strings.Join(args, " "), err)
+	}
+	want := []recordedRequest{
+		{Path: a2asrv.WellKnownAgentCardPath, Auth: "Bearer " + url},
+		{Path: "/message:send", Auth: ""},
+	}
+	if diff := cmp.Diff(want, rec.all()); diff != "" {
+		t.Fatalf("a2a %s wrong result (-want +got) diff = %s", strings.Join(args, " "), diff)
+	}
+}
+
+func TestCredentialHelperOnlyRunsForRequests(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "config list", args: []string{"config", "list", "-a", "https://agent.example.com", "--credential-helper", "false"}},
+		{name: "transport list", args: []string{"transport", "list", "-a", "https://agent.example.com", "--credential-helper", "false"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := runCMD(t, tc.args...); err != nil {
+				t.Fatalf("a2a %s error = %v", strings.Join(tc.args, " "), err)
+			}
+		})
+	}
+}
+
+func TestCredentialHelperInvalidSpec(t *testing.T) {
+	t.Parallel()
+	args := []string{"send", "-a", "https://agent.example.com", "--credential-helper", `sh -c "unterminated`, "hello"}
+	_, err := runCMD(t, args...)
+	if ce := clierr.Classify(err); ce.Code != clierr.CodeUsage {
+		t.Fatalf("a2a %s error = %v, want a usage error", strings.Join(args, " "), err)
 	}
 }
 
@@ -180,6 +240,16 @@ func TestAuthGet(t *testing.T) {
 			name: "revealed",
 			args: []string{"auth", "get", "https://agent.example.com", "--credential-helper", helper, "--reveal", "-o", "json"},
 			want: map[string]any{"url": "https://agent.example.com", "helper": helper, "headers": map[string]any{"Authorization": []any{"Bearer https://agent.example.com"}}, "expires": ""},
+		},
+		{
+			name: "ignores the helper of the configured agent",
+			args: []string{"auth", "get", "https://other.example.com", "-a", "https://agent.example.com", "--credential-helper", "agent.example.com=false", "--credential-helper", "other.example.com=" + helper, "-o", "json"},
+			want: map[string]any{"url": "https://other.example.com", "helper": "other.example.com=" + helper, "headers": map[string]any{"Authorization": []any{"<redacted>"}}, "expires": ""},
+		},
+		{
+			name:    "local file",
+			args:    []string{"auth", "get", "./card.json", "--credential-helper", helper},
+			wantErr: "http(s) agent URL",
 		},
 		{
 			name:    "no helper for the host",
@@ -254,6 +324,7 @@ func TestSendOverUnixSocket(t *testing.T) {
 		{name: "agent card", socket: sock, args: []string{"-a", base}},
 		{name: "endpoint", socket: sock, args: []string{"-e", base, "--transport", "rest"}},
 		{name: "scoped to the host", socket: "agent.invalid=" + sock, args: []string{"-a", base}},
+		{name: "scoped to the host in another case", socket: "AGENT.invalid=" + sock, args: []string{"-a", base}},
 		{name: "scoped to another host", socket: "other.invalid=" + sock, args: []string{"-a", base, "--timeout", "2s"}, wantErr: true},
 	}
 	for _, tc := range tests {

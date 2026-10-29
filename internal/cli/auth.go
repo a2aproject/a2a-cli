@@ -29,9 +29,9 @@ credential-helper in the config file) is a program that returns the HTTP
 headers to send to an agent, following the Bazel credential helper protocol:
 https://github.com/EngFlow/credential-helper-spec. Its value is
 "[scope=]command [args...]", where scope is a host such as example.com, or
-*.example.com for a domain and its subdomains. The most specific helper for
-the agent's host runs as "command args... get", and its headers are sent
-unless --auth or --svc-param set the same header.`,
+*.example.com for a domain and its subdomains. For each request, the most
+specific helper for the request's host runs as "command args... get", and
+its headers are sent unless --auth or --svc-param set the same header.`,
 	}
 	cmd.AddCommand(newAuthGetCmd(cfg))
 	return cmd

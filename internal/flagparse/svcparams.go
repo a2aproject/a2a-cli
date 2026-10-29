@@ -28,9 +28,8 @@ import (
 // registers several flags backed by one accumulator; merging happens as flags
 // are parsed, so Params can be read repeatedly without accumulating duplicates.
 type ServiceParams struct {
-	entries  []serviceParam
-	auth     string
-	defaults []serviceParam
+	entries []serviceParam
+	auth    string
 }
 
 type serviceParam struct {
@@ -49,7 +48,7 @@ func (s *ServiceParams) Attach(f *pflag.FlagSet) {
 // to the result and repeated calls never accumulate duplicates. Returns nil when
 // nothing was provided.
 func (s *ServiceParams) Params() a2aclient.ServiceParams {
-	if len(s.entries) == 0 && s.auth == "" && len(s.defaults) == 0 {
+	if len(s.entries) == 0 && s.auth == "" {
 		return nil
 	}
 	params := a2aclient.ServiceParams{}
@@ -59,52 +58,20 @@ func (s *ServiceParams) Params() a2aclient.ServiceParams {
 	if s.auth != "" {
 		params.Append("Authorization", s.auth)
 	}
-	for _, d := range s.defaults {
-		if !s.isSet(d.key) {
-			params.Append(d.key, d.value)
-		}
-	}
 	return params
-}
-
-// SetDefault adds values for key that are sent unless --auth or --svc-param
-// set the same key, such as the headers from a credential helper.
-func (s *ServiceParams) SetDefault(key string, values ...string) {
-	for _, v := range values {
-		s.defaults = append(s.defaults, serviceParam{key: key, value: v})
-	}
-}
-
-// isSet reports whether --svc-param, or --auth for Authorization, sets key.
-func (s *ServiceParams) isSet(key string) bool {
-	if s.auth != "" && strings.EqualFold(key, "Authorization") {
-		return true
-	}
-	for _, e := range s.entries {
-		if strings.EqualFold(e.key, key) {
-			return true
-		}
-	}
-	return false
-}
-
-// SendsCredential reports whether Params includes an Authorization entry,
-// set explicitly or by default.
-func (s *ServiceParams) SendsCredential() bool {
-	if s.HasCredential() {
-		return true
-	}
-	for _, d := range s.defaults {
-		if strings.EqualFold(d.key, "Authorization") {
-			return true
-		}
-	}
-	return false
 }
 
 // HasCredential reports whether --auth or an Authorization --svc-param is set.
 func (s *ServiceParams) HasCredential() bool {
-	return s.isSet("Authorization")
+	if s.auth != "" {
+		return true
+	}
+	for _, e := range s.entries {
+		if strings.EqualFold(e.key, "Authorization") {
+			return true
+		}
+	}
+	return false
 }
 
 type svcParamValue struct{ s *ServiceParams }

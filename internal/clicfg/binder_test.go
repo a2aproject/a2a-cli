@@ -78,6 +78,7 @@ func TestApplyConfig(t *testing.T) {
 		vals["agent-card"] = fs.String("agent-card", "", "")
 		vals["tenant"] = fs.String("tenant", "", "")
 		fs.StringArray("transport", nil, "")
+		fs.StringArray("credential-helper", nil, "")
 		fs.Bool("insecure", false, "")
 		fs.Bool("stream", false, "")
 		fs.String("config", "", "")
@@ -144,6 +145,23 @@ func TestApplyConfig(t *testing.T) {
 		}
 		if diff := cmp.Diff([]string{"rest", "jsonrpc"}, got); diff != "" {
 			t.Fatalf("transport wrong result (-want +got) diff = %s", diff)
+		}
+	})
+
+	t.Run("keeps a credential helper with commas as one entry", func(t *testing.T) {
+		t.Parallel()
+		fs, _ := newFlags()
+		s := store(t, map[string]string{"A2ACLI_CREDENTIAL_HELPER": "helper --scopes=a,b"})
+
+		if _, err := Bind(fs, s); err != nil {
+			t.Fatalf("applyConfig() error = %v", err)
+		}
+		got, err := fs.GetStringArray("credential-helper")
+		if err != nil {
+			t.Fatalf("fs.GetStringArray() error = %v", err)
+		}
+		if diff := cmp.Diff([]string{"helper --scopes=a,b"}, got); diff != "" {
+			t.Fatalf("credential-helper wrong result (-want +got) diff = %s", diff)
 		}
 	})
 
@@ -580,10 +598,11 @@ tenant: yaml-tenant
 			got[r.Name] = r.Source
 		}
 		want := map[string]string{
-			"agent-card": "env",
-			"tenant":     "flag",
-			"transport":  "default",
-			"insecure":   "default",
+			"agent-card":        "env",
+			"tenant":            "flag",
+			"transport":         "default",
+			"credential-helper": "default",
+			"insecure":          "default",
 		}
 		if diff := cmp.Diff(want, got); diff != "" {
 			t.Fatalf("resolution sources wrong result (-want +got) diff = %s", diff)

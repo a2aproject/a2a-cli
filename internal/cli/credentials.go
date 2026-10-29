@@ -18,58 +18,83 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"slices"
+	"strings"
+	"sync"
 
+	"github.com/a2aproject/a2a-go/v2/a2aclient"
+
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/credhelper"
+	"github.com/a2aproject/a2a-cli/internal/unixsocket"
 )
 
-// targetURL returns the HTTP(S) URL of the agent the command talks to, or
-// "" when there is none, such as for a local card file.
-func (g *globalConfig) targetURL() string {
-	target := g.url
-	if target == "" && g.agentCard.IsSet() {
-		target = g.agentCard.URL()
-	}
-	u, err := url.Parse(target)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return ""
-	}
-	return target
-}
-
-// credentialHelper returns the --credential-helper for target.
-func (g *globalConfig) credentialHelper(target string) (credhelper.Helper, bool, error) {
-	helpers, err := credhelper.ParseAll(g.credentialHelpers)
-	if err != nil {
-		return credhelper.Helper{}, false, err
-	}
-	h, ok := credhelper.Select(helpers, target)
-	return h, ok, nil
-}
-
-// applyCredentialHelper sends the headers the credential helper returns for
-// the target agent, unless --auth or --svc-param set the same header.
-func applyCredentialHelper(ctx context.Context, cfg *globalConfig) error {
-	target := cfg.targetURL()
-	if target == "" || len(cfg.credentialHelpers) == 0 {
+// initHTTPTransport routes HTTP requests through --unix-socket, if set.
+func (g *globalConfig) initHTTPTransport() error {
+	if g.unixSocket == "" {
 		return nil
 	}
-	h, ok, err := cfg.credentialHelper(target)
-	if err != nil || !ok {
-		return err
-	}
-	cfg.logf("asking credential helper %q for %s", h.Spec, target)
-	resp, err := h.Get(ctx, target)
+	spec, err := unixsocket.Parse(g.unixSocket)
 	if err != nil {
-		return fmt.Errorf("getting credentials for %s: %w", target, err)
+		return clierr.Usage(err.Error())
 	}
-	names := make([]string, 0, len(resp.Headers))
-	for name := range resp.Headers {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-	for _, name := range names {
-		cfg.svcParams.SetDefault(name, resp.Headers[name]...)
-	}
+	g.httpTransport = spec.Transport()
 	return nil
+}
+
+// initCredentials parses --credential-helper. Helpers run only when a
+// request is made to a host in their scope.
+func (g *globalConfig) initCredentials() error {
+	if len(g.credentialHelpers) == 0 {
+		return nil
+	}
+	helpers, err := credhelper.ParseAll(g.credentialHelpers)
+	if err != nil {
+		return clierr.Usage(err.Error())
+	}
+	g.credentials = &credhelper.Source{Helpers: helpers, Logf: g.logf}
+	return nil
+}
+
+// cardHeaders returns the helper headers for the card request to ref that
+// --auth and --svc-param don't already set.
+func (g *globalConfig) cardHeaders(ctx context.Context, ref string) (map[string][]string, error) {
+	if g.credentials == nil || !isHTTPURL(ref) {
+		return nil, nil
+	}
+	_, resp, err := g.credentials.Headers(ctx, ref)
+	if err != nil || resp == nil {
+		return nil, err
+	}
+	explicit := g.svcParams.Params()
+	headers := map[string][]string{}
+	for name, values := range resp.Headers {
+		if len(explicit.Get(name)) == 0 {
+			headers[name] = values
+		}
+	}
+	return headers, nil
+}
+
+// credentialInterceptor adds the helper headers to every A2A call, chosen
+// by the host of the interface the client is connected to.
+func (g *globalConfig) credentialInterceptor() a2aclient.FactoryOption {
+	var warn sync.Once
+	return a2aclient.WithCallInterceptors(&credhelper.Interceptor{
+		Source: g.credentials,
+		OnApply: func(headers map[string][]string) {
+			if !g.insecureGRPC {
+				return
+			}
+			for name := range headers {
+				if strings.EqualFold(name, "Authorization") {
+					warn.Do(func() { _, _ = fmt.Fprintln(g.stderr(), insecureCredentialWarning) })
+				}
+			}
+		},
+	})
+}
+
+func isHTTPURL(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }

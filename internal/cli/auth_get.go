@@ -23,6 +23,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/a2aproject/a2a-cli/internal/clierr"
+	"github.com/a2aproject/a2a-cli/internal/credhelper"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 )
 
@@ -40,10 +41,13 @@ func newAuthGetCmd(cfg *globalConfig) *cobra.Command {
 				return err
 			}
 			target := ref.URL()
-			h, ok, err := cfg.credentialHelper(target)
-			if err != nil {
-				return clierr.Usage(err.Error())
+			if !isHTTPURL(target) {
+				return clierr.Usage(fmt.Sprintf("auth get needs an http(s) agent URL, got %q", args[0]))
 			}
+			if cfg.credentials == nil {
+				return fmt.Errorf("no credential helper configured")
+			}
+			h, ok := credhelper.Select(cfg.credentials.Helpers, target)
 			if !ok {
 				return fmt.Errorf("no credential helper for %s", target)
 			}

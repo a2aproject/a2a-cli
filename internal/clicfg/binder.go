@@ -157,6 +157,9 @@ func setFlagValue(f *pflag.Flag, raw any) error {
 	switch v := raw.(type) {
 	case string:
 		if sv, ok := f.Value.(pflag.SliceValue); ok {
+			if !splitsOnComma(f.Name) {
+				return sv.Replace([]string{v})
+			}
 			parts := strings.Split(v, ",")
 			for i := range parts {
 				parts[i] = strings.TrimSpace(parts[i])
@@ -169,6 +172,12 @@ func setFlagValue(f *pflag.Flag, raw any) error {
 	default:
 		return f.Value.Set(fmt.Sprint(v))
 	}
+}
+
+// splitsOnComma reports whether a single string value of a repeatable flag
+// holds a comma-separated list. Credential helper commands may contain commas.
+func splitsOnComma(name string) bool {
+	return name != "credential-helper"
 }
 
 func flagToEnvVar(name string) string {

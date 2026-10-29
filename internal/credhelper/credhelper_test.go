@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/a2aproject/a2a-go/v2/a2aclient"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -38,6 +39,7 @@ func TestParse(t *testing.T) {
 		{spec: `helper --opt=a\ b`, want: Helper{Command: []string{"helper", "--opt=a b"}}},
 		{spec: "/opt/x=y/helper", want: Helper{Command: []string{"/opt/x=y/helper"}}},
 		{spec: "example.com=", wantErr: true},
+		{spec: "localhost:8080=helper", wantErr: true},
 		{spec: "", wantErr: true},
 	}
 	for _, tc := range tests {
@@ -60,43 +62,42 @@ func TestParse(t *testing.T) {
 
 func TestSelect(t *testing.T) {
 	t.Parallel()
-	helpers, err := ParseAll([]string{
+	all := []string{
 		"default",
 		"*.example.com=wildcard",
 		"*.dev.example.com=dev-wildcard",
 		"api.example.com=exact",
 		"api.example.com=exact-override",
-	})
-	if err != nil {
-		t.Fatalf("ParseAll() error = %v", err)
 	}
 	tests := []struct {
-		url  string
-		want string
+		specs  []string
+		url    string
+		want   string
+		wantOK bool
 	}{
-		{url: "https://api.example.com/agent", want: "exact-override"},
-		{url: "https://API.example.com:8443", want: "exact-override"},
-		{url: "https://foo.dev.example.com", want: "dev-wildcard"},
-		{url: "https://foo.example.com", want: "wildcard"},
-		{url: "https://example.com", want: "wildcard"},
-		{url: "https://other.org", want: "default"},
+		{specs: all, url: "https://api.example.com/agent", want: "exact-override", wantOK: true},
+		{specs: all, url: "https://API.example.com:8443", want: "exact-override", wantOK: true},
+		{specs: all, url: "https://foo.dev.example.com", want: "dev-wildcard", wantOK: true},
+		{specs: all, url: "https://foo.example.com", want: "wildcard", wantOK: true},
+		{specs: all, url: "https://example.com", want: "wildcard", wantOK: true},
+		{specs: all, url: "https://other.org", want: "default", wantOK: true},
+		{specs: []string{"example.com=helper"}, url: "https://other.org", wantOK: false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.url, func(t *testing.T) {
 			t.Parallel()
+			helpers, err := ParseAll(tc.specs)
+			if err != nil {
+				t.Fatalf("ParseAll(%q) error = %v", tc.specs, err)
+			}
 			got, ok := Select(helpers, tc.url)
-			if !ok || got.Command[0] != tc.want {
-				t.Fatalf("Select(%q) = %v, %v, want %s", tc.url, got.Command, ok, tc.want)
+			if ok != tc.wantOK {
+				t.Fatalf("Select(%q) ok = %v, want %v", tc.url, ok, tc.wantOK)
+			}
+			if ok && got.Command[0] != tc.want {
+				t.Fatalf("Select(%q) = %v, want %s", tc.url, got.Command, tc.want)
 			}
 		})
-	}
-
-	scoped, err := ParseAll([]string{"example.com=helper"})
-	if err != nil {
-		t.Fatalf("ParseAll() error = %v", err)
-	}
-	if got, ok := Select(scoped, "https://other.org"); ok {
-		t.Fatalf("Select() = %v, want no helper for a host outside every scope", got.Command)
 	}
 }
 
@@ -149,6 +150,106 @@ func TestGet(t *testing.T) {
 			}
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Fatalf("Get() wrong result (-want +got) diff = %s", diff)
+			}
+		})
+	}
+}
+
+func TestSourceHeaders(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		expires  string
+		uris     []string
+		wantRuns int
+	}{
+		{name: "reused for the same uri", uris: []string{"https://a.example.com", "https://a.example.com"}, wantRuns: 1},
+		{name: "reused until expiry", expires: "2999-01-01T00:00:00Z", uris: []string{"https://a.example.com", "https://a.example.com"}, wantRuns: 1},
+		{name: "refreshed after expiry", expires: "2000-01-01T00:00:00Z", uris: []string{"https://a.example.com", "https://a.example.com"}, wantRuns: 2},
+		{name: "run per uri", uris: []string{"https://a.example.com", "https://a.example.com/agent"}, wantRuns: 2},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			runs := filepath.Join(t.TempDir(), "runs")
+			h, err := Parse(writeHelper(t, `echo run >>`+runs+`; printf '{"headers":{"X":["v"]},"expires":"%s"}' "`+tc.expires+`"`))
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+			src := &Source{Helpers: []Helper{h}}
+			for _, uri := range tc.uris {
+				_, resp, err := src.Headers(t.Context(), uri)
+				if err != nil {
+					t.Fatalf("Source.Headers(%q) error = %v", uri, err)
+				}
+				if diff := cmp.Diff(map[string][]string{"X": {"v"}}, resp.Headers); diff != "" {
+					t.Fatalf("Source.Headers(%q) wrong result (-want +got) diff = %s", uri, diff)
+				}
+			}
+			out, err := os.ReadFile(runs)
+			if err != nil {
+				t.Fatalf("os.ReadFile() error = %v", err)
+			}
+			if got := strings.Count(string(out), "run"); got != tc.wantRuns {
+				t.Fatalf("helper runs = %d, want %d", got, tc.wantRuns)
+			}
+		})
+	}
+}
+
+func TestInterceptor(t *testing.T) {
+	t.Parallel()
+	helper := writeHelper(t, `uri=$(sed 's/.*"uri":"\([^"]*\)".*/\1/'); printf '{"headers":{"Authorization":["Bearer %s"]}}' "$uri"`)
+	tests := []struct {
+		name    string
+		spec    string
+		baseURL string
+		params  a2aclient.ServiceParams
+		want    a2aclient.ServiceParams
+	}{
+		{
+			name:    "adds the headers for the interface url",
+			spec:    helper,
+			baseURL: "https://agent.example.com/a2a",
+			params:  a2aclient.ServiceParams{},
+			want:    a2aclient.ServiceParams{"authorization": {"Bearer https://agent.example.com/a2a"}},
+		},
+		{
+			name:    "keeps an explicit service param",
+			spec:    helper,
+			baseURL: "https://agent.example.com",
+			params:  a2aclient.ServiceParams{"authorization": {"Bearer flag"}},
+			want:    a2aclient.ServiceParams{"authorization": {"Bearer flag"}},
+		},
+		{
+			name:    "skips a host outside the scope",
+			spec:    "agent.example.com=" + helper,
+			baseURL: "https://other.example.com",
+			params:  a2aclient.ServiceParams{},
+			want:    a2aclient.ServiceParams{},
+		},
+		{
+			name:    "matches a grpc address without a scheme",
+			spec:    "agent.example.com=" + helper,
+			baseURL: "agent.example.com:443",
+			params:  a2aclient.ServiceParams{},
+			want:    a2aclient.ServiceParams{"authorization": {"Bearer https://agent.example.com:443"}},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h, err := Parse(tc.spec)
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+			i := &Interceptor{Source: &Source{Helpers: []Helper{h}}}
+			req := &a2aclient.Request{BaseURL: tc.baseURL, ServiceParams: tc.params}
+			if _, _, err := i.Before(t.Context(), req); err != nil {
+				t.Fatalf("Interceptor.Before() error = %v", err)
+			}
+			if diff := cmp.Diff(tc.want, req.ServiceParams); diff != "" {
+				t.Fatalf("Interceptor.Before() wrong result (-want +got) diff = %s", diff)
 			}
 		})
 	}

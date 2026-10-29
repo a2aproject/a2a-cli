@@ -30,22 +30,18 @@ func newCardGetCmd(cfg *globalConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get [url]",
 		Short: "Fetch and display an agent card",
-		// The positional URL is taken while validating args, which runs
-		// before the root's PersistentPreRunE asks the credential helper.
-		Args: func(cmd *cobra.Command, args []string) error {
-			if err := cobra.MaximumNArgs(1)(cmd, args); err != nil {
-				return err
-			}
-			if len(args) == 1 {
-				return cfg.agentCard.Set(args[0])
-			}
-			return nil
-		},
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
 			ctx, cancel := context.WithTimeout(ctx, cfg.timeout)
 			defer cancel()
+
+			if len(args) == 1 {
+				if err := cfg.agentCard.Set(args[0]); err != nil {
+					return err
+				}
+			}
 
 			var card *a2a.AgentCard
 			var err error

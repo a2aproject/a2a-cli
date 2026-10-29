@@ -29,6 +29,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/clicfg"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/commandplugin"
+	"github.com/a2aproject/a2a-cli/internal/credhelper"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-cli/internal/polling"
@@ -67,6 +68,7 @@ type globalConfig struct {
 	configPath   string
 
 	credentialHelpers []string
+	credentials       *credhelper.Source
 
 	pluginsEnabled bool
 
@@ -159,10 +161,10 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 			}
 			cfg.bindings = bindings
 			cfg.store = store
-			if cfg.unixSocket != "" && cfg.httpTransport == nil {
-				cfg.httpTransport = unixSocketTransport(cfg.unixSocket)
+			if err := cfg.initHTTPTransport(); err != nil {
+				return err
 			}
-			if err := applyCredentialHelper(cmd.Context(), cfg); err != nil {
+			if err := cfg.initCredentials(); err != nil {
 				return err
 			}
 

@@ -31,9 +31,6 @@ import (
 	"github.com/google/shlex"
 )
 
-// Timeout bounds a single helper invocation.
-const Timeout = 10 * time.Second
-
 // Helper is a configured credential helper, from "[scope=]command [args...]".
 type Helper struct {
 	// Spec is the configured value, for messages.
@@ -63,6 +60,9 @@ func Parse(spec string) (Helper, error) {
 	h := Helper{Spec: spec}
 	rest := strings.TrimSpace(spec)
 	if scope, cmd, ok := strings.Cut(rest, "="); ok && isScope(scope) {
+		if strings.Contains(scope, ":") {
+			return Helper{}, fmt.Errorf("credential helper %q: scope %q must be a host without a port", spec, scope)
+		}
 		h.Scope, rest = strings.ToLower(scope), cmd
 	}
 	args, err := shlex.Split(rest)
@@ -134,10 +134,8 @@ func matchRank(scope, host string) int {
 	return -1
 }
 
-// Get runs the helper for uri.
+// Get runs the helper for uri. ctx bounds the helper's run.
 func (h Helper) Get(ctx context.Context, uri string) (*Response, error) {
-	ctx, cancel := context.WithTimeout(ctx, Timeout)
-	defer cancel()
 	in, err := json.Marshal(request{URI: uri})
 	if err != nil {
 		return nil, err
