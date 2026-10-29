@@ -72,26 +72,7 @@ func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 			defer destroyClient(cfg, client)
 
 			if flags.stream {
-				defer func() { _ = cfg.Printer.Flush() }()
-				ctx, debounceTimeout := utils.WithInactivityTimeout(baseCtx, cfg.timeout)
-
-				err = handleStreaming(ctx, cfg, client, req, debounceTimeout)
-				if err == nil {
-					return nil
-				}
-				if !errors.Is(err, a2a.ErrUnsupportedOperation) {
-					return utils.UnpackCause(ctx, err)
-				}
-
-				cfg.logf("falling back to polling (%v): %v", flags.pollInterval, err)
-
-				for event, err := range poller(ctx, client, req, flags.pollInterval) {
-					debounceTimeout()
-					if err := handleStreamEntry(cfg, event, err); err != nil {
-						return utils.UnpackCause(ctx, err)
-					}
-				}
-				return nil
+				return sendStreaming(baseCtx, cfg, client, req, poller, flags.pollInterval)
 			}
 
 			ctx, cancel = context.WithTimeout(baseCtx, cfg.timeout)
@@ -154,6 +135,31 @@ func buildRequest(cmd *cobra.Command, cfg *globalConfig, flags *sendFlags, args 
 		}
 	}
 	return req, nil
+}
+
+// sendStreaming streams the reply to req, falling back to polling when the agent does
+// not support streaming. --timeout bounds the time between events.
+func sendStreaming(ctx context.Context, cfg *globalConfig, client *a2aclient.Client, req *a2a.SendMessageRequest, poller pollerFunc, pollInterval time.Duration) error {
+	defer func() { _ = cfg.Printer.Flush() }()
+	ctx, debounceTimeout := utils.WithInactivityTimeout(ctx, cfg.timeout)
+
+	err := handleStreaming(ctx, cfg, client, req, debounceTimeout)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, a2a.ErrUnsupportedOperation) {
+		return utils.UnpackCause(ctx, err)
+	}
+
+	cfg.logf("falling back to polling (%v): %v", pollInterval, err)
+
+	for event, err := range poller(ctx, client, req, pollInterval) {
+		debounceTimeout()
+		if err := handleStreamEntry(cfg, event, err); err != nil {
+			return utils.UnpackCause(ctx, err)
+		}
+	}
+	return nil
 }
 
 func handleStreaming(ctx context.Context, cfg *globalConfig, client *a2aclient.Client, req *a2a.SendMessageRequest, debounceTimeout utils.DebounceFunc) error {

@@ -48,6 +48,12 @@ func TestClassify(t *testing.T) {
 			wantExit: 4,
 		},
 		{
+			name:     "card resolution deadline exceeded is a timeout",
+			err:      CardResolution(context.DeadlineExceeded),
+			wantCode: CodeTimeout,
+			wantExit: 5,
+		},
+		{
 			name:     "deadline exceeded is a timeout",
 			err:      fmt.Errorf("waiting: %w", context.DeadlineExceeded),
 			wantCode: CodeTimeout,
@@ -136,18 +142,28 @@ func TestCardResolution(t *testing.T) {
 		err      error
 		wantCode string
 		wantExit int
+		wantHint string
 	}{
 		{
 			name:     "transport failure is io",
 			err:      fmt.Errorf("card request failed: %w", &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED}),
 			wantCode: CodeIO,
 			wantExit: 3,
+			wantHint: "check the agent is running and the --agent-card reference is correct",
 		},
 		{
 			name:     "non-transport failure is card-invalid",
 			err:      errors.New("card request failed, status: 404 Not Found"),
 			wantCode: CodeCardInvalid,
 			wantExit: 4,
+			wantHint: "check the --agent-card reference (host, full card URL, or local file path)",
+		},
+		{
+			name:     "deadline exceeded is a timeout",
+			err:      context.DeadlineExceeded,
+			wantCode: CodeTimeout,
+			wantExit: 5,
+			wantHint: "increase --timeout",
 		},
 	}
 
@@ -156,13 +172,16 @@ func TestCardResolution(t *testing.T) {
 			t.Parallel()
 			got := CardResolution(tt.err)
 			if got.Code != tt.wantCode {
-				t.Errorf("CardResolution(%v).Code = %q, want %q", tt.err, got.Code, tt.wantCode)
+				t.Fatalf("CardResolution(%v).Code = %q, want %q", tt.err, got.Code, tt.wantCode)
 			}
 			if got.Exit != tt.wantExit {
-				t.Errorf("CardResolution(%v).Exit = %d, want %d", tt.err, got.Exit, tt.wantExit)
+				t.Fatalf("CardResolution(%v).Exit = %d, want %d", tt.err, got.Exit, tt.wantExit)
+			}
+			if got.Hint != tt.wantHint {
+				t.Fatalf("CardResolution(%v).Hint = %q, want %q", tt.err, got.Hint, tt.wantHint)
 			}
 			if !errors.Is(got, tt.err) {
-				t.Errorf("CardResolution(%v) does not wrap the cause", tt.err)
+				t.Fatalf("CardResolution(%v) does not wrap the cause", tt.err)
 			}
 		})
 	}

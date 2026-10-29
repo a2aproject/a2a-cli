@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/spf13/pflag"
 )
@@ -118,7 +119,7 @@ func buildFilePart(ref, mediaType string) (*a2a.Part, error) {
 	path := strings.TrimPrefix(ref, "file://")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("reading --file-part %q: %w", ref, err)
+		return nil, clierr.Usage(fmt.Sprintf("reading --file-part %q: %v", ref, err))
 	}
 	p := a2a.NewRawPart(data)
 	p.Filename = filepath.Base(path)

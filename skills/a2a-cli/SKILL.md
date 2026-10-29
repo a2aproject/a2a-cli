@@ -96,10 +96,13 @@ transport) or `-e <url> --transport <rest|jsonrpc|grpc>` (connect directly).
    a2a task subscribe -a https://agent.example.com <task-id>
    ```
 
-4. **Check status and fetch results** at any time:
+4. **Check status, poll to completion, or fetch results:**
 
    ```bash
    a2a task get -a https://agent.example.com <task-id>
+   # Poll until completion or input/auth-required:
+   a2a task get -a https://agent.example.com <task-id> --wait
+   a2a task get -a https://agent.example.com <task-id> --wait --poll-interval 2s --timeout 60s
    ```
 
 5. **Answer an interrupted task** (it reached `INPUT_REQUIRED` / `AUTH_REQUIRED`)
@@ -132,6 +135,9 @@ Run `a2a <command> --help` for the full, current set. The load-bearing ones:
 | `-e, --endpoint <url>` + `--transport <rest\|jsonrpc\|grpc>` | Connect to one interface directly, skipping card resolution. |
 | `-o, --output json` | Machine-readable output; add `--stream` for a live event stream. |
 | `--async` | Return immediately with the identifiers instead of blocking; poll later with `task get`. |
+| `--wait` | Poll `task get` repeatedly until reaching a terminal or interrupted state. |
+| `--poll-interval <duration>` | Delay between polls while waiting (default `2s`). |
+| `--timeout <duration>` | Request timeout and overall wait budget (default `30s`). |
 | `--task-id <id>` / `--context-id <id>` | Continue a task / group a new task under a context. |
 | `--save-fileparts <dir>` | Save raw file parts from responses (artifacts and messages) as files under `<dir>`; the output still summarizes them by name/type/size. |
 | `--auth "<creds>"` / `--svc-param <k=v>` | Attach credentials or transport parameters (or set `A2ACLI_*` env vars). Never commit a secret. |

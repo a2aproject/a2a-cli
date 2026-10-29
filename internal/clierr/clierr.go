@@ -89,6 +89,15 @@ func Usage(msg string) *Error {
 // it was reached but did not yield a usable card.
 func CardResolution(err error) *Error {
 	msg := fmt.Sprintf("failed to resolve agent card: %v", err)
+	if errors.Is(err, context.DeadlineExceeded) {
+		return &Error{
+			Code:    CodeTimeout,
+			Message: msg,
+			Exit:    5,
+			err:     err,
+			Hint:    "increase --timeout",
+		}
+	}
 	if isIOError(err) {
 		return &Error{
 			Code:    CodeIO,
