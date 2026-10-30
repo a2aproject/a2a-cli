@@ -23,22 +23,15 @@ import (
 
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
 
-	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/credhelper"
 	"github.com/a2aproject/a2a-cli/internal/unixsocket"
 )
 
 // initHTTPTransport routes HTTP requests through --unix-socket, if set.
-func (g *globalConfig) initHTTPTransport() error {
-	if g.unixSocket == "" {
-		return nil
+func (g *globalConfig) initHTTPTransport() {
+	if g.unixSocket != "" {
+		g.httpTransport = unixsocket.Transport(g.unixSocket)
 	}
-	spec, err := unixsocket.Parse(g.unixSocket)
-	if err != nil {
-		return clierr.Usage(err.Error())
-	}
-	g.httpTransport = spec.Transport()
-	return nil
 }
 
 // initCredentials sets up --credential-helper. Helpers run only when a

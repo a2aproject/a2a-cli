@@ -15,60 +15,59 @@
 package unixsocket
 
 import (
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
-
-	"github.com/google/go-cmp/cmp"
 )
 
-func TestParse(t *testing.T) {
+func TestTransport(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		spec    string
-		want    Spec
-		wantErr bool
-	}{
-		{spec: "/tmp/a.sock", want: Spec{Path: "/tmp/a.sock"}},
-		{spec: "agent.local=/tmp/a.sock", want: Spec{Host: "agent.local", Path: "/tmp/a.sock"}},
-		{spec: "Agent.Local=/tmp/a.sock", want: Spec{Host: "agent.local", Path: "/tmp/a.sock"}},
-		{spec: "/tmp/a=b.sock", want: Spec{Path: "/tmp/a=b.sock"}},
-		{spec: "a.sock", want: Spec{Path: "a.sock"}},
-		{spec: "localhost:8080=/tmp/a.sock", wantErr: true},
-		{spec: "agent.local=", wantErr: true},
-		{spec: "", wantErr: true},
+	// t.TempDir paths can exceed the Unix socket path length limit.
+	dir, err := os.MkdirTemp("", "a2a")
+	if err != nil {
+		t.Fatalf("os.MkdirTemp() error = %v", err)
 	}
-	for _, tc := range tests {
-		t.Run(tc.spec, func(t *testing.T) {
-			t.Parallel()
-			got, err := Parse(tc.spec)
-			if (err != nil) != tc.wantErr {
-				t.Fatalf("Parse(%q) error = %v, want error %v", tc.spec, err, tc.wantErr)
-			}
-			if tc.wantErr {
-				return
-			}
-			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Fatalf("Parse(%q) wrong result (-want +got) diff = %s", tc.spec, diff)
-			}
-		})
+	t.Cleanup(func() {
+		if err := os.RemoveAll(dir); err != nil {
+			t.Errorf("os.RemoveAll(%q) error = %v", dir, err)
+		}
+	})
+	sock := filepath.Join(dir, "a2a.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("net.Listen(%q) error = %v", sock, err)
 	}
-}
+	server := &httptest.Server{Listener: ln, Config: &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := io.WriteString(w, r.Host); err != nil {
+			t.Errorf("io.WriteString() error = %v", err)
+		}
+	})}}
+	server.Start()
+	t.Cleanup(server.Close)
 
-func TestMatches(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		spec Spec
-		host string
-		want bool
-	}{
-		{spec: Spec{Path: "/s"}, host: "anything.example.com", want: true},
-		{spec: Spec{Host: "agent.local", Path: "/s"}, host: "AGENT.local", want: true},
-		{spec: Spec{Host: "agent.local", Path: "/s"}, host: "other.local", want: false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.host, func(t *testing.T) {
+	client := &http.Client{Transport: Transport(sock)}
+	for _, host := range []string{"agent.invalid", "other.invalid:8080"} {
+		t.Run(host, func(t *testing.T) {
 			t.Parallel()
-			if got := tc.spec.Matches(tc.host); got != tc.want {
-				t.Fatalf("%+v.Matches(%q) = %v, want %v", tc.spec, tc.host, got, tc.want)
+			resp, err := client.Get("http://" + host + "/")
+			if err != nil {
+				t.Fatalf("client.Get(%q) error = %v", host, err)
+			}
+			defer func() {
+				if err := resp.Body.Close(); err != nil {
+					t.Errorf("resp.Body.Close() error = %v", err)
+				}
+			}()
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("io.ReadAll() error = %v", err)
+			}
+			if got := string(body); got != host {
+				t.Fatalf("client.Get(%q) Host = %q, want %q", host, got, host)
 			}
 		})
 	}

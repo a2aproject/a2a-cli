@@ -411,26 +411,21 @@ func TestSendOverUnixSocket(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	tests := []struct {
-		name    string
-		socket  string
-		args    []string
-		wantErr bool
+		name string
+		args []string
 	}{
-		{name: "agent card", socket: sock, args: []string{"-a", base}},
-		{name: "endpoint", socket: sock, args: []string{"-e", base, "--transport", "rest"}},
-		{name: "scoped to the host", socket: "agent.invalid=" + sock, args: []string{"-a", base}},
-		{name: "scoped to the host in another case", socket: "AGENT.invalid=" + sock, args: []string{"-a", base}},
-		{name: "scoped to another host", socket: "other.invalid=" + sock, args: []string{"-a", base, "--timeout", "2s"}, wantErr: true},
+		{name: "agent card", args: []string{"-a", base}},
+		{name: "endpoint", args: []string{"-e", base, "--transport", "rest"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			args := append(append([]string{"send", "--unix-socket", tc.socket}, tc.args...), "hello")
+			args := append(append([]string{"send", "--unix-socket", sock}, tc.args...), "hello")
 			out, err := runCMD(t, args...)
-			if (err != nil) != tc.wantErr {
-				t.Fatalf("a2a %s error = %v, want error %v", strings.Join(args, " "), err, tc.wantErr)
+			if err != nil {
+				t.Fatalf("a2a %s error = %v", strings.Join(args, " "), err)
 			}
-			if !tc.wantErr && !strings.Contains(out, "over the socket") {
+			if !strings.Contains(out, "over the socket") {
 				t.Fatalf("a2a %s = %q, want the agent's answer", strings.Join(args, " "), out)
 			}
 		})

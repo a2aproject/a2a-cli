@@ -180,9 +180,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 					return err
 				}
 			}
-			if err := cfg.initHTTPTransport(); err != nil {
-				return err
-			}
+			cfg.initHTTPTransport()
 			cfg.initCredentials()
 
 			switch output.Mode(cfg.output) {
@@ -207,7 +205,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	pf.DurationVar(&cfg.timeout, "timeout", 30*time.Second, "Request timeout")
 	pf.BoolVarP(&cfg.verbose, "verbose", "v", false, "Verbose output to stderr")
 	pf.BoolVar(&cfg.insecureGRPC, "insecure", false, "Use insecure (plaintext) gRPC transport credentials")
-	pf.StringVar(&cfg.unixSocket, "unix-socket", "", "Send HTTP requests through a Unix socket: <path> for every host, or <host>=<path> for one host")
+	pf.StringVar(&cfg.unixSocket, "unix-socket", "", "Send every HTTP request through the Unix socket at this path")
 	pf.Var(&cfg.credentialHelpers, "credential-helper", "Credential helper returning the headers for an agent: [scope=]path (repeatable; see a2a auth get --help)")
 	pf.StringVar(&cfg.configPath, "config", "", "Load configuration from an explicit file (.yaml, .json, or .env) in place of the local .env")
 	for _, name := range []string{"unix-socket", "credential-helper"} {

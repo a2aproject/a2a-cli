@@ -38,7 +38,7 @@ These apply to every client-mode command. Each command selects the agent it talk
 | `--svc-param <k=v>` | | Service parameter (repeatable). The chosen transport defines how it's passed. Split on the first `=`. |
 | `--auth <creds>` | | Shorthand for `--svc-param "Authorization=<creds>"`. |
 | `--credential-helper <spec>` | | Credential helper returning the headers for an agent: `[scope=]path`. Repeatable. Not read from the local `.env`. See [Credentials](#credentials). |
-| `--unix-socket <spec>` | | Send HTTP requests through a Unix socket: `<path>` for every host, or `<host>=<path>` for one host. Applies to the card request and the REST and JSON-RPC transports, not gRPC. Not read from the local `.env`. |
+| `--unix-socket <path>` | | Send every HTTP request through the Unix socket at `<path>`, whatever the URL's host. Applies to the card request and the REST and JSON-RPC transports, not gRPC. Not read from the local `.env`. |
 | `--tenant <id>` | | Tenant identifier. Passed on every request. |
 | `--timeout <dur>` | | Request timeout. Default `30s`. |
 | `--verbose` | `-v` | Verbose output to stderr. |
