@@ -18,11 +18,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"syscall"
 	"testing"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
 )
 
 func TestClassify(t *testing.T) {
@@ -82,6 +84,18 @@ func TestClassify(t *testing.T) {
 		{
 			name:     "connection reset sentinel is io, exit 3",
 			err:      fmt.Errorf("reading stream: %w", syscall.ECONNRESET),
+			wantCode: CodeIO,
+			wantExit: 3,
+		},
+		{
+			name:     "local file error is not io, exit 1",
+			err:      fmt.Errorf("failed to save file parts: %w", &fs.PathError{Op: "open", Path: "out/x.txt", Err: syscall.EACCES}),
+			wantCode: CodeInternal,
+			wantExit: 1,
+		},
+		{
+			name:     "broken pipe on a file is still io",
+			err:      fmt.Errorf("writing to plugin: %w", &fs.PathError{Op: "write", Path: "|1", Err: syscall.EPIPE}),
 			wantCode: CodeIO,
 			wantExit: 3,
 		},
@@ -157,6 +171,27 @@ func TestCardResolution(t *testing.T) {
 			wantCode: CodeCardInvalid,
 			wantExit: 4,
 			wantHint: "check the --agent-card reference (host, full card URL, or local file path)",
+		},
+		{
+			name:     "unauthorized card request asks for credentials",
+			err:      &agentcard.ErrStatusNotOK{StatusCode: 401, Status: "401 Unauthorized"},
+			wantCode: CodeCardInvalid,
+			wantExit: 4,
+			wantHint: "pass credentials with --auth, --svc-param or --credential-helper",
+		},
+		{
+			name:     "forbidden card request asks for credentials",
+			err:      &agentcard.ErrStatusNotOK{StatusCode: 403, Status: "403 Forbidden"},
+			wantCode: CodeCardInvalid,
+			wantExit: 4,
+			wantHint: "pass credentials with --auth, --svc-param or --credential-helper",
+		},
+		{
+			name:     "server error on card request points at the agent",
+			err:      &agentcard.ErrStatusNotOK{StatusCode: 500, Status: "500 Internal Server Error"},
+			wantCode: CodeCardInvalid,
+			wantExit: 4,
+			wantHint: "the agent failed to serve its card, check its logs or retry",
 		},
 		{
 			name:     "deadline exceeded is a timeout",
