@@ -137,7 +137,7 @@ func buildFilePart(ref, mediaType string) (*a2a.Part, error) {
 func buildDataPart(ref, mediaType string) (*a2a.Part, error) {
 	var data any
 	if err := json.Unmarshal(RawOrInline(ref), &data); err != nil {
-		return nil, fmt.Errorf("--data-part %q is not a readable file or valid JSON: %w", ref, err)
+		return nil, clierr.Usage(fmt.Sprintf("--data-part %q is not a readable file or valid JSON: %v", ref, err))
 	}
 	p := a2a.NewDataPart(data)
 	if mediaType != "" {
