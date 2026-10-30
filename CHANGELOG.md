@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0](https://github.com/a2aproject/a2a-cli/compare/v0.3.1...v0.4.0) (2026-10-30)
+
+
+### Features
+
+* add --unix-socket and credential helpers ([#105](https://github.com/a2aproject/a2a-cli/issues/105)) ([0f6200c](https://github.com/a2aproject/a2a-cli/commit/0f6200ce076263e9b6f7ba3b9161d649feeeb1fa))
+* add an interactive chat command ([#86](https://github.com/a2aproject/a2a-cli/issues/86)) ([c65d313](https://github.com/a2aproject/a2a-cli/commit/c65d3131f39f8ca7a176c0aca1a7229362188680))
+
+
+### Bug Fixes
+
+* honor --timeout on card resolution and document wait/polling flags ([#94](https://github.com/a2aproject/a2a-cli/issues/94)) ([4c17dd2](https://github.com/a2aproject/a2a-cli/commit/4c17dd21364856c3ade9e5e89c8dbe9147fe6a5b))
+* report a missing --file-part or --config file as a usage error ([#97](https://github.com/a2aproject/a2a-cli/issues/97)) ([7229469](https://github.com/a2aproject/a2a-cli/commit/72294695caa6e1952c9dd10accda292cb065b511)), closes [#96](https://github.com/a2aproject/a2a-cli/issues/96)
+
 ## [0.3.1](https://github.com/a2aproject/a2a-cli/compare/v0.3.0...v0.3.1) (2026-10-16)
 
 
