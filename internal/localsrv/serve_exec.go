@@ -18,9 +18,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"iter"
-	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -61,18 +61,18 @@ type execExecutor struct {
 	chunk   string
 
 	mu        sync.Mutex
-	processes map[a2a.TaskID]*os.Process
+	processes map[a2a.TaskID]*processTree
 }
 
 func newExecExecutor(command, chunk string) *execExecutor {
 	return &execExecutor{
 		command:   command,
 		chunk:     chunk,
-		processes: make(map[a2a.TaskID]*os.Process),
+		processes: make(map[a2a.TaskID]*processTree),
 	}
 }
 
-func (e *execExecutor) trackProcess(id a2a.TaskID, p *os.Process) {
+func (e *execExecutor) trackProcess(id a2a.TaskID, p *processTree) {
 	e.mu.Lock()
 	e.processes[id] = p
 	e.mu.Unlock()
@@ -89,9 +89,33 @@ func (e *execExecutor) killProcess(id a2a.TaskID) error {
 	p := e.processes[id]
 	e.mu.Unlock()
 	if p != nil {
-		return p.Kill()
+		return p.kill()
 	}
 	return nil
+}
+
+func newShellCommand(ctx context.Context, command, input string) (*exec.Cmd, *processTree) {
+	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	cmd.Stdin = strings.NewReader(input)
+	tree := &processTree{cmd: cmd}
+	tree.configure()
+	cmd.Cancel = tree.kill
+	return cmd, tree
+}
+
+func (e *execExecutor) startProcess(id a2a.TaskID, cmd *exec.Cmd, tree *processTree) error {
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	if err := tree.attach(); err != nil {
+		return errors.Join(err, tree.kill(), cmd.Wait())
+	}
+	e.trackProcess(id, tree)
+	return nil
+}
+
+func waitProcess(cmd *exec.Cmd, tree *processTree) error {
+	return errors.Join(cmd.Wait(), tree.close())
 }
 
 func (e *execExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
@@ -115,22 +139,20 @@ func (e *execExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorCont
 }
 
 func (e *execExecutor) executeBuffered(ctx context.Context, execCtx *a2asrv.ExecutorContext, input string, yield func(a2a.Event, error) bool) {
-	cmd := exec.CommandContext(ctx, "sh", "-c", e.command)
-	cmd.Stdin = strings.NewReader(input)
+	cmd, tree := newShellCommand(ctx, e.command, input)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	if err := cmd.Start(); err != nil {
+	if err := e.startProcess(execCtx.TaskID, cmd, tree); err != nil {
 		yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateFailed,
 			a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart(err.Error()))), nil)
 		return
 	}
-	e.trackProcess(execCtx.TaskID, cmd.Process)
 	defer e.untrackProcess(execCtx.TaskID)
 
-	if err := cmd.Wait(); err != nil {
+	if err := waitProcess(cmd, tree); err != nil {
 		msg := stderr.String()
 		if msg == "" {
 			msg = err.Error()
@@ -149,8 +171,7 @@ func (e *execExecutor) executeBuffered(ctx context.Context, execCtx *a2asrv.Exec
 }
 
 func (e *execExecutor) executeChunked(ctx context.Context, execCtx *a2asrv.ExecutorContext, input string, yield func(a2a.Event, error) bool) {
-	cmd := exec.CommandContext(ctx, "sh", "-c", e.command)
-	cmd.Stdin = strings.NewReader(input)
+	cmd, tree := newShellCommand(ctx, e.command, input)
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -160,11 +181,10 @@ func (e *execExecutor) executeChunked(ctx context.Context, execCtx *a2asrv.Execu
 		yield(nil, fmt.Errorf("creating stdout pipe: %w", err))
 		return
 	}
-	if err := cmd.Start(); err != nil {
+	if err := e.startProcess(execCtx.TaskID, cmd, tree); err != nil {
 		yield(nil, fmt.Errorf("starting command: %w", err))
 		return
 	}
-	e.trackProcess(execCtx.TaskID, cmd.Process)
 	defer e.untrackProcess(execCtx.TaskID)
 
 	scanner := bufio.NewScanner(stdout)
@@ -219,7 +239,7 @@ func (e *execExecutor) executeChunked(ctx context.Context, execCtx *a2asrv.Execu
 		}
 	}
 
-	if err := cmd.Wait(); err != nil {
+	if err := waitProcess(cmd, tree); err != nil {
 		msg := stderr.String()
 		if msg == "" {
 			msg = err.Error()

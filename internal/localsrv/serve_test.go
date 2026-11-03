@@ -16,9 +16,13 @@ package localsrv
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 
@@ -213,6 +217,68 @@ func TestExecExecutor_ChunkedStreaming(t *testing.T) {
 	if lastState != a2a.TaskStateCompleted {
 		t.Fatalf("last task state = %v, want %v", lastState, a2a.TaskStateCompleted)
 	}
+}
+
+func TestExecExecutor_CancelKillsChildProcesses(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		chunk string
+	}{
+		{name: "buffered", chunk: ""},
+		{name: "chunked", chunk: "\n"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			dir := t.TempDir()
+			started := filepath.ToSlash(filepath.Join(dir, "started"))
+			leaked := filepath.ToSlash(filepath.Join(dir, "leaked"))
+			command := fmt.Sprintf("touch '%s'; (sleep 2; touch '%s') & sleep 30", started, leaked)
+			client := startExecTestServer(t, command, tc.chunk)
+
+			msg := a2a.NewMessage(a2a.MessageRoleUser, a2a.NewTextPart("go"))
+			result, err := client.SendMessage(ctx, &a2a.SendMessageRequest{
+				Message: msg,
+				Config:  &a2a.SendMessageConfig{ReturnImmediately: true},
+			})
+			if err != nil {
+				t.Fatalf("client.SendMessage() error = %v", err)
+			}
+			task, ok := result.(*a2a.Task)
+			if !ok {
+				t.Fatalf("client.SendMessage() result type = %T, want *a2a.Task", result)
+			}
+			waitForFile(t, started)
+
+			canceled, err := client.CancelTask(ctx, &a2a.CancelTaskRequest{ID: task.ID})
+			if err != nil {
+				t.Fatalf("client.CancelTask() error = %v", err)
+			}
+			if canceled.Status.State != a2a.TaskStateCanceled {
+				t.Fatalf("client.CancelTask() state = %v, want %v", canceled.Status.State, a2a.TaskStateCanceled)
+			}
+
+			time.Sleep(3 * time.Second)
+			if _, err := os.Stat(leaked); err == nil {
+				t.Fatal("child process kept running after the task was canceled")
+			}
+		})
+	}
+}
+
+func waitForFile(t *testing.T, path string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("file %s was not created in time", path)
 }
 
 func TestSplitByDelimiter(t *testing.T) {
