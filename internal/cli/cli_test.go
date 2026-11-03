@@ -922,6 +922,8 @@ func TestUsageErrors(t *testing.T) {
 		{"missing agent-card file", []string{"card", "get", "-a", "/no/such/card.json"}},
 		{"missing --file-part file", []string{"send", "-a", "http://x", "--file-part", "/no/such/file.txt"}},
 		{"invalid --data-part json", []string{"send", "-a", "http://x", "--data-part", "{bad"}},
+		{"unknown task list --status", []string{"task", "list", "-a", "http://x", "--status", "bogus"}},
+		{"malformed task list --since", []string{"task", "list", "-a", "http://x", "--since", "yesterday"}},
 	}
 
 	for _, tt := range tests {

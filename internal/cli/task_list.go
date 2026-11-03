@@ -21,6 +21,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 )
@@ -41,16 +42,6 @@ func newTaskListCmd(cfg *globalConfig) *cobra.Command {
 		Short: "List tasks",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, cancel := context.WithTimeout(cmd.Context(), cfg.timeout)
-			defer cancel()
-			ctx = withServiceParams(ctx, cfg)
-
-			client, err := newAgentClient(ctx, cfg)
-			if err != nil {
-				return fmt.Errorf("failed to create a client: %w", err)
-			}
-			defer destroyClient(cfg, client)
-
 			req := &a2a.ListTasksRequest{
 				Tenant:           cfg.tenant,
 				ContextID:        contextID,
@@ -61,7 +52,7 @@ func newTaskListCmd(cfg *globalConfig) *cobra.Command {
 			if status != "" {
 				s, err := flagparse.TaskState(status)
 				if err != nil {
-					return err
+					return clierr.Usage(fmt.Sprintf("invalid --status: %v", err))
 				}
 				req.Status = s
 			}
@@ -71,10 +62,20 @@ func newTaskListCmd(cfg *globalConfig) *cobra.Command {
 			if since != "" {
 				t, err := time.Parse(time.RFC3339, since)
 				if err != nil {
-					return fmt.Errorf("parsing --since: %w", err)
+					return clierr.Usage(fmt.Sprintf("parsing --since: %v", err))
 				}
 				req.StatusTimestampAfter = &t
 			}
+
+			ctx, cancel := context.WithTimeout(cmd.Context(), cfg.timeout)
+			defer cancel()
+			ctx = withServiceParams(ctx, cfg)
+
+			client, err := newAgentClient(ctx, cfg)
+			if err != nil {
+				return fmt.Errorf("failed to create a client: %w", err)
+			}
+			defer destroyClient(cfg, client)
 
 			resp, err := client.ListTasks(ctx, req)
 			if err != nil {
