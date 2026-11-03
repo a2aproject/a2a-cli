@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net"
+	"os"
 	"syscall"
 	"testing"
 
@@ -90,6 +91,18 @@ func TestClassify(t *testing.T) {
 		{
 			name:     "local file error is not io, exit 1",
 			err:      fmt.Errorf("failed to save file parts: %w", &fs.PathError{Op: "open", Path: "out/x.txt", Err: syscall.EACCES}),
+			wantCode: CodeInternal,
+			wantExit: 1,
+		},
+		{
+			name:     "local link error is not io, exit 1",
+			err:      &os.LinkError{Op: "rename", Old: "a", New: "b", Err: syscall.EXDEV},
+			wantCode: CodeInternal,
+			wantExit: 1,
+		},
+		{
+			name:     "local syscall error is not io, exit 1",
+			err:      os.NewSyscallError("fsync", syscall.ENOSPC),
 			wantCode: CodeInternal,
 			wantExit: 1,
 		},
@@ -177,14 +190,14 @@ func TestCardResolution(t *testing.T) {
 			err:      &agentcard.ErrStatusNotOK{StatusCode: 401, Status: "401 Unauthorized"},
 			wantCode: CodeCardInvalid,
 			wantExit: 4,
-			wantHint: "pass credentials with --auth, --svc-param or --credential-helper",
+			wantHint: "pass or check credentials (--auth, --svc-param or --credential-helper)",
 		},
 		{
 			name:     "forbidden card request asks for credentials",
 			err:      &agentcard.ErrStatusNotOK{StatusCode: 403, Status: "403 Forbidden"},
 			wantCode: CodeCardInvalid,
 			wantExit: 4,
-			wantHint: "pass credentials with --auth, --svc-param or --credential-helper",
+			wantHint: "pass or check credentials (--auth, --svc-param or --credential-helper)",
 		},
 		{
 			name:     "server error on card request points at the agent",

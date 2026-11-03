@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"net"
 	"net/http"
 	"syscall"
@@ -126,7 +125,7 @@ func cardInvalidHint(err error) string {
 	if errors.As(err, &status) {
 		switch {
 		case status.StatusCode == http.StatusUnauthorized || status.StatusCode == http.StatusForbidden:
-			return "pass credentials with --auth, --svc-param or --credential-helper"
+			return "pass or check credentials (--auth, --svc-param or --credential-helper)"
 		case status.StatusCode >= http.StatusInternalServerError:
 			return "the agent failed to serve its card, check its logs or retry"
 		}
@@ -204,13 +203,15 @@ func Classify(err error) *Error {
 
 // isIOError reports whether err is a transport-level failure — a network error,
 // a broken stream, or a reset/closed connection — identified by type and
-// sentinel rather than by matching message text. A local file error is not one,
-// even though the syscall.Errno it wraps satisfies net.Error.
+// sentinel rather than by matching message text. A bare syscall.Errno satisfies
+// net.Error too, so it only counts when it is one of the sentinels below; this
+// keeps local file errors out.
 func isIOError(err error) bool {
 	var netErr net.Error
-	var pathErr *fs.PathError
-	if errors.As(err, &netErr) && !errors.As(err, &pathErr) {
-		return true
+	if errors.As(err, &netErr) {
+		if _, isErrno := netErr.(syscall.Errno); !isErrno {
+			return true
+		}
 	}
 	return errors.Is(err, io.ErrUnexpectedEOF) ||
 		errors.Is(err, io.ErrClosedPipe) ||
