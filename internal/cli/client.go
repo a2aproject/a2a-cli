@@ -36,7 +36,7 @@ import (
 	a2agrpc "github.com/a2aproject/a2a-go/v2/a2agrpc/v1"
 )
 
-const insecureCredentialWarning = "warning: sending a credential with TLS verification disabled (--insecure); the token may be exposed."
+const insecureCredentialWarning = "warning: --insecure disables TLS for gRPC; a credential sent over gRPC may be exposed."
 
 // warnInsecureCredential warns once when a credential is sent with --insecure.
 func warnInsecureCredential(cfg *globalConfig) {
