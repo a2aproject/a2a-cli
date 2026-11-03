@@ -924,6 +924,8 @@ func TestUsageErrors(t *testing.T) {
 		{"invalid --data-part json", []string{"send", "-a", "http://x", "--data-part", "{bad"}},
 		{"unknown task list --status", []string{"task", "list", "-a", "http://x", "--status", "bogus"}},
 		{"malformed task list --since", []string{"task", "list", "-a", "http://x", "--since", "yesterday"}},
+		{"missing push-config --url", []string{"task", "push-config", "create", "-a", "http://x", "task-1"}},
+		{"push-config --auth-credentials without --auth-scheme", []string{"task", "push-config", "create", "-a", "http://x", "task-1", "--url", "http://hook", "--auth-credentials", "secret"}},
 	}
 
 	for _, tt := range tests {
