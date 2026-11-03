@@ -48,6 +48,14 @@ brew install a2a
 winget install a2aproject.a2acli
 ```
 
+**Install script (macOS / Linux)**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/a2aproject/a2a-cli/main/install.sh | bash
+```
+
+Set `A2A_VERSION` to pin a release and `INSTALL_DIR` to change the destination (default `/usr/local/bin`).
+
 **From Source (Linux / Windows / macOS)**
 
 ```bash
