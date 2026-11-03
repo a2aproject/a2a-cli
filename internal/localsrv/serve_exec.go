@@ -72,6 +72,7 @@ type execExecutor struct {
 
 	mu        sync.Mutex
 	processes map[a2a.TaskID]*processTree
+	canceled  map[a2a.TaskID]bool
 }
 
 func newExecExecutor(command, chunk string) *execExecutor {
@@ -79,6 +80,7 @@ func newExecExecutor(command, chunk string) *execExecutor {
 		command:   command,
 		chunk:     chunk,
 		processes: make(map[a2a.TaskID]*processTree),
+		canceled:  make(map[a2a.TaskID]bool),
 	}
 }
 
@@ -91,12 +93,24 @@ func (e *execExecutor) trackProcess(id a2a.TaskID, p *processTree) {
 func (e *execExecutor) untrackProcess(id a2a.TaskID) {
 	e.mu.Lock()
 	delete(e.processes, id)
+	delete(e.canceled, id)
 	e.mu.Unlock()
+}
+
+// wasCanceled reports whether the task's process was killed by Cancel. The
+// cancelation then reports the final state, so Execute must not report a failure.
+func (e *execExecutor) wasCanceled(id a2a.TaskID) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.canceled[id]
 }
 
 func (e *execExecutor) killProcess(id a2a.TaskID) error {
 	e.mu.Lock()
 	p := e.processes[id]
+	if p != nil {
+		e.canceled[id] = true
+	}
 	e.mu.Unlock()
 	if p != nil {
 		return p.kill()
@@ -175,6 +189,9 @@ func (e *execExecutor) executeBuffered(ctx context.Context, execCtx *a2asrv.Exec
 	defer e.untrackProcess(execCtx.TaskID)
 
 	if err := waitProcess(cmd, tree); err != nil {
+		if e.wasCanceled(execCtx.TaskID) {
+			return
+		}
 		msg := stderr.String()
 		if msg == "" {
 			msg = err.Error()
@@ -262,6 +279,9 @@ func (e *execExecutor) executeChunked(ctx context.Context, execCtx *a2asrv.Execu
 	}
 
 	if err := waitProcess(cmd, tree); err != nil {
+		if e.wasCanceled(execCtx.TaskID) {
+			return
+		}
 		msg := stderr.String()
 		if msg == "" {
 			msg = err.Error()
