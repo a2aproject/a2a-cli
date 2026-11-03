@@ -69,12 +69,7 @@ func newClientFromEndpoint(ctx context.Context, cfg *globalConfig, ref string, e
 	if err != nil {
 		return nil, err
 	}
-	endpointURL := ref
-	if protocol == a2a.TransportProtocolGRPC {
-		endpointURL = stripHTTPScheme(ref)
-	}
-
-	cfg.logf("connecting directly to %s via %s (skipping card resolution)", endpointURL, protocol)
+	cfg.logf("connecting directly to %s via %s (skipping card resolution)", ref, protocol)
 
 	factoryOpts := append(clientFactoryOpts(cfg), extraOpts...)
 	if !transportplugin.IsBuiltin(protocol) {
@@ -85,7 +80,7 @@ func newClientFromEndpoint(ctx context.Context, cfg *globalConfig, ref string, e
 		factoryOpts = append(factoryOpts, pluginOpt)
 	}
 
-	endpoint := a2a.NewAgentInterface(endpointURL, protocol)
+	endpoint := a2a.NewAgentInterface(ref, protocol)
 	if cfg.a2aVersion != "" {
 		endpoint.ProtocolVersion = a2a.ProtocolVersion(cfg.a2aVersion)
 	}
@@ -115,11 +110,6 @@ func newClientFromCard(ctx context.Context, cfg *globalConfig, ref string, extra
 		factoryOpts = append(factoryOpts, a2aclient.WithConfig(
 			a2aclient.Config{PreferredTransports: transportPrefs},
 		))
-	}
-	for _, iface := range card.SupportedInterfaces {
-		if iface.ProtocolBinding == a2a.TransportProtocolGRPC {
-			iface.URL = stripHTTPScheme(iface.URL)
-		}
 	}
 	cfg.logf("creating client for %s", card.Name)
 	return a2aclient.NewFromCard(ctx, card, factoryOpts...)
@@ -171,7 +161,7 @@ func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
 			opts,
 			a2aclient.WithRESTTransport(httpClient),
 			a2aclient.WithJSONRPCTransport(httpClient),
-			a2agrpc.WithGRPCTransport(grpcOpt),
+			a2aclient.WithTransport(a2a.TransportProtocolGRPC, grpcTransportFactory(a2agrpc.NewGRPCTransport, grpcOpt)),
 		)
 	}
 	if cfg.a2aVersion == "" || cfg.a2aVersion == "0.3" {
@@ -179,10 +169,23 @@ func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
 			opts,
 			a2av0.WithRESTTransport(a2av0.RESTTransportConfig{Client: httpClient}),
 			a2av0.WithJSONRPCTransport(a2av0.JSONRPCTransportConfig{Client: httpClient}),
-			a2agrpcv0.WithGRPCTransport(grpcOpt),
+			a2aclient.WithCompatTransport(a2av0.Version, a2a.TransportProtocolGRPC, grpcTransportFactory(a2agrpcv0.NewGRPCTransport, grpcOpt)),
 		)
 	}
 	return opts
+}
+
+// grpcTransportFactory dials the host and port of a gRPC interface URL, which
+// cards may advertise with an http(s) scheme. The a2agrpc options pass the URL
+// to grpc.NewClient as is, which cannot resolve such a target.
+func grpcTransportFactory(newTransport func(*grpc.ClientConn) a2aclient.Transport, opts ...grpc.DialOption) a2aclient.TransportFactory {
+	return a2aclient.TransportFactoryFn(func(_ context.Context, _ *a2a.AgentCard, iface *a2a.AgentInterface) (a2aclient.Transport, error) {
+		conn, err := grpc.NewClient(stripHTTPScheme(iface.URL), opts...)
+		if err != nil {
+			return nil, err
+		}
+		return newTransport(conn), nil
+	})
 }
 
 func stripHTTPScheme(raw string) string {
