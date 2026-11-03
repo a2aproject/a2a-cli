@@ -34,6 +34,7 @@ These apply to every client-mode command. Each command selects the agent it talk
 | `--agent-card <ref>` | `-a` | Agent Card reference: a host/origin (the well-known path is appended), a full card URL, or a local file path. The card is resolved and a transport negotiated. |
 | `--endpoint <ref>` | `-e` | Agent interface URL for a direct connection, skipping card resolution. Must be paired with exactly one `--transport`. Mutually exclusive with `--agent-card`. |
 | `--transport <name>` | | Transport preference: `rest`, `jsonrpc`, `grpc`. Repeatable and ordered (highest preference first). With `--agent-card` it overrides the card's preference order; with `--endpoint` exactly one is required. |
+| `--insecure` | | Use plaintext for the built-in gRPC client. By default it uses TLS and verifies the server certificate against the system trust store. |
 | `--output <fmt>` | `-o` | Output format: `text` (default), `json` (indented), or `jsonl` (one compact JSON object per line). |
 | `--svc-param <k=v>` | | Service parameter (repeatable). The chosen transport defines how it's passed. Split on the first `=`. |
 | `--auth <creds>` | | Shorthand for `--svc-param "Authorization=<creds>"`. |

@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/a2aproject/a2a-cli/internal/clierr"
@@ -88,8 +89,7 @@ func newClientFromEndpoint(ctx context.Context, cfg *globalConfig, ref string, e
 	if cfg.a2aVersion != "" {
 		endpoint.ProtocolVersion = a2a.ProtocolVersion(cfg.a2aVersion)
 	}
-	client, err := a2aclient.NewFromEndpoints(ctx, []*a2a.AgentInterface{endpoint}, factoryOpts...)
-	return client, hintInsecure(err)
+	return a2aclient.NewFromEndpoints(ctx, []*a2a.AgentInterface{endpoint}, factoryOpts...)
 }
 
 // newClientFromCard resolves the Agent Card and builds a client for it, honoring
@@ -116,9 +116,13 @@ func newClientFromCard(ctx context.Context, cfg *globalConfig, ref string, extra
 			a2aclient.Config{PreferredTransports: transportPrefs},
 		))
 	}
+	for _, iface := range card.SupportedInterfaces {
+		if iface.ProtocolBinding == a2a.TransportProtocolGRPC {
+			iface.URL = stripHTTPScheme(iface.URL)
+		}
+	}
 	cfg.logf("creating client for %s", card.Name)
-	client, err := a2aclient.NewFromCard(ctx, card, factoryOpts...)
-	return client, hintInsecure(err)
+	return a2aclient.NewFromCard(ctx, card, factoryOpts...)
 }
 
 // resolveCard fetches the agent card with every service parameter sent as a request
@@ -149,19 +153,12 @@ func cardResolver(cfg *globalConfig) *agentcard.Resolver {
 	return resolver
 }
 
-// hintInsecure wraps gRPC "no transport security set" errors with a user-friendly suggestion to pass --insecure.
-func hintInsecure(err error) error {
-	if err != nil && strings.Contains(err.Error(), "no transport security set") {
-		return fmt.Errorf("%w\n\nhint: pass --insecure to allow plaintext gRPC connections", err)
-	}
-	return err
-}
-
 func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
-	var grpcOpts []grpc.DialOption
+	creds := credentials.NewTLS(nil)
 	if cfg.insecureGRPC {
-		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		creds = insecure.NewCredentials()
 	}
+	grpcOpt := grpc.WithTransportCredentials(creds)
 	// The a2a-go default HTTP client caps every request at 3 minutes. Use one without a
 	// total timeout so the --timeout context deadline is what bounds a request.
 	httpClient := &http.Client{Transport: cfg.httpTransport}
@@ -174,7 +171,7 @@ func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
 			opts,
 			a2aclient.WithRESTTransport(httpClient),
 			a2aclient.WithJSONRPCTransport(httpClient),
-			a2agrpc.WithGRPCTransport(grpcOpts...),
+			a2agrpc.WithGRPCTransport(grpcOpt),
 		)
 	}
 	if cfg.a2aVersion == "" || cfg.a2aVersion == "0.3" {
@@ -182,7 +179,7 @@ func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
 			opts,
 			a2av0.WithRESTTransport(a2av0.RESTTransportConfig{Client: httpClient}),
 			a2av0.WithJSONRPCTransport(a2av0.JSONRPCTransportConfig{Client: httpClient}),
-			a2agrpcv0.WithGRPCTransport(grpcOpts...),
+			a2agrpcv0.WithGRPCTransport(grpcOpt),
 		)
 	}
 	return opts
