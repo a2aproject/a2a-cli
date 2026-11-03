@@ -921,6 +921,7 @@ func TestUsageErrors(t *testing.T) {
 		{"malformed agent-card url", []string{"card", "get", "-a", "http://exa mple.com"}},
 		{"missing agent-card file", []string{"card", "get", "-a", "/no/such/card.json"}},
 		{"missing --file-part file", []string{"send", "-a", "http://x", "--file-part", "/no/such/file.txt"}},
+		{"invalid --data-part json", []string{"send", "-a", "http://x", "--data-part", "{bad"}},
 	}
 
 	for _, tt := range tests {
