@@ -15,8 +15,10 @@
 package localsrv
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -232,28 +234,13 @@ func TestExecExecutor_CancelKillsChildProcesses(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			ctx := t.Context()
-			dir := t.TempDir()
-			started := filepath.ToSlash(filepath.Join(dir, "started"))
-			leaked := filepath.ToSlash(filepath.Join(dir, "leaked"))
-			command := fmt.Sprintf("touch '%s'; (sleep 2; touch '%s') & sleep 30", started, leaked)
+			command, started, leaked := leakingCommand(t)
 			client := startExecTestServer(t, command, tc.chunk)
 
-			msg := a2a.NewMessage(a2a.MessageRoleUser, a2a.NewTextPart("go"))
-			result, err := client.SendMessage(ctx, &a2a.SendMessageRequest{
-				Message: msg,
-				Config:  &a2a.SendMessageConfig{ReturnImmediately: true},
-			})
-			if err != nil {
-				t.Fatalf("client.SendMessage() error = %v", err)
-			}
-			task, ok := result.(*a2a.Task)
-			if !ok {
-				t.Fatalf("client.SendMessage() result type = %T, want *a2a.Task", result)
-			}
+			task := execSendAsync(t, client)
 			waitForFile(t, started)
 
-			canceled, err := client.CancelTask(ctx, &a2a.CancelTaskRequest{ID: task.ID})
+			canceled, err := client.CancelTask(t.Context(), &a2a.CancelTaskRequest{ID: task.ID})
 			if err != nil {
 				t.Fatalf("client.CancelTask() error = %v", err)
 			}
@@ -261,11 +248,86 @@ func TestExecExecutor_CancelKillsChildProcesses(t *testing.T) {
 				t.Fatalf("client.CancelTask() state = %v, want %v", canceled.Status.State, a2a.TaskStateCanceled)
 			}
 
-			time.Sleep(3 * time.Second)
-			if _, err := os.Stat(leaked); err == nil {
-				t.Fatal("child process kept running after the task was canceled")
-			}
+			assertNotCreated(t, leaked)
 		})
+	}
+}
+
+func TestServeExec_ShutdownKillsChildProcesses(t *testing.T) {
+	t.Parallel()
+	command, started, leaked := leakingCommand(t)
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen() error = %v", err)
+	}
+	cfg := Config{
+		CardParams: CardParams{AdvertiseAddress: ln.Addr().String(), Transport: a2a.TransportProtocolHTTPJSON},
+		Listener:   ln,
+		Quiet:      true,
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- ServeExec(ctx, cfg, command, "") }()
+
+	card, err := createAgentCard(cfg.CardParams)
+	if err != nil {
+		t.Fatalf("createAgentCard() error = %v", err)
+	}
+	client, err := a2aclient.NewFromCard(t.Context(), card)
+	if err != nil {
+		t.Fatalf("a2aclient.NewFromCard() error = %v", err)
+	}
+	t.Cleanup(func() { _ = client.Destroy() })
+
+	execSendAsync(t, client)
+	waitForFile(t, started)
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("ServeExec() error = %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("ServeExec() did not return after the context was canceled")
+	}
+
+	assertNotCreated(t, leaked)
+}
+
+func leakingCommand(t *testing.T) (command, started, leaked string) {
+	t.Helper()
+	dir := t.TempDir()
+	started = filepath.ToSlash(filepath.Join(dir, "started"))
+	leaked = filepath.ToSlash(filepath.Join(dir, "leaked"))
+	command = fmt.Sprintf("touch '%s'; (sleep 2; touch '%s') & sleep 30", started, leaked)
+	return command, started, leaked
+}
+
+func execSendAsync(t *testing.T, client *a2aclient.Client) *a2a.Task {
+	t.Helper()
+	msg := a2a.NewMessage(a2a.MessageRoleUser, a2a.NewTextPart("go"))
+	result, err := client.SendMessage(t.Context(), &a2a.SendMessageRequest{
+		Message: msg,
+		Config:  &a2a.SendMessageConfig{ReturnImmediately: true},
+	})
+	if err != nil {
+		t.Fatalf("client.SendMessage() error = %v", err)
+	}
+	task, ok := result.(*a2a.Task)
+	if !ok {
+		t.Fatalf("client.SendMessage() result type = %T, want *a2a.Task", result)
+	}
+	return task
+}
+
+func assertNotCreated(t *testing.T, path string) {
+	t.Helper()
+	time.Sleep(3 * time.Second)
+	if _, err := os.Stat(path); err == nil {
+		t.Fatal("child process kept running after the command was stopped")
 	}
 }
 

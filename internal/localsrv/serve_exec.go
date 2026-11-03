@@ -21,7 +21,10 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"maps"
+	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 
@@ -52,6 +55,13 @@ func ServeExec(ctx context.Context, cfg Config, command, chunk string) error {
 	if !cfg.Quiet {
 		cfg.Logger("exec mode, command=%q chunk=%q transport=%s protocol=%s", command, chunk, cfg.Transport, cfg.ProtocolVersion)
 	}
+
+	stop := context.AfterFunc(ctx, func() {
+		if err := executor.killAll(); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Stopping exec commands: %v\n", err)
+		}
+	})
+	defer stop()
 
 	return serve(ctx, cfg, handler, card)
 }
@@ -92,6 +102,18 @@ func (e *execExecutor) killProcess(id a2a.TaskID) error {
 		return p.kill()
 	}
 	return nil
+}
+
+func (e *execExecutor) killAll() error {
+	e.mu.Lock()
+	trees := slices.Collect(maps.Values(e.processes))
+	e.mu.Unlock()
+
+	var errs []error
+	for _, tree := range trees {
+		errs = append(errs, tree.kill())
+	}
+	return errors.Join(errs...)
 }
 
 func newShellCommand(ctx context.Context, command, input string) (*exec.Cmd, *processTree) {
