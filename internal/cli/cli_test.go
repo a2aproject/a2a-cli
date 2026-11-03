@@ -969,6 +969,44 @@ func TestRenderErrorJSONModes(t *testing.T) {
 	}
 }
 
+func TestRenderErrorJSONForFlagAndArgErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"unknown flag", []string{"-o", "json", "card", "get", "--bogus"}},
+		{"missing positional arg", []string{"-o", "jsonl", "task", "get", "-a", "http://x"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var out, errOut bytes.Buffer
+			cfg := &globalConfig{
+				Printer:   &output.Printer{Out: &out},
+				svcParams: &flagparse.ServiceParams{},
+				errOut:    &errOut,
+			}
+			root := mustNewRoot(t, cfg, deps{cfgLoader: clicfg.LoadEmpty})
+			root.SetArgs(tt.args)
+
+			cfg.renderError(root.Execute())
+
+			var got struct {
+				Error clierr.Error `json:"error"`
+			}
+			if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+				t.Fatalf("renderError() for %v wrote stdout %q, stderr %q, want a JSON error object: %v", tt.args, out.String(), errOut.String(), err)
+			}
+			if got.Error.Code != clierr.CodeUsage {
+				t.Errorf("renderError() for %v code = %q, want %q", tt.args, got.Error.Code, clierr.CodeUsage)
+			}
+		})
+	}
+}
+
 func TestGetTaskWait_Timeout(t *testing.T) {
 	t.Parallel()
 	url := startTestServerWith(t, a2a.AgentCapabilities{Streaming: false},

@@ -132,6 +132,10 @@ func Execute() int {
 
 func (g *globalConfig) renderError(err error) int {
 	ce := clierr.Classify(err)
+	// Flag, argument and config errors fail before PersistentPreRunE sets the mode.
+	if mode := output.Mode(g.output); mode == output.ModeJson || mode == output.ModeJSONL {
+		g.Mode = mode
+	}
 	if g.IsJSON() {
 		if perr := g.PrintJSON(ce); perr != nil {
 			_, _ = fmt.Fprintf(g.stderr(), "Error: %v\n", err)
