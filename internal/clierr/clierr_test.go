@@ -140,6 +140,35 @@ func TestClassify(t *testing.T) {
 	}
 }
 
+func TestClassifyPlaintextServer(t *testing.T) {
+	t.Parallel()
+
+	const handshake = `connection error: desc = "transport: authentication handshake failed: tls: first record does not look like a TLS handshake"`
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{name: "gRPC status converted to an a2a error", err: fmt.Errorf("failed to send message: %w", a2a.NewError(a2a.ErrInternalError, handshake))},
+		{name: "transport error", err: fmt.Errorf("failed to send message: %w", errors.New(handshake))},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := Classify(tt.err)
+			if got.Code != CodeIO {
+				t.Fatalf("Classify(%v).Code = %q, want %q", tt.err, got.Code, CodeIO)
+			}
+			if got.Exit != 3 {
+				t.Fatalf("Classify(%v).Exit = %d, want 3", tt.err, got.Exit)
+			}
+			if got.Hint != plaintextServerHint {
+				t.Fatalf("Classify(%v).Hint = %q, want %q", tt.err, got.Hint, plaintextServerHint)
+			}
+		})
+	}
+}
+
 func TestClassifyNil(t *testing.T) {
 	t.Parallel()
 	if got := Classify(nil); got != nil {

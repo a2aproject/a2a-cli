@@ -23,6 +23,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"syscall"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
@@ -77,6 +78,10 @@ func (e *Error) Unwrap() error { return e.err }
 // UsageHint is remediation advice attached to every usage error. It is aimed at
 // agents, whose bundled skill may lag the installed binary's commands and flags.
 const UsageHint = "if you are an agent, your a2a skill may be out of date — run `a2a skill` for the current commands and update your local copy"
+
+// plaintextServerHint is remediation for a TLS handshake that reached a server
+// without TLS, such as a local agent serving plaintext gRPC.
+const plaintextServerHint = "the agent may not use TLS; pass --insecure to allow plaintext gRPC connections"
 
 // Usage builds a usage error for invalid arguments, flags, or flag combinations.
 func Usage(msg string) *Error {
@@ -174,6 +179,18 @@ func Classify(err error) *Error {
 			Exit:    5,
 			err:     err,
 			Hint:    "increase --timeout, or start the task with --async and follow it later",
+		}
+	}
+
+	// gRPC reports a failed TLS handshake as a status message, which a2a-go turns
+	// into an a2a.Error, so a server answering in plaintext is recognized by text.
+	if strings.Contains(msg, "first record does not look like a TLS handshake") {
+		return &Error{
+			Code:    CodeIO,
+			Message: msg,
+			Exit:    3,
+			Hint:    plaintextServerHint,
+			err:     err,
 		}
 	}
 

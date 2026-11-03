@@ -18,7 +18,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"net"
-	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -27,6 +26,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/localsrv"
 	"github.com/a2aproject/a2a-cli/internal/testutil"
 	"github.com/a2aproject/a2a-go/v2/a2a"
@@ -59,26 +59,26 @@ func TestGRPCTransportSecurity(t *testing.T) {
 	secured.StartTLS()
 	t.Cleanup(secured.Close)
 
-	plain := httptest.NewUnstartedServer(srv)
-	plain.Config.Protocols = new(http.Protocols)
-	plain.Config.Protocols.SetUnencryptedHTTP2(true)
-	plain.Start()
-	t.Cleanup(plain.Close)
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen() error = %v", err)
+	}
+	go func() {
+		if err := srv.Serve(lis); err != nil {
+			t.Errorf("srv.Serve() error = %v", err)
+		}
+	}()
+	plainAddr := lis.Addr().String()
 
-	_, err := runCMD(t, "send", "--endpoint", secured.URL, "--transport", "grpc", "--timeout", "3s", "hi")
+	_, err = runCMD(t, "send", "--endpoint", secured.URL, "--transport", "grpc", "--timeout", "3s", "hi")
 	if err == nil || !strings.Contains(err.Error(), "certificate") {
-		t.Errorf("send with untrusted certificate error = %v, want certificate verification failure", err)
+		t.Fatalf("send with untrusted certificate error = %v, want certificate verification failure", err)
 	}
 
 	roots := x509.NewCertPool()
 	roots.AddCert(secured.Certificate())
 	x509.SetFallbackRoots(roots)
 	wrongHost := fmt.Sprintf("passthrough:///localhost:%d", secured.Listener.Addr().(*net.TCPAddr).Port)
-	_, err = runCMD(t, "send", "--endpoint", wrongHost, "--transport", "grpc", "--timeout", "3s", "hi")
-	if err == nil || !strings.Contains(err.Error(), "certificate") {
-		t.Errorf("send with mismatched hostname error = %v, want certificate verification failure", err)
-	}
-
 	cardPath := func(address string) string {
 		return testutil.MustWriteTmpCardFile(t, &a2a.AgentCard{
 			Name: "gRPC Echo", Version: "1.0.0",
@@ -86,23 +86,40 @@ func TestGRPCTransportSecurity(t *testing.T) {
 		})
 	}
 
-	for _, tt := range []struct {
-		name string
-		args []string
+	tests := []struct {
+		name     string
+		args     []string
+		wantErr  string
+		wantHint string
 	}{
-		{"TLS endpoint", []string{"--endpoint", secured.URL}},
-		{"TLS Agent Card", []string{"--agent-card", cardPath(secured.URL)}},
-		{"TLS 0.3 endpoint", []string{"--endpoint", secured.URL, "--a2a-version", "0.3"}},
-		{"TLS Agent Card with bare address", []string{"--agent-card", cardPath(secured.Listener.Addr().String())}},
-		{"plaintext Agent Card", []string{"--agent-card", cardPath(plain.Listener.Addr().String()), "--insecure"}},
-		{"explicit plaintext", []string{"--endpoint", plain.URL, "--insecure"}},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
+		{name: "TLS endpoint", args: []string{"--endpoint", secured.URL}},
+		{name: "TLS Agent Card", args: []string{"--agent-card", cardPath(secured.URL)}},
+		{name: "TLS 0.3 endpoint", args: []string{"--endpoint", secured.URL, "--a2a-version", "0.3"}},
+		{name: "TLS Agent Card with bare address", args: []string{"--agent-card", cardPath(secured.Listener.Addr().String())}},
+		{name: "plaintext Agent Card", args: []string{"--agent-card", cardPath(plainAddr), "--insecure"}},
+		{name: "explicit plaintext", args: []string{"--endpoint", "http://" + plainAddr, "--insecure"}},
+		{name: "mismatched hostname", args: []string{"--endpoint", wrongHost}, wantErr: "certificate"},
+		{name: "plaintext server without --insecure", args: []string{"--endpoint", "http://" + plainAddr}, wantErr: "TLS handshake", wantHint: "--insecure"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			args := append([]string{"send", "--transport", "grpc", "--timeout", "3s", "-o", "json", "hello"}, tt.args...)
-			task := mustDecodeTask(t, mustRunCMD(t, args...))
-			if got := testutil.AllArtifactText(task); got != "hello" {
-				t.Errorf("send artifact text = %q, want hello", got)
+			args := append([]string{"send", "--transport", "grpc", "--timeout", "3s", "-o", "json", "hello"}, tc.args...)
+			out, err := runCMD(t, args...)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("a2a %s error = %v, want %q", strings.Join(args, " "), err, tc.wantErr)
+				}
+				if hint := clierr.Classify(err).Hint; !strings.Contains(hint, tc.wantHint) {
+					t.Fatalf("a2a %s hint = %q, want %q", strings.Join(args, " "), hint, tc.wantHint)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("a2a %s error = %v", strings.Join(args, " "), err)
+			}
+			if got := testutil.AllArtifactText(mustDecodeTask(t, out)); got != "hello" {
+				t.Fatalf("a2a %s artifact text = %q, want %q", strings.Join(args, " "), got, "hello")
 			}
 		})
 	}
