@@ -16,13 +16,17 @@ package cli
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
 
+	"github.com/a2aproject/a2a-cli/internal/cacert"
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/credhelper"
 	"github.com/a2aproject/a2a-cli/internal/unixsocket"
 )
@@ -32,6 +36,28 @@ func (g *globalConfig) initHTTPTransport() {
 	if g.unixSocket != "" {
 		g.httpTransport = unixsocket.Transport(g.unixSocket)
 	}
+}
+
+// initTLS makes HTTP and gRPC connections trust only the certificates in
+// --ca-cert, if set. It runs when a command connects, so a bad file does not
+// fail commands that make no requests, such as config show.
+func (g *globalConfig) initTLS() error {
+	if g.caCert == "" || g.rootCAs != nil {
+		return nil
+	}
+	roots, err := cacert.Load(g.caCert)
+	if err != nil {
+		return clierr.Usage(fmt.Sprintf("reading --ca-cert %q: %v", g.caCert, err))
+	}
+	base := http.DefaultTransport.(*http.Transport)
+	if t, ok := g.httpTransport.(*http.Transport); ok {
+		base = t // --unix-socket
+	}
+	transport := base.Clone()
+	transport.TLSClientConfig = &tls.Config{RootCAs: roots}
+	g.httpTransport = transport
+	g.rootCAs = roots
+	return nil
 }
 
 // initCredentials sets up --credential-helper. Helpers run only when a

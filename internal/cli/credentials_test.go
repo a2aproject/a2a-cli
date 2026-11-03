@@ -285,6 +285,7 @@ func TestCredentialFlagsIgnoredFromDiscoveredEnv(t *testing.T) {
 	}{
 		{name: "credential helper", env: "A2ACLI_CREDENTIAL_HELPER=false", flag: "credential-helper"},
 		{name: "unix socket", env: "A2ACLI_UNIX_SOCKET=/nonexistent/a2a.sock", flag: "unix-socket"},
+		{name: "CA certificate", env: "A2ACLI_CA_CERT=/nonexistent/ca.pem", flag: "ca-cert"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

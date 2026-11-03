@@ -16,6 +16,7 @@ package cli
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -47,6 +48,9 @@ func warnInsecureCredential(cfg *globalConfig) {
 
 func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
 	warnInsecureCredential(cfg)
+	if err := cfg.initTLS(); err != nil {
+		return nil, err
+	}
 	switch {
 	case cfg.url != "" && cfg.agentCard.IsSet():
 		return nil, clierr.Usage("--endpoint and --agent-card are mutually exclusive")
@@ -118,6 +122,9 @@ func newClientFromCard(ctx context.Context, cfg *globalConfig, ref string, extra
 // resolveCard fetches the agent card with every service parameter sent as a request
 // header, so a gateway authenticating the card fetch sees what the transport sends.
 func resolveCard(ctx context.Context, cfg *globalConfig, ref string) (*a2a.AgentCard, error) {
+	if err := cfg.initTLS(); err != nil {
+		return nil, err
+	}
 	var opts []agentcard.ResolveOption
 	for k, vals := range cfg.svcParams.Params() {
 		opts = append(opts, agentcard.WithRequestHeader(k, strings.Join(vals, ", ")))
@@ -144,7 +151,7 @@ func cardResolver(cfg *globalConfig) *agentcard.Resolver {
 }
 
 func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
-	creds := credentials.NewTLS(nil)
+	creds := credentials.NewTLS(&tls.Config{RootCAs: cfg.rootCAs})
 	if cfg.insecureGRPC {
 		creds = insecure.NewCredentials()
 	}

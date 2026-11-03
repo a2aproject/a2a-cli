@@ -34,7 +34,8 @@ These apply to every client-mode command. Each command selects the agent it talk
 | `--agent-card <ref>` | `-a` | Agent Card reference: a host/origin (the well-known path is appended), a full card URL, or a local file path. The card is resolved and a transport negotiated. |
 | `--endpoint <ref>` | `-e` | Agent interface URL for a direct connection, skipping card resolution. Must be paired with exactly one `--transport`. Mutually exclusive with `--agent-card`. |
 | `--transport <name>` | | Transport preference: `rest`, `jsonrpc`, `grpc`. Repeatable and ordered (highest preference first). With `--agent-card` it overrides the card's preference order; with `--endpoint` exactly one is required. |
-| `--insecure` | | Use plaintext for the built-in gRPC client. By default it uses TLS and verifies the server certificate against the system trust store. |
+| `--insecure` | | Use plaintext for the built-in gRPC client. By default it uses TLS and verifies the server certificate against the system trust store, or the certificates in `--ca-cert`. |
+| `--ca-cert <file>` | | Trust only the CA certificates in the PEM file `<file>` for TLS. Applies to the card request and the REST, JSON-RPC and gRPC transports. Not read from the local `.env`. |
 | `--output <fmt>` | `-o` | Output format: `text` (default), `json` (indented), or `jsonl` (one compact JSON object per line). |
 | `--svc-param <k=v>` | | Service parameter (repeatable). The chosen transport defines how it's passed. Split on the first `=`. |
 | `--auth <creds>` | | Shorthand for `--svc-param "Authorization=<creds>"`. |
@@ -312,7 +313,7 @@ credential-helper:
 
 `--credential-helper` and `A2ACLI_CREDENTIAL_HELPER` take `[scope=]path`, like Bazel's `--credential_helper`: a path with no arguments. A scope is a host without a port (`example.com`), or `*.example.com` for the domain and its subdomains. Helpers are chosen per request: the card request uses the helper for the card reference as given (`--agent-card` or the positional URL), and A2A calls use the helper for the interface URL the client connects to. That URL is also the `uri` the helper receives. Unlike Bazel, which sends the full URL of each request, a2a does not append the `/.well-known/agent-card.json` path or the A2A method path. The helper with the most specific matching scope runs; among equal scopes the last one wins. Its headers are sent unless `--auth` or `--svc-param` set the same header. a2a runs a helper once per URL and reuses its headers until they expire. `--timeout` bounds each run. A helper that exits non-zero fails the command; a helper with no credentials for the URL prints `{}`.
 
-a2a executes the configured helper command, so `credential-helper` and `--unix-socket` are not read from the local `.env` found by walking up from the current directory: a `.env` in a cloned repository could otherwise run a command or redirect requests. a2a ignores them there with a warning. Set them with the flag, the environment, `~/.config/a2a-cli/config.yaml`, or a file passed with `--config`.
+a2a executes the configured helper command, so `credential-helper`, `--unix-socket` and `--ca-cert` are not read from the local `.env` found by walking up from the current directory: a `.env` in a cloned repository could otherwise run a command, redirect requests or choose the certificates a2a trusts. a2a ignores them there with a warning. Set them with the flag, the environment, `~/.config/a2a-cli/config.yaml`, or a file passed with `--config`.
 
 ### `auth get` - Inspect credentials
 
