@@ -22,9 +22,11 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"syscall"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
 )
 
 // Code is a symbolic error identifier.
@@ -111,9 +113,24 @@ func CardResolution(err error) *Error {
 		Code:    CodeCardInvalid,
 		Message: msg,
 		Exit:    4,
-		Hint:    "check the --agent-card reference (host, full card URL, or local file path)",
+		Hint:    cardInvalidHint(err),
 		err:     err,
 	}
+}
+
+// cardInvalidHint picks remediation for a card that was reached but not usable,
+// based on the HTTP status of the card request when there is one.
+func cardInvalidHint(err error) string {
+	var status *agentcard.ErrStatusNotOK
+	if errors.As(err, &status) {
+		switch {
+		case status.StatusCode == http.StatusUnauthorized || status.StatusCode == http.StatusForbidden:
+			return "pass or check credentials (--auth, --svc-param or --credential-helper)"
+		case status.StatusCode >= http.StatusInternalServerError:
+			return "the agent failed to serve its card, check its logs or retry"
+		}
+	}
+	return "check the --agent-card reference (host, full card URL, or local file path)"
 }
 
 // MarshalJSON implements [json.Marshaler].
@@ -186,11 +203,15 @@ func Classify(err error) *Error {
 
 // isIOError reports whether err is a transport-level failure — a network error,
 // a broken stream, or a reset/closed connection — identified by type and
-// sentinel rather than by matching message text.
+// sentinel rather than by matching message text. A bare syscall.Errno satisfies
+// net.Error too, so it only counts when it is one of the sentinels below; this
+// keeps local file errors out.
 func isIOError(err error) bool {
 	var netErr net.Error
 	if errors.As(err, &netErr) {
-		return true
+		if _, isErrno := netErr.(syscall.Errno); !isErrno {
+			return true
+		}
 	}
 	return errors.Is(err, io.ErrUnexpectedEOF) ||
 		errors.Is(err, io.ErrClosedPipe) ||
