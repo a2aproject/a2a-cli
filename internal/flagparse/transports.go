@@ -15,9 +15,9 @@
 package flagparse
 
 import (
-	"fmt"
 	"strings"
 
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 )
 
@@ -46,7 +46,7 @@ func SingleTransport(ss []string) (a2a.TransportProtocol, error) {
 		return "", err
 	}
 	if len(protos) != 1 {
-		return "", fmt.Errorf("exactly one --transport is required (rest, jsonrpc, grpc, or a plugin name)")
+		return "", clierr.Usage("exactly one --transport is required (rest, jsonrpc, grpc, or a plugin name)")
 	}
 	return protos[0], nil
 }
@@ -57,7 +57,7 @@ func SingleTransport(ss []string) (a2a.TransportProtocol, error) {
 func parseTransport(s string) (a2a.TransportProtocol, error) {
 	switch strings.ToLower(s) {
 	case "":
-		return "", fmt.Errorf("empty --transport value")
+		return "", clierr.Usage("empty --transport value")
 	case "rest":
 		return a2a.TransportProtocol(a2a.TransportProtocolHTTPJSON), nil
 	case "jsonrpc":
