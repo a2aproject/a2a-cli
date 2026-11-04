@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package unixsocket routes HTTP requests through a Unix socket.
+// Package unixsocket routes HTTP requests and gRPC connections through a Unix
+// socket.
 package unixsocket
 
 import (
@@ -26,9 +27,18 @@ import (
 func Transport(path string) *http.Transport {
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.Proxy = nil
-	var d net.Dialer
-	t.DialContext = func(ctx context.Context, _, _ string) (net.Conn, error) {
-		return d.DialContext(ctx, "unix", path)
+	dial := Dialer(path)
+	t.DialContext = func(ctx context.Context, _, addr string) (net.Conn, error) {
+		return dial(ctx, addr)
 	}
 	return t
+}
+
+// Dialer returns a dial function, usable with grpc.WithContextDialer, that
+// connects to the socket at path whatever the address.
+func Dialer(path string) func(context.Context, string) (net.Conn, error) {
+	var d net.Dialer
+	return func(ctx context.Context, _ string) (net.Conn, error) {
+		return d.DialContext(ctx, "unix", path)
+	}
 }

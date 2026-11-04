@@ -109,6 +109,71 @@ func TestGRPCTransportSecurity(t *testing.T) {
 	}
 }
 
+func TestGRPCOverUnixSocket(t *testing.T) {
+	t.Parallel()
+	handler := a2asrv.NewHandler(localsrv.NewEchoExecutor())
+	srv := grpc.NewServer()
+	t.Cleanup(srv.Stop)
+	a2agrpc.NewHandler(handler).RegisterWith(srv)
+
+	// t.TempDir paths can exceed the Unix socket path length limit.
+	dir, err := os.MkdirTemp("", "a2a")
+	if err != nil {
+		t.Fatalf("os.MkdirTemp() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(dir); err != nil {
+			t.Errorf("removing %s: %v", dir, err)
+		}
+	})
+	sock := filepath.Join(dir, "a2a.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatalf("net.Listen(%q) error = %v", sock, err)
+	}
+	go func() {
+		if err := srv.Serve(ln); err != nil {
+			t.Errorf("srv.Serve() error = %v", err)
+		}
+	}()
+
+	// The host does not resolve, so only the socket can reach the server.
+	const address = "agent.invalid:443"
+	card := testutil.MustWriteTmpCardFile(t, &a2a.AgentCard{
+		Name: "gRPC Echo", Version: "1.0.0",
+		SupportedInterfaces: []*a2a.AgentInterface{a2a.NewAgentInterface(address, a2a.TransportProtocolGRPC)},
+	})
+
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{name: "endpoint", args: []string{"--unix-socket", sock, "--endpoint", address, "--transport", "grpc"}},
+		{name: "Agent Card", args: []string{"--unix-socket", sock, "--agent-card", card}},
+		{name: "missing socket", args: []string{"--unix-socket", filepath.Join(dir, "missing.sock"), "--endpoint", address, "--transport", "grpc"}, wantErr: "dial unix"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			args := append([]string{"send", "--insecure", "--timeout", "3s", "-o", "json", "hello"}, tc.args...)
+			out, err := runCMD(t, args...)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("a2a %s error = %v, want %q", strings.Join(args, " "), err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("a2a %s error = %v", strings.Join(args, " "), err)
+			}
+			if got := testutil.AllArtifactText(mustDecodeTask(t, out)); got != "hello" {
+				t.Fatalf("a2a %s artifact text = %q, want %q", strings.Join(args, " "), got, "hello")
+			}
+		})
+	}
+}
+
 func TestCACert(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
