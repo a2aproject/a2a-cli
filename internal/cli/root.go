@@ -213,7 +213,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	pf.BoolVarP(&cfg.verbose, "verbose", "v", false, "Verbose output to stderr")
 	pf.BoolVar(&cfg.insecureGRPC, "insecure", false, "Use insecure (plaintext) gRPC transport credentials")
 	pf.StringVar(&cfg.caCert, "ca-cert", "", "Trust only the CA certificates in this PEM file for TLS connections")
-	pf.StringVar(&cfg.unixSocket, "unix-socket", "", "Send every HTTP request through the Unix socket at this path")
+	pf.StringVar(&cfg.unixSocket, "unix-socket", "", "Send every HTTP request and gRPC connection through the Unix socket at this path")
 	pf.Var(&cfg.credentialHelpers, "credential-helper", "Credential helper returning the headers for an agent: [scope=]path (repeatable; see a2a auth get --help)")
 	pf.StringVar(&cfg.configPath, "config", "", "Load configuration from an explicit file (.yaml, .json, or .env) in place of the local .env")
 	for _, name := range []string{"unix-socket", "credential-helper", "ca-cert"} {
