@@ -20,6 +20,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 )
 
@@ -80,7 +81,7 @@ func newPushConfigCreateCmd(cfg *globalConfig) *cobra.Command {
 
 func buildPushConfig(f pushConfigCreateFlags) (*a2a.PushConfig, error) {
 	if f.url == "" {
-		return nil, fmt.Errorf("--url is required")
+		return nil, clierr.Usage("--url is required")
 	}
 	pc := &a2a.PushConfig{
 		Tenant: f.tenant,
@@ -91,7 +92,7 @@ func buildPushConfig(f pushConfigCreateFlags) (*a2a.PushConfig, error) {
 	}
 	if f.authScheme != "" || f.authCredentials != "" {
 		if f.authScheme == "" {
-			return nil, fmt.Errorf("--auth-scheme is required when --auth-credentials is set")
+			return nil, clierr.Usage("--auth-scheme is required when --auth-credentials is set")
 		}
 		pc.Auth = &a2a.PushAuthInfo{Scheme: f.authScheme, Credentials: f.authCredentials}
 	}

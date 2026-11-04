@@ -922,6 +922,10 @@ func TestUsageErrors(t *testing.T) {
 		{"missing agent-card file", []string{"card", "get", "-a", "/no/such/card.json"}},
 		{"missing --file-part file", []string{"send", "-a", "http://x", "--file-part", "/no/such/file.txt"}},
 		{"invalid --data-part json", []string{"send", "-a", "http://x", "--data-part", "{bad"}},
+		{"unknown task list --status", []string{"task", "list", "-a", "http://x", "--status", "bogus"}},
+		{"malformed task list --since", []string{"task", "list", "-a", "http://x", "--since", "yesterday"}},
+		{"missing push-config --url", []string{"task", "push-config", "create", "-a", "http://x", "task-1"}},
+		{"push-config --auth-credentials without --auth-scheme", []string{"task", "push-config", "create", "-a", "http://x", "task-1", "--url", "http://hook", "--auth-credentials", "secret"}},
 	}
 
 	for _, tt := range tests {
@@ -964,6 +968,44 @@ func TestRenderErrorJSONModes(t *testing.T) {
 			}
 			if got.Error.Code != clierr.CodeInternal {
 				t.Errorf("renderError() in %s mode code = %q, want %q", mode, got.Error.Code, clierr.CodeInternal)
+			}
+		})
+	}
+}
+
+func TestRenderErrorJSONForFlagAndArgErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"unknown flag", []string{"-o", "json", "card", "get", "--bogus"}},
+		{"missing positional arg", []string{"-o", "jsonl", "task", "get", "-a", "http://x"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var out, errOut bytes.Buffer
+			cfg := &globalConfig{
+				Printer:   &output.Printer{Out: &out},
+				svcParams: &flagparse.ServiceParams{},
+				errOut:    &errOut,
+			}
+			root := mustNewRoot(t, cfg, deps{cfgLoader: clicfg.LoadEmpty})
+			root.SetArgs(tt.args)
+
+			cfg.renderError(root.Execute())
+
+			var got struct {
+				Error clierr.Error `json:"error"`
+			}
+			if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+				t.Fatalf("renderError() for %v wrote stdout %q, stderr %q, want a JSON error object: %v", tt.args, out.String(), errOut.String(), err)
+			}
+			if got.Error.Code != clierr.CodeUsage {
+				t.Errorf("renderError() for %v code = %q, want %q", tt.args, got.Error.Code, clierr.CodeUsage)
 			}
 		})
 	}
