@@ -16,7 +16,9 @@
 package testutil
 
 import (
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,6 +36,21 @@ func AllArtifactText(task *a2a.Task) string {
 		}
 	}
 	return sb.String()
+}
+
+// MustWriteTmpCertFile writes certs PEM-encoded to a ca.pem file in a temporary
+// directory and returns its path.
+func MustWriteTmpCertFile(t *testing.T, certs ...*x509.Certificate) string {
+	t.Helper()
+	var data []byte
+	for _, cert := range certs {
+		data = append(data, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})...)
+	}
+	path := filepath.Join(t.TempDir(), "ca.pem")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	return path
 }
 
 // MustWriteTmpCardFile creates a card.json file in a temporary directory on the local
