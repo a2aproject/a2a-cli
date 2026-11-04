@@ -29,6 +29,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/transportplugin"
+	"github.com/a2aproject/a2a-cli/internal/unixsocket"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
 	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
@@ -155,7 +156,10 @@ func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
 	if cfg.insecureGRPC {
 		creds = insecure.NewCredentials()
 	}
-	grpcOpt := grpc.WithTransportCredentials(creds)
+	grpcOpts := []grpc.DialOption{grpc.WithTransportCredentials(creds)}
+	if cfg.unixSocket != "" {
+		grpcOpts = append(grpcOpts, grpc.WithContextDialer(unixsocket.Dialer(cfg.unixSocket)))
+	}
 	// The a2a-go default HTTP client caps every request at 3 minutes. Use one without a
 	// total timeout so the --timeout context deadline is what bounds a request.
 	httpClient := &http.Client{Transport: cfg.httpTransport}
@@ -168,7 +172,7 @@ func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
 			opts,
 			a2aclient.WithRESTTransport(httpClient),
 			a2aclient.WithJSONRPCTransport(httpClient),
-			a2aclient.WithTransport(a2a.TransportProtocolGRPC, grpcTransportFactory(a2agrpc.NewGRPCTransport, grpcOpt)),
+			a2aclient.WithTransport(a2a.TransportProtocolGRPC, grpcTransportFactory(a2agrpc.NewGRPCTransport, cfg.unixSocket != "", grpcOpts...)),
 		)
 	}
 	if cfg.a2aVersion == "" || cfg.a2aVersion == "0.3" {
@@ -176,7 +180,7 @@ func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
 			opts,
 			a2av0.WithRESTTransport(a2av0.RESTTransportConfig{Client: httpClient}),
 			a2av0.WithJSONRPCTransport(a2av0.JSONRPCTransportConfig{Client: httpClient}),
-			a2aclient.WithCompatTransport(a2av0.Version, a2a.TransportProtocolGRPC, grpcTransportFactory(a2agrpcv0.NewGRPCTransport, grpcOpt)),
+			a2aclient.WithCompatTransport(a2av0.Version, a2a.TransportProtocolGRPC, grpcTransportFactory(a2agrpcv0.NewGRPCTransport, cfg.unixSocket != "", grpcOpts...)),
 		)
 	}
 	return opts
@@ -184,10 +188,15 @@ func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
 
 // grpcTransportFactory dials the host and port of a gRPC interface URL, which
 // cards may advertise with an http(s) scheme. The a2agrpc options pass the URL
-// to grpc.NewClient as is, which cannot resolve such a target.
-func grpcTransportFactory(newTransport func(*grpc.ClientConn) a2aclient.Transport, opts ...grpc.DialOption) a2aclient.TransportFactory {
+// to grpc.NewClient as is, which cannot resolve such a target. With
+// --unix-socket the host is not resolved, since the dialer ignores it.
+func grpcTransportFactory(newTransport func(*grpc.ClientConn) a2aclient.Transport, unixSocket bool, opts ...grpc.DialOption) a2aclient.TransportFactory {
 	return a2aclient.TransportFactoryFn(func(_ context.Context, _ *a2a.AgentCard, iface *a2a.AgentInterface) (a2aclient.Transport, error) {
-		conn, err := grpc.NewClient(stripHTTPScheme(iface.URL), opts...)
+		target := stripHTTPScheme(iface.URL)
+		if unixSocket {
+			target = "passthrough:///" + target
+		}
+		conn, err := grpc.NewClient(target, opts...)
 		if err != nil {
 			return nil, err
 		}
