@@ -54,7 +54,7 @@ func newServeCmd(cfg *globalConfig) *cobra.Command {
 		Short: "Start an A2A-compliant server",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if protocol != "latest" && protocol != "0.3" {
-				return fmt.Errorf("--protocol must be %q or %q", "latest", "0.3")
+				return clierr.Usage(fmt.Sprintf("--protocol must be %q or %q", "latest", "0.3"))
 			}
 			modes := 0
 			if echo {
@@ -72,18 +72,23 @@ func newServeCmd(cfg *globalConfig) *cobra.Command {
 			if modes == 0 {
 				return clierr.Usage("specify --echo, --proxy <url>, or --exec <cmd>")
 			}
-			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-			defer stop()
-			listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", host, port))
-			if err != nil {
-				return fmt.Errorf("listen: %w", err)
-			}
 			transport, err := flagparse.SingleTransport([]string{serveTransport})
 			if err != nil {
 				return err
 			}
 			if !transportplugin.IsBuiltin(transport) {
-				return fmt.Errorf("serve %q transport not supported", transport)
+				return clierr.Usage(fmt.Sprintf("serve %q transport not supported", transport))
+			}
+			if cardFile != "" {
+				if _, err := os.Stat(cardFile); err != nil {
+					return clierr.Usage(fmt.Sprintf("reading --card %q: %v", cardFile, err))
+				}
+			}
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+			defer stop()
+			listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", host, port))
+			if err != nil {
+				return fmt.Errorf("listen: %w", err)
 			}
 			sc := localsrv.Config{
 				Listener:        listener,
