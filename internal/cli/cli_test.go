@@ -926,6 +926,12 @@ func TestUsageErrors(t *testing.T) {
 		{"malformed task list --since", []string{"task", "list", "-a", "http://x", "--since", "yesterday"}},
 		{"missing push-config --url", []string{"task", "push-config", "create", "-a", "http://x", "task-1"}},
 		{"push-config --auth-credentials without --auth-scheme", []string{"task", "push-config", "create", "-a", "http://x", "task-1", "--url", "http://hook", "--auth-credentials", "secret"}},
+		{"--endpoint without --transport", []string{"send", "-e", "http://x", "hi"}},
+		{"--endpoint with two --transport", []string{"send", "-e", "http://x", "--transport", "rest", "--transport", "grpc", "hi"}},
+		{"empty --transport", []string{"send", "-a", "http://x", "--transport", "", "hi"}},
+		{"unknown server --protocol", []string{"server", "--echo", "--port", "0", "--protocol", "bogus"}},
+		{"unknown server --serve-transport", []string{"server", "--echo", "--port", "0", "--serve-transport", "bogus"}},
+		{"missing server --card file", []string{"server", "--echo", "--port", "0", "--card", "/no/such/card.json"}},
 	}
 
 	for _, tt := range tests {
