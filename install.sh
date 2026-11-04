@@ -6,18 +6,18 @@
 #   curl -fsSL https://raw.githubusercontent.com/a2aproject/a2a-cli/main/install.sh | bash
 #
 # Environment variables:
-#   A2A_VERSION   Specific version to install (e.g. v0.3.1 or 0.3.1). Defaults
-#                 to the latest published release.
-#   INSTALL_DIR   Directory to install the binary into. Defaults to
-#                 /usr/local/bin (falls back to $HOME/.local/bin if not
-#                 writable and sudo is unavailable).
-#   BINARY_NAME   Name of the installed binary. Defaults to a2a.
+#   A2A_VERSION       Specific version to install (e.g. v0.3.1 or 0.3.1).
+#                     Defaults to the latest published release.
+#   A2A_INSTALL_DIR   Directory to install the binary into. Defaults to
+#                     /usr/local/bin (falls back to $HOME/.local/bin if not
+#                     writable and sudo is unavailable).
+#   A2A_BINARY_NAME   Name of the installed binary. Defaults to a2a.
 #
 set -euo pipefail
 
 REPO="a2aproject/a2a-cli"
-BINARY_NAME="${BINARY_NAME:-a2a}"
-INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
+A2A_BINARY_NAME="${A2A_BINARY_NAME:-a2a}"
+A2A_INSTALL_DIR="${A2A_INSTALL_DIR:-/usr/local/bin}"
 
 tmpdir=""
 trap 'rm -rf "${tmpdir:-}"' EXIT
@@ -114,7 +114,7 @@ verify_checksum() {
 }
 
 choose_install_dir() {
-  local dir="$INSTALL_DIR"
+  local dir="$A2A_INSTALL_DIR"
   if [ -d "$dir" ] && [ -w "$dir" ]; then
     echo "$dir"
     return
@@ -133,7 +133,7 @@ choose_install_dir() {
 }
 
 install_binary() {
-  local src="$1" dest_dir="$2" dest="$2/$BINARY_NAME"
+  local src="$1" dest_dir="$2" dest="$2/$A2A_BINARY_NAME"
   if [ -w "$dest_dir" ]; then
     install -m 0755 "$src" "$dest"
     return
@@ -169,14 +169,14 @@ main() {
   dest_dir="$(choose_install_dir)"
   install_binary "${tmpdir}/a2a" "$dest_dir"
 
-  log "Installed ${BINARY_NAME} to ${dest_dir}/${BINARY_NAME}"
+  log "Installed ${A2A_BINARY_NAME} to ${dest_dir}/${A2A_BINARY_NAME}"
 
   case ":$PATH:" in
     *":${dest_dir}:"*) ;;
-    *) warn "${dest_dir} is not in your PATH; add it to use ${BINARY_NAME} directly" ;;
+    *) warn "${dest_dir} is not in your PATH; add it to use ${A2A_BINARY_NAME} directly" ;;
   esac
 
-  "${dest_dir}/${BINARY_NAME}" version || warn "installed binary failed to report its version"
+  "${dest_dir}/${A2A_BINARY_NAME}" version || warn "installed binary failed to report its version"
 }
 
 main "$@"

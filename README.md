@@ -54,7 +54,11 @@ winget install a2aproject.a2acli
 curl -fsSL https://raw.githubusercontent.com/a2aproject/a2a-cli/main/install.sh | bash
 ```
 
-Set `A2A_VERSION` to pin a release and `INSTALL_DIR` to change the destination (default `/usr/local/bin`).
+This installs the latest release into `/usr/local/bin`. Set `A2A_INSTALL_DIR` to change the destination, or `A2A_VERSION` to pin a version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/a2aproject/a2a-cli/main/install.sh | A2A_VERSION=0.3.1 bash
+```
 
 **From Source (Linux / Windows / macOS)**
 
