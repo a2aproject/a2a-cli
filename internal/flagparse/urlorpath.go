@@ -90,7 +90,7 @@ func normalize(ref string) string {
 		if abs, err := filepath.Abs(path); err == nil {
 			path = abs
 		}
-		return "file://" + path
+		return (&url.URL{Scheme: "file", Path: path}).String()
 	}
 	if isLoopbackHost(ref) {
 		return "http://" + ref

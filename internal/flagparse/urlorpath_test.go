@@ -38,6 +38,7 @@ func TestURLOrPathURL(t *testing.T) {
 		{name: "https url unchanged", ref: "https://a.example/card.json", want: "https://a.example/card.json"},
 		{name: "file url unchanged", ref: "file:///tmp/card.json", want: "file:///tmp/card.json"},
 		{name: "absolute path becomes file url", ref: "/tmp/card.json", want: "file:///tmp/card.json"},
+		{name: "path characters are escaped", ref: "/tmp/agent #2 100%?.json", want: "file:///tmp/agent%20%232%20100%25%3F.json"},
 		{name: "bare host gets https", ref: "agent.example", want: "https://agent.example"},
 		{name: "bare host:port gets https", ref: "agent.example:8443", want: "https://agent.example:8443"},
 		{name: "loopback host:port gets http", ref: "127.0.0.1:8091", want: "http://127.0.0.1:8091"},
@@ -67,9 +68,13 @@ func TestURLOrPathURL(t *testing.T) {
 func TestURLOrPathValidate(t *testing.T) {
 	t.Parallel()
 
-	existing := filepath.Join(t.TempDir(), "card.json")
-	if err := os.WriteFile(existing, []byte("{}"), 0o600); err != nil {
-		t.Fatalf("os.WriteFile() error = %v", err)
+	dir := t.TempDir()
+	existing := filepath.Join(dir, "card.json")
+	special := filepath.Join(dir, "agent #2 100%?.json")
+	for _, path := range []string{existing, special} {
+		if err := os.WriteFile(path, []byte("{}"), 0o600); err != nil {
+			t.Fatalf("os.WriteFile() error = %v", err)
+		}
 	}
 
 	tests := []struct {
@@ -84,6 +89,7 @@ func TestURLOrPathValidate(t *testing.T) {
 		{name: "full https url is valid", ref: "https://agent.example/card.json"},
 		{name: "existing absolute path is valid", ref: existing},
 		{name: "existing file url is valid", ref: "file://" + existing},
+		{name: "existing path with url characters is valid", ref: special},
 		{name: "missing absolute path is a usage error", ref: "/no/such/card.json", wantErr: true, wantErrIs: os.ErrNotExist},
 		{name: "missing relative path is a usage error", ref: "./no-such-card.json", wantErr: true, wantErrIs: os.ErrNotExist},
 		{name: "missing file url is a usage error", ref: "file:///no/such/card.json", wantErr: true, wantErrIs: os.ErrNotExist},
