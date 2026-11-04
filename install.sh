@@ -10,7 +10,7 @@
 #                     Defaults to the latest published release.
 #   A2A_INSTALL_DIR   Directory to install the binary into. Defaults to
 #                     /usr/local/bin (falls back to $HOME/.local/bin if not
-#                     writable and sudo is unavailable).
+#                     writable and sudo is unusable).
 #   A2A_BINARY_NAME   Name of the installed binary. Defaults to a2a.
 #
 set -euo pipefail
@@ -60,13 +60,21 @@ fetch() {
   fi
 }
 
-fetch_stdout() {
+resolve_redirect() {
   local url="$1"
   if [ "$DOWNLOADER" = "curl" ]; then
-    curl -fsSL "$url"
+    curl -fsSLI -o /dev/null -w '%{url_effective}' "$url"
   else
-    wget -qO- "$url"
+    wget -S --spider "$url" 2>&1 \
+      | awk '/^  Location: / { loc = $2 } END { sub(/\r$/, "", loc); if (loc == "") exit 1; print loc }'
   fi
+}
+
+# sudo is only usable if it doesn't need a password or can prompt for one.
+can_sudo() {
+  command -v sudo >/dev/null 2>&1 || return 1
+  sudo -n true 2>/dev/null && return 0
+  { : </dev/tty; } 2>/dev/null
 }
 
 detect_os() {
@@ -82,6 +90,10 @@ detect_os() {
 detect_arch() {
   local arch
   arch="$(uname -m)"
+  # A shell running under Rosetta reports x86_64 on Apple Silicon.
+  if [ "$arch" = "x86_64" ] && [ "$(sysctl -n sysctl.proc_translated 2>/dev/null)" = "1" ]; then
+    arch="arm64"
+  fi
   case "$arch" in
     x86_64|amd64)  echo "amd64" ;;
     aarch64|arm64) echo "arm64" ;;
@@ -94,14 +106,14 @@ resolve_tag() {
     echo "v${A2A_VERSION#v}"
     return
   fi
-  local api_url="https://api.github.com/repos/${REPO}/releases/latest"
-  local tag
-  tag="$(fetch_stdout "$api_url" \
-    | grep -E '"tag_name"' \
-    | head -n 1 \
-    | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
-  [ -n "$tag" ] || err "failed to detect latest version from $api_url"
-  echo "$tag"
+  # Follow the releases/latest redirect to avoid GitHub API rate limits.
+  local latest_url="https://github.com/${REPO}/releases/latest"
+  local url
+  url="$(resolve_redirect "$latest_url")" || err "failed to detect latest version from $latest_url"
+  case "$url" in
+    */releases/tag/*) echo "${url##*/}" ;;
+    *) err "failed to detect latest version from $latest_url (resolved to $url)" ;;
+  esac
 }
 
 verify_checksum() {
@@ -123,11 +135,11 @@ choose_install_dir() {
     echo "$dir"
     return
   fi
-  if command -v sudo >/dev/null 2>&1; then
+  if can_sudo; then
     echo "$dir"
     return
   fi
-  warn "$dir is not writable and sudo is unavailable; falling back to \$HOME/.local/bin"
+  warn "$dir is not writable and sudo is unusable; falling back to \$HOME/.local/bin"
   mkdir -p "$HOME/.local/bin"
   echo "$HOME/.local/bin"
 }
