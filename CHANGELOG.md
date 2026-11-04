@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.4.0](https://github.com/a2aproject/a2a-cli/compare/v0.3.1...v0.4.0) (2026-11-04)
+
+
+### Features
+
+* add --ca-cert to trust a custom CA ([#119](https://github.com/a2aproject/a2a-cli/issues/119)) ([b8309d0](https://github.com/a2aproject/a2a-cli/commit/b8309d04db0e73f66f36f653b931b3db625a28d6))
+* add --unix-socket and credential helpers ([#105](https://github.com/a2aproject/a2a-cli/issues/105)) ([0f6200c](https://github.com/a2aproject/a2a-cli/commit/0f6200ce076263e9b6f7ba3b9161d649feeeb1fa))
+* add an interactive chat command ([#86](https://github.com/a2aproject/a2a-cli/issues/86)) ([c65d313](https://github.com/a2aproject/a2a-cli/commit/c65d3131f39f8ca7a176c0aca1a7229362188680))
+* add install script for macOS and Linux ([#120](https://github.com/a2aproject/a2a-cli/issues/120)) ([0234a8f](https://github.com/a2aproject/a2a-cli/commit/0234a8fb507783813baa59f6231e6f548fe18daa))
+
+
+### Bug Fixes
+
+* honor --timeout on card resolution and document wait/polling flags ([#94](https://github.com/a2aproject/a2a-cli/issues/94)) ([4c17dd2](https://github.com/a2aproject/a2a-cli/commit/4c17dd21364856c3ade9e5e89c8dbe9147fe6a5b))
+* make error hints match the error class ([#107](https://github.com/a2aproject/a2a-cli/issues/107)) ([f50a110](https://github.com/a2aproject/a2a-cli/commit/f50a11081d8ee44c705fe3eb27d0009f9c04b5e9))
+* print flag and argument errors as JSON under -o json ([#117](https://github.com/a2aproject/a2a-cli/issues/117)) ([b90755a](https://github.com/a2aproject/a2a-cli/commit/b90755a94699079562bceabaf02eaf60c85af662)), closes [#115](https://github.com/a2aproject/a2a-cli/issues/115)
+* report a missing --file-part or --config file as a usage error ([#97](https://github.com/a2aproject/a2a-cli/issues/97)) ([7229469](https://github.com/a2aproject/a2a-cli/commit/72294695caa6e1952c9dd10accda292cb065b511)), closes [#96](https://github.com/a2aproject/a2a-cli/issues/96)
+* report bad task list filters and missing push-config flags as usage errors ([#118](https://github.com/a2aproject/a2a-cli/issues/118)) ([a1809cb](https://github.com/a2aproject/a2a-cli/commit/a1809cbefbcd2ff22f47a9fb57a2062a5c3155c3)), closes [#116](https://github.com/a2aproject/a2a-cli/issues/116)
+* report invalid --data-part JSON as a usage error ([#110](https://github.com/a2aproject/a2a-cli/issues/110)) ([c26bb76](https://github.com/a2aproject/a2a-cli/commit/c26bb7611631dd2f753853ac9e93983bdfe0f5b3)), closes [#109](https://github.com/a2aproject/a2a-cli/issues/109)
+* send gRPC through --unix-socket ([#122](https://github.com/a2aproject/a2a-cli/issues/122)) ([c44eb01](https://github.com/a2aproject/a2a-cli/commit/c44eb0171384abf4b76dafc2d5d9b45f2dd2ed5f)), closes [#108](https://github.com/a2aproject/a2a-cli/issues/108)
+* use TLS by default for built-in gRPC connections ([#114](https://github.com/a2aproject/a2a-cli/issues/114)) ([7510bd5](https://github.com/a2aproject/a2a-cli/commit/7510bd51b5379bad40be19f3feab7fc40ce28bad))
+
 ## [0.3.1](https://github.com/a2aproject/a2a-cli/compare/v0.3.0...v0.3.1) (2026-10-16)
 
 
