@@ -19,6 +19,7 @@ package oauthtest
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -53,6 +54,8 @@ type ServerOptions struct {
 	PendingPolls int
 	// DenyAuthorization makes the authorization and device flows fail with access_denied.
 	DenyAuthorization bool
+	// TLS serves https with the certificate returned by [AuthServer.Certificate].
+	TLS bool
 }
 
 type codeGrant struct {
@@ -77,6 +80,7 @@ type AuthServer struct {
 	URL string
 
 	opts ServerOptions
+	srv  *httptest.Server
 	mu   sync.Mutex
 
 	codes   map[string]codeGrant
@@ -116,11 +120,27 @@ func NewAuthServer(t *testing.T, opts ServerOptions) *AuthServer {
 	mux.HandleFunc("POST /device", s.device)
 	mux.HandleFunc("GET /activate", s.activate)
 	mux.HandleFunc("POST /revoke", s.revoke)
-	srv := httptest.NewServer(s.record(mux))
-	t.Cleanup(srv.Close)
-	s.URL = srv.URL
+	s.srv = startServer(t, s.record(mux), opts.TLS)
+	s.URL = s.srv.URL
 	return s
 }
+
+// startServer starts an httptest server, with TLS if requested, that is stopped
+// with the test.
+func startServer(t *testing.T, h http.Handler, useTLS bool) *httptest.Server {
+	srv := httptest.NewUnstartedServer(h)
+	if useTLS {
+		srv.StartTLS()
+	} else {
+		srv.Start()
+	}
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// Certificate returns the server's TLS certificate, or nil without
+// [ServerOptions.TLS].
+func (s *AuthServer) Certificate() *x509.Certificate { return s.srv.Certificate() }
 
 func (s *AuthServer) record(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

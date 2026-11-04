@@ -16,6 +16,7 @@ package oauthtest
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"iter"
 	"net/http"
@@ -57,6 +58,8 @@ type AgentOptions struct {
 	Scopes []string
 	// JSONRPC serves the JSON-RPC binding instead of REST.
 	JSONRPC bool
+	// TLS serves https with the certificate returned by [ProtectedAgent.Certificate].
+	TLS bool
 }
 
 // ProtectedAgent is an A2A echo agent that requires access tokens from an [AuthServer].
@@ -66,6 +69,7 @@ type ProtectedAgent struct {
 
 	as   *AuthServer
 	opts AgentOptions
+	srv  *httptest.Server
 
 	mu      sync.Mutex
 	headers []string
@@ -77,9 +81,8 @@ func NewProtectedAgent(t *testing.T, as *AuthServer, opts AgentOptions) *Protect
 	a := &ProtectedAgent{as: as, opts: opts}
 	handler := a2asrv.NewHandler(echoExecutor{}, a2asrv.WithCapabilityChecks(&a2a.AgentCapabilities{Streaming: true}))
 	mux := http.NewServeMux()
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-	a.URL = srv.URL
+	a.srv = startServer(t, mux, opts.TLS)
+	a.URL = a.srv.URL
 
 	protocol := a2a.TransportProtocolHTTPJSON
 	binding := a2asrv.NewRESTHandler(handler)
@@ -180,6 +183,10 @@ func (a *ProtectedAgent) AuthorizationHeaders() []string {
 	defer a.mu.Unlock()
 	return append([]string(nil), a.headers...)
 }
+
+// Certificate returns the agent's TLS certificate, or nil without
+// [AgentOptions.TLS].
+func (a *ProtectedAgent) Certificate() *x509.Certificate { return a.srv.Certificate() }
 
 type echoExecutor struct{}
 

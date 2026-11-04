@@ -66,10 +66,10 @@ func origin(raw string) string {
 	return u.Scheme + "://" + u.Host
 }
 
-// SameOrigin reports whether two URLs have the same scheme, host and port.
-func SameOrigin(a, b string) bool {
-	oa := origin(a)
-	return oa != "" && oa == origin(b)
+// ResourceCovers reports whether a grant for resource applies to requests to
+// target: same origin, and the target path is the resource path or below it.
+func ResourceCovers(resource, target string) bool {
+	return resourceCovers(resource, target)
 }
 
 // resourceCovers reports whether resource identifies target: same origin, and

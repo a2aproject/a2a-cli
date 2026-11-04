@@ -141,6 +141,7 @@ Run `a2a <command> --help` for the full, current set. The load-bearing ones:
 | `--task-id <id>` / `--context-id <id>` | Continue a task / group a new task under a context. |
 | `--save-fileparts <dir>` | Save raw file parts from responses (artifacts and messages) as files under `<dir>`; the output still summarizes them by name/type/size. |
 | `--auth "<creds>"` / `--svc-param <k=v>` | Attach credentials or transport parameters (or set `A2ACLI_*` env vars). Never commit a secret. |
+| `--oauth cached` | Use only stored OAuth grants; never start a sign-in. On `A2ACLI_ERR_CREDENTIALS_MISSING`, ask the user to run the command in the error's `hint` (an `a2a auth login …`; add `--device` without a browser), then do what the hint says next. Don't run `auth login` yourself: it waits for the user. |
 
 ## Configuration
 
