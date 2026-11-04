@@ -58,6 +58,8 @@ type deps struct {
 	authTimeout time.Duration
 	// authSleep, if set, replaces the wait between device flow polls.
 	authSleep func(context.Context, time.Duration) error
+	// keyring replaces the OS keychain used by --oauth-store keychain.
+	keyring oauth.Keyring
 }
 
 func (d *deps) setDefaults() {
@@ -104,6 +106,7 @@ type globalConfig struct {
 	oauthMode            string
 	oauthClients         oauth.ClientsFlag
 	oauthDefaultClientID string
+	oauthStore           string
 	oauth                *oauth.Manager
 
 	// insecureWarning prints insecureCredentialWarning at most once.
@@ -248,8 +251,9 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	pf.StringVar(&cfg.oauthMode, "oauth", oauthAuto, "OAuth sign-in for agents that require it: auto (sign in when needed), cached (use stored grants only), or off (see a2a auth login --help)")
 	pf.Var(&cfg.oauthClients, "oauth-clients", `OAuth client registration as JSON: {"authority":"<issuer>","client_id":"<id or CIMD URL>","scopes":[...]} (repeatable; a JSON array is also accepted)`)
 	pf.StringVar(&cfg.oauthDefaultClientID, "oauth-default-client-id", oauth.DefaultClientID, "OAuth client ID used with authorization servers that support Client ID Metadata Documents when no oauth-clients entry matches; empty disables it")
+	pf.StringVar(&cfg.oauthStore, "oauth-store", "file", "Where OAuth grants are stored: file (~/.config/a2a-cli/oauth/grants.json) or keychain (tokens in the OS keychain)")
 	pf.StringVar(&cfg.configPath, "config", "", "Load configuration from an explicit file (.yaml, .json, or .env) in place of the local .env")
-	for _, name := range []string{"unix-socket", "credential-helper", "ca-cert", "oauth-clients", "oauth-default-client-id"} {
+	for _, name := range []string{"unix-socket", "credential-helper", "ca-cert", "oauth-clients", "oauth-default-client-id", "oauth-store"} {
 		if err := pf.SetAnnotation(name, clicfg.AnnotationNotFromDiscoveredFile, []string{"true"}); err != nil {
 			return nil, err
 		}

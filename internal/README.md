@@ -44,6 +44,7 @@ These apply to every client-mode command. Each command selects the agent it talk
 | `--oauth <mode>` | | OAuth sign-in for agents that require it: `auto` (default), `cached`, or `off`. See [OAuth](#oauth). |
 | `--oauth-clients <json>` | | OAuth client registration per authorization server. Repeatable. Not read from the local `.env`. |
 | `--oauth-default-client-id <id>` | | OAuth client ID for authorization servers that support Client ID Metadata Documents when no registration matches; empty disables it. Not read from the local `.env`. |
+| `--oauth-store <store>` | | Where OAuth grants are kept: `file` (default) or `keychain`. Not read from the local `.env`. |
 | `--tenant <id>` | | Tenant identifier. Passed on every request. |
 | `--timeout <dur>` | | Request timeout. Default `30s`. |
 | `--verbose` | `-v` | Verbose output to stderr. |
@@ -334,6 +335,7 @@ a2a send -a https://agent.example.com --oauth cached "from CI"    # never prompt
 | `--oauth` | `auto` (default), `cached`, `off` | `auto` signs in when an agent requires it and stderr is a terminal; without a terminal it fails like `cached`. `cached` only uses stored grants and otherwise fails with `A2ACLI_ERR_CREDENTIALS_MISSING` (exit 4). `off` disables OAuth. |
 | `--oauth-clients` | JSON object or array | Client registrations, one per authorization server: `{"authority":"<issuer>","client_id":"<client id or CIMD URL>","scopes":[...]}` on the command line and in `A2ACLI_OAUTH_CLIENTS`; a list of such objects in config files. Not read from the local `.env`. See [Client registrations](#client-registrations). |
 | `--oauth-default-client-id` | Client ID or CIMD URL, empty to disable | Client ID used with servers that support Client ID Metadata Documents when no registration matches. Default `https://a2a-protocol.org/oauth/a2a-cli.json`. Not read from the local `.env`. |
+| `--oauth-store` | `file` (default), `keychain` | `file` keeps grants, tokens included, in `~/.config/a2a-cli/oauth/grants.json` (mode 0600). `keychain` keeps the tokens in the macOS Keychain, Windows Credential Manager or Linux Secret Service, one entry per token, and the rest of each grant in `keychain-grants.json`; the two stores keep separate grants. Without a keychain, or when a token is too large for it, saving a grant fails rather than writing the tokens to disk. Not read from the local `.env`. |
 
 #### Where a2a learns how to sign in
 
@@ -353,7 +355,7 @@ OAuth is enforced only when the agent card requires it. A card that also accepts
 
 Tokens are only sent over `https`, or `http` to a loopback host. Every request to the authorization server carries the agent URL as `resource` ([RFC 8707](https://www.rfc-editor.org/rfc/rfc8707)), so the token only works for that agent. These requests go through the same transport as agent requests, so `--unix-socket` and `--ca-cert` apply to them. Signing in has its own 5-minute limit; `--timeout` covers the agent requests, which start after it. If signing in fails or the agent still rejects the token, the command fails with `A2ACLI_ERR_AUTH_FAILED` (exit 4).
 
-Grants are stored per issuer, client ID, agent URL and scopes in `~/.config/a2a-cli/oauth/grants.json` (mode 0600). A grant also serves agents below its URL, and one obtained with more scopes than an agent asks for is reused. a2a refreshes a token shortly before it expires, or once when the agent rejects it with `error="invalid_token"`, and retries the request once.
+Grants are stored per issuer, client ID, agent URL and scopes in `~/.config/a2a-cli/oauth/grants.json` (mode 0600), or in the OS keychain with an index in `keychain-grants.json` under `--oauth-store keychain`. A grant also serves agents below its URL, and one obtained with more scopes than an agent asks for is reused. a2a refreshes a token shortly before it expires, or once when the agent rejects it with `error="invalid_token"`, and retries the request once.
 
 #### Client registrations
 
@@ -389,7 +391,7 @@ a2a auth get https://agent.example.com --reveal
 a2a auth logout --all
 ```
 
-A script or a sandboxed agent can sign in once with `a2a auth login` and then run with `--oauth cached`. Both have to use the same `~/.config/a2a-cli`, so a sandbox with its own home directory doesn't see a grant stored outside it.
+A script or a sandboxed agent can sign in once with `a2a auth login` and then run with `--oauth cached`. Both have to use the same `~/.config/a2a-cli` and `--oauth-store`, so a sandbox with its own home directory doesn't see a grant stored outside it.
 
 ---
 

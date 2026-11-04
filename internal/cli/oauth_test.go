@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -459,6 +460,101 @@ func TestAuthUsageErrors(t *testing.T) {
 		if _, _, err := e.run(t, args...); errCode(err) != clierr.CodeUsage {
 			t.Errorf("a2a %s error = %v, want a usage error", strings.Join(args, " "), err)
 		}
+	}
+}
+
+type memKeyring struct {
+	mu      sync.Mutex
+	secrets map[string]string
+}
+
+func (k *memKeyring) Get(service, user string) (string, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if s, ok := k.secrets[service+"/"+user]; ok {
+		return s, nil
+	}
+	return "", oauth.ErrSecretNotFound
+}
+
+func (k *memKeyring) Set(service, user, secret string) error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.secrets == nil {
+		k.secrets = map[string]string{}
+	}
+	k.secrets[service+"/"+user] = secret
+	return nil
+}
+
+func (k *memKeyring) Delete(service, user string) error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	delete(k.secrets, service+"/"+user)
+	return nil
+}
+
+func TestOAuthKeychainStore(t *testing.T) {
+	t.Parallel()
+	e := newOAuthEnv(t, oauthtest.ServerOptions{}, oauthtest.AgentOptions{Card: oauthtest.CardMetadataURL})
+	kr := &memKeyring{}
+	e.deps.keyring = kr
+	args := []string{"send", "-a", e.agent.URL, e.clients(), "--oauth-store", "keychain", oauthTestMessage}
+	e.mustRun(t, args...)
+
+	index, err := os.ReadFile(filepath.Join(e.deps.oauthDir, oauth.KeyringIndexName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(index), "access_token") || strings.Contains(string(index), "refresh_token") {
+		t.Fatalf("%s contains tokens: %s", oauth.KeyringIndexName, index)
+	}
+	if _, err := os.Stat(filepath.Join(e.deps.oauthDir, "grants.json")); !os.IsNotExist(err) {
+		t.Fatalf("grants.json exists with --oauth-store keychain (stat error %v)", err)
+	}
+	if len(kr.secrets) != 2 {
+		t.Fatalf("keychain entries = %d, want one per token", len(kr.secrets))
+	}
+	if _, stderr := e.mustRun(t, args...); strings.Contains(stderr, "To authorize") {
+		t.Fatalf("second send stderr = %q, want the grant read from the keychain", stderr)
+	}
+	e.mustRun(t, "auth", "logout", "--all", "--oauth-store", "keychain")
+	if len(kr.secrets) != 0 {
+		t.Fatalf("keychain entries after logout = %d, want 0", len(kr.secrets))
+	}
+}
+
+func TestOAuthKeychainGrantWithoutTokens(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		mutate func(*memKeyring)
+		store  []string
+	}{
+		{name: "file store", store: nil},
+		{name: "keychain entries removed", mutate: func(k *memKeyring) { k.secrets = nil }, store: []string{"--oauth-store", "keychain"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			e := newOAuthEnv(t, oauthtest.ServerOptions{}, oauthtest.AgentOptions{Card: oauthtest.CardMetadataURL})
+			kr := &memKeyring{}
+			e.deps.keyring = kr
+			e.mustRun(t, "auth", "login", e.agent.URL, e.clients(), "--oauth-store", "keychain")
+			if tc.mutate != nil {
+				tc.mutate(kr)
+			}
+			sent := len(e.agent.AuthorizationHeaders())
+			e.deps.authInteractive = func() bool { return false }
+			args := append([]string{"send", "-a", e.agent.URL, e.clients(), oauthTestMessage}, tc.store...)
+			_, _, err := e.run(t, args...)
+			if got := errCode(err); got != clierr.CodeCredentialsMissing {
+				t.Fatalf("a2a send error = %v (code %s), want %s", err, got, clierr.CodeCredentialsMissing)
+			}
+			if got := e.agent.AuthorizationHeaders()[sent:]; len(got) != 0 {
+				t.Fatalf("the agent received %q, want no request without a usable token", got)
+			}
+		})
 	}
 }
 
