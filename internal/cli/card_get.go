@@ -84,8 +84,9 @@ func getPublicAgentCard(ctx context.Context, cfg *globalConfig) (*a2a.AgentCard,
 	if !cfg.agentCard.IsSet() {
 		return nil, clierr.Usage("specify the agent card URL as an argument or with --agent-card")
 	}
-	if err := cfg.agentCard.Validate(); err != nil {
-		return nil, clierr.Usage(err.Error())
+	ref, err := cfg.resolveAgentCardRef()
+	if err != nil {
+		return nil, err
 	}
-	return resolveCard(ctx, cfg, cfg.agentCard.URL())
+	return resolveCard(ctx, cfg, ref)
 }

@@ -297,6 +297,46 @@ Streams events to stdout until the task reaches a terminal state. Output format 
 
 ---
 
+## Contacts
+
+The contact book stores named agents you trust in `~/.config/a2a-cli/contacts.yaml`. A contact name can be passed to `--agent-card` (`-a`) or `card get` in place of a card reference. Names use lowercase letters, digits, `-` and `_`, so they never look like a host, URL or path.
+
+```bash
+a2a contact add nimbus nimbus.coffee --note "Order status for my coffee subscription"
+a2a contact list                 # names, agent names from the card cache, card references
+a2a contact get nimbus           # contact details and its cached card (--refresh to fetch it)
+a2a send -a nimbus "Where is order NR-2041?"
+a2a contact rm nimbus
+```
+
+`contact add` fetches the card first and fails if it can't, using the same credentials, `--svc-param` headers and `--ca-cert` as `card get`. Pass `--replace` to overwrite an existing contact. Fetched cards are cached under the user cache directory (`~/.cache/a2a-cli` on Linux).
+
+### Agent harness hooks
+
+`a2a hook` is a hidden command for agent harness hooks. It reads a hook event as JSON on stdin and prints the context to add in the Claude Code hook output format. The [Agent Plugin](../agent-plugin/) registers it for `SessionStart`, `UserPromptSubmit` and `PostToolBatch`.
+
+- On `SessionStart` it lists your contacts as trusted agents. After a compaction it also lists the agents discovered earlier in the session.
+- When the contact book changes during a session, the next event lists the contacts again.
+- It probes the origins of URLs in prompts and in `WebFetch` and `WebSearch` calls (`discovery-scan-tools`) for an agent card. Agents it finds are listed as unverified, and the model is told to ask the user before delegating to them.
+
+The hook itself makes no network requests. Origins without a cached card are probed by a detached `a2a hook probe` process, and agents it finds are reported by a later event. Each agent is reported once per session. Found cards are cached for 24 hours, and origins without a card for 6 hours.
+
+| Setting | Default | Description |
+|---|---|---|
+| `discovery` | `true` | Probe origins of URLs in the conversation. Set `false` (or `A2ACLI_DISCOVERY=false`) to keep only the contacts. |
+| `discovery-allow-host` | | Hosts discovery may probe whatever address they resolve to, and reach by any redirect. |
+| `discovery-scan-tools` | `WebFetch,WebSearch` | Tools whose calls are scanned for URLs. |
+
+Discovery fetches URLs that only appeared in a conversation, so it limits where a probe can connect:
+
+- It probes internal hosts (loopback, private and carrier-grade NAT addresses) as well as public ones.
+- It never connects to link-local addresses, such as cloud metadata endpoints, or to unspecified or multicast addresses.
+- It follows at most 3 redirects, and refuses a redirect from a public address to an internal one, so a public site can't point a probe into your network.
+
+The checks run on the address a probe connects to, so DNS rebinding can't get around them. Probes don't use HTTP proxies or reuse connections, because either would hide the target address from the checks. A refused probe isn't cached, so a change to `discovery-allow-host` applies at once. `discovery-allow-host` is not read from a `.env` found by walking up from the working directory.
+
+---
+
 ## Credentials
 
 A credential helper is a program that returns the HTTP headers to send to an agent. a2a implements the [Bazel credential helper protocol](https://github.com/EngFlow/credential-helper-spec), so helpers written for Bazel work unchanged: a2a runs `<command> get`, writes `{"uri": "<agent URL>"}` to its stdin, and reads `{"headers": {"Authorization": ["Bearer …"]}, "expires": "<RFC 3339>"}` from its stdout.

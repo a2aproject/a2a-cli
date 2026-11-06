@@ -32,6 +32,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/commandplugin"
 	"github.com/a2aproject/a2a-cli/internal/credhelper"
+	"github.com/a2aproject/a2a-cli/internal/discover"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-cli/internal/polling"
@@ -46,6 +47,7 @@ type deps struct {
 	cfgLoader       cfgLoaderFunc
 	isTerminal      func() bool
 	notifyInterrupt func(context.Context) (context.Context, context.CancelFunc)
+	spawnDetached   func(args []string) error
 }
 
 func (d *deps) setDefaults() {
@@ -57,6 +59,9 @@ func (d *deps) setDefaults() {
 	}
 	if d.isTerminal == nil {
 		d.isTerminal = stdioIsTerminal
+	}
+	if d.spawnDetached == nil {
+		d.spawnDetached = discover.SpawnDetached
 	}
 	if d.notifyInterrupt == nil {
 		d.notifyInterrupt = func(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -84,6 +89,10 @@ type globalConfig struct {
 	credentials       *credhelper.Source
 
 	pluginsEnabled bool
+
+	// contactsFile and cacheDir override the default locations, for tests.
+	contactsFile string
+	cacheDir     string
 
 	bindings []clicfg.FlagBinding
 	store    *clicfg.Store
@@ -224,6 +233,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 
 	cmd.AddCommand(
 		newCardCmd(cfg),
+		newContactCmd(cfg),
 		newSendCmd(cfg, deps.poller),
 		newChatCmd(cfg, deps),
 		newTaskCmd(cfg),
@@ -235,6 +245,11 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 		newSkillCmd(cfg),
 		newVersionCmd(cfg),
 	)
+	hookCmd, err := newHookCmd(cfg, deps.spawnDetached)
+	if err != nil {
+		return nil, err
+	}
+	cmd.AddCommand(hookCmd)
 
 	preStore, err := deps.cfgLoader(clicfg.LoadOpts{})
 	if err != nil {

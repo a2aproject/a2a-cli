@@ -87,6 +87,10 @@ a2a send -a https://agent.example.com --stream "Summarize this document"
 # Send asynchronously and poll until completion
 a2a send -a https://agent.example.com --async "Analyze this dataset"
 a2a task get -a https://agent.example.com <task-id> --wait --timeout 60s
+
+# Save an agent you trust as a contact and address it by name
+a2a contact add helper https://agent.example.com
+a2a send -a helper "Hello again"
 ```
 
 See the **[full command reference](./internal/README.md)** for all commands, flags, configuration, and server mode.
@@ -122,6 +126,8 @@ Prefer a plugin-aware client? The same skill ships as an [Agent Plugin](https://
 ```
 
 Like the skill, it drives the `a2a` binary — [install the CLI](#installation) first.
+
+In Claude Code the plugin also adds hooks that tell the agent about your [contacts](./internal/README.md#contacts), and about A2A agents found on sites that come up in the conversation. Agents found this way are marked unverified until you save them as contacts.
 
 ## About the Project
 

@@ -58,10 +58,11 @@ func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclie
 	case cfg.url != "":
 		return newClientFromEndpoint(ctx, cfg, cfg.url, extraOpts...)
 	case cfg.agentCard.IsSet():
-		if err := cfg.agentCard.Validate(); err != nil {
-			return nil, clierr.Usage(err.Error())
+		ref, err := cfg.resolveAgentCardRef()
+		if err != nil {
+			return nil, err
 		}
-		return newClientFromCard(ctx, cfg, cfg.agentCard.URL(), extraOpts...)
+		return newClientFromCard(ctx, cfg, ref, extraOpts...)
 	default:
 		return nil, clierr.Usage("either '--agent-card <ref>' or '--endpoint <url> --transport <t>' must be provided")
 	}
