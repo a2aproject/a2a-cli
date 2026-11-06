@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1](https://github.com/a2aproject/a2a-cli/compare/v0.4.0...v0.4.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* bind the gRPC server's agent card listener to --host ([#133](https://github.com/a2aproject/a2a-cli/issues/133)) ([0d4d99e](https://github.com/a2aproject/a2a-cli/commit/0d4d99e1881401722b72a7dafa5049375fe5c23c))
+* escape local agent card paths when building the file URL ([#135](https://github.com/a2aproject/a2a-cli/issues/135)) ([40b9b79](https://github.com/a2aproject/a2a-cli/commit/40b9b795445fecc7df52391884519ced924d1b13)), closes [#134](https://github.com/a2aproject/a2a-cli/issues/134)
+
 ## [0.4.0](https://github.com/a2aproject/a2a-cli/compare/v0.3.1...v0.4.0) (2026-11-04)
 
 
