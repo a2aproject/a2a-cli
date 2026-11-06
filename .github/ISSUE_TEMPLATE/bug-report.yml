@@ -9,15 +9,6 @@ body:
         Thanks for taking the time to file a bug report! The more detail you can share, the faster we can reproduce and fix it.
 
         **Note:** Commits, issue titles, and pull request titles all follow the [Conventional Commits](https://www.conventionalcommits.org/) specification.
-  - type: checkboxes
-    id: area
-    attributes:
-      label: Which area does this relate to?
-      description: Select all that apply.
-      options:
-        - label: CLI code
-        - label: SPEC or COMPLIANCE file
-        - label: Other doc files
   - type: textarea
     id: what-happened
     attributes:
