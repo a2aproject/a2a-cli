@@ -88,7 +88,7 @@ func startGRPCServer(ctx context.Context, cfg Config, handler a2asrv.RequestHand
 
 	cardMux := http.NewServeMux()
 	cardMux.Handle(a2asrv.WellKnownAgentCardPath, agentCardHandler(card, cfg))
-	cardListener, err := net.Listen("tcp", ":0")
+	cardListener, err := listenCard(cfg.Listener)
 	if err != nil {
 		return fmt.Errorf("creating agent card listener: %w", err)
 	}
@@ -116,6 +116,16 @@ func startGRPCServer(ctx context.Context, cfg Config, handler a2asrv.RequestHand
 		return fmt.Errorf("gRPC server: %w", err)
 	}
 	return nil
+}
+
+// listenCard opens the agent card listener on the gRPC server's host, so the card
+// is not reachable from more interfaces than the server itself.
+func listenCard(server net.Listener) (net.Listener, error) {
+	host, _, err := net.SplitHostPort(server.Addr().String())
+	if err != nil {
+		return nil, err
+	}
+	return net.Listen("tcp", net.JoinHostPort(host, "0"))
 }
 
 func buildMux(handler a2asrv.RequestHandler, card *a2a.AgentCard, transport a2a.TransportProtocol, sc Config) *http.ServeMux {

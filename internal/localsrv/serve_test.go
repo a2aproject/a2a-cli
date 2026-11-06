@@ -16,6 +16,7 @@ package localsrv
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -123,6 +124,38 @@ func TestCreateAgentCard_InterfaceURLScheme(t *testing.T) {
 				t.Fatalf("createAgentCard() interface URL = %q, want %q", got, tc.wantURL)
 			}
 		})
+	}
+}
+
+func TestListenCard_UsesServerHost(t *testing.T) {
+	t.Parallel()
+
+	server, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := server.Close(); err != nil {
+			t.Errorf("server.Close() error = %v", err)
+		}
+	})
+
+	card, err := listenCard(server)
+	if err != nil {
+		t.Fatalf("listenCard() error = %v", err)
+	}
+	t.Cleanup(func() {
+		if err := card.Close(); err != nil {
+			t.Errorf("card.Close() error = %v", err)
+		}
+	})
+
+	host, _, err := net.SplitHostPort(card.Addr().String())
+	if err != nil {
+		t.Fatalf("net.SplitHostPort() error = %v", err)
+	}
+	if host != "127.0.0.1" {
+		t.Fatalf("listenCard() host = %q, want %q", host, "127.0.0.1")
 	}
 }
 
