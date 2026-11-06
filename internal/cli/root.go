@@ -63,6 +63,8 @@ type deps struct {
 	authTimeout time.Duration
 	// authPollInterval, if set, replaces the interval between device flow polls.
 	authPollInterval time.Duration
+	// keyring replaces the OS keychain used by --oauth-store keychain.
+	keyring oauthstore.Keyring
 }
 
 func (d *deps) setDefaults() {
@@ -109,6 +111,7 @@ type globalConfig struct {
 	oauthMode            string
 	oauthClients         oauthstore.ClientsFlag
 	oauthDefaultClientID string
+	oauthStore           string
 	oauth                *oauth.Manager
 	// buildOAuth sets oauth; initOAuth defines it.
 	buildOAuth func() error
@@ -263,8 +266,9 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	pf.StringVar(&cfg.oauthMode, "oauth", oauthOff, "OAuth for agent calls: off (default), auto (sign in when an agent requires it), or cached (use stored grants only); see a2a auth login --help")
 	pf.Var(&cfg.oauthClients, "oauth-clients", `OAuth client registration as JSON: {"authority":"<issuer>","client_id":"<id or CIMD URL>","scopes":[...],"omit_resource":false} (repeatable; a JSON array is also accepted)`)
 	pf.StringVar(&cfg.oauthDefaultClientID, "oauth-default-client-id", oauthstore.DefaultClientID, "OAuth client ID used with authorization servers that support Client ID Metadata Documents when no oauth-clients entry matches; empty disables it")
+	pf.StringVar(&cfg.oauthStore, "oauth-store", "file", "Where OAuth grants are stored: file (~/.config/a2a-cli/oauth/grants.json) or keychain (tokens in the OS keychain)")
 	pf.StringVar(&cfg.configPath, "config", "", "Load configuration from an explicit file (.yaml, .json, or .env) in place of the local .env")
-	for _, name := range []string{"unix-socket", "credential-helper", "ca-cert", "oauth", "oauth-clients", "oauth-default-client-id"} {
+	for _, name := range []string{"unix-socket", "credential-helper", "ca-cert", "oauth", "oauth-clients", "oauth-default-client-id", "oauth-store"} {
 		if err := pf.SetAnnotation(name, clicfg.AnnotationNotFromDiscoveredFile, []string{"true"}); err != nil {
 			return nil, err
 		}
