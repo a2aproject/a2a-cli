@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
+
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 )
 
 // Source runs the helper selected for each URI and reuses its headers for
@@ -52,7 +54,7 @@ func (s *Source) Headers(ctx context.Context, uri string) (Helper, *Response, er
 	}
 	resp, err := h.Get(ctx, uri)
 	if err != nil {
-		return h, nil, fmt.Errorf("getting credentials for %s: %w", uri, err)
+		return h, nil, fmt.Errorf("getting credentials for %s: %w", clierr.RedactURL(uri), err)
 	}
 	if s.cache == nil {
 		s.cache = map[string]*Response{}
