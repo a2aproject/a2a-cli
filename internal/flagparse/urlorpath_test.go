@@ -115,6 +115,35 @@ func TestURLOrPathValidate(t *testing.T) {
 	}
 }
 
+func TestURLOrPathValidateRedactsURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		ref  string
+		want string
+	}{
+		{
+			ref:  "http://bob:S3CRETPW@127.0.0.1:x/?token=S3CRETQ",
+			want: `invalid agent card reference "http://bob:***@127.0.0.1:x/": invalid port ":x" after host`,
+		},
+		{
+			ref:  "https://?token=S3CRETQ",
+			want: `invalid agent card reference "https://": missing host`,
+		},
+	}
+
+	for _, tt := range tests {
+		var u URLOrPath
+		if err := u.Set(tt.ref); err != nil {
+			t.Fatalf("URLOrPath.Set(%q) error = %v", tt.ref, err)
+		}
+		err := u.Validate()
+		if err == nil || err.Error() != tt.want {
+			t.Errorf("URLOrPath.Validate() error = %v, want %s", err, tt.want)
+		}
+	}
+}
+
 func TestURLOrPathIsSet(t *testing.T) {
 	t.Parallel()
 
