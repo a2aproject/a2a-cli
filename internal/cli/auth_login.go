@@ -42,8 +42,8 @@ a2a learns where to sign in from the agent card's oauth2 or openIdConnect
 security scheme, or from the Bearer challenge of a 401 response and the
 agent's protected resource metadata. It prints a URL to open and waits for the
 redirect to 127.0.0.1; with --device it prints a URL and a code to enter on any
-device. The grant is stored in ~/.config/a2a-cli/oauth/grants.json and
-refreshed when it expires.
+device. The grant is stored in ~/.config/a2a-cli/oauth/grants.json (or the OS
+keychain with --oauth-store keychain) and refreshed when it expires.
 
 Other commands sign in the same way when an agent requires it (--oauth auto,
 the default) if a terminal is attached. --oauth cached only uses stored grants,

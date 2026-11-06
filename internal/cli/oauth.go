@@ -101,7 +101,18 @@ func (g *globalConfig) newOAuthStore(d deps) (oauth.Store, error) {
 			return nil, err
 		}
 	}
-	return &oauth.FileStore{Dir: dir}, nil
+	switch g.oauthStore {
+	case "", "file":
+		return &oauth.FileStore{Dir: dir}, nil
+	case "keychain":
+		kr := d.keyring
+		if kr == nil {
+			kr = oauth.SystemKeyring{}
+		}
+		return &oauth.KeyringStore{Index: &oauth.FileStore{Dir: dir, Name: oauth.KeyringIndexName}, Keyring: kr}, nil
+	default:
+		return nil, clierr.Usage(fmt.Sprintf("invalid --oauth-store %q (want file or keychain)", g.oauthStore))
+	}
 }
 
 // wrapSignIn makes every command marked with [agentCall] sign in when the agent
