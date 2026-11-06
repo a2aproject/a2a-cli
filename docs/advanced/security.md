@@ -4,13 +4,14 @@ The `a2a` CLI runs on your machine with your permissions, sends your credentials
 
 ## Cloned repositories
 
-The CLI reads the nearest `.env` found by walking up from the working directory, so running `a2a` inside a repository you cloned applies the repository's `.env`. Three settings are not read from that file:
+The CLI reads the nearest `.env` found by walking up from the working directory, so running `a2a` inside a repository you cloned applies the repository's `.env`. These settings are not read from that file:
 
 | Setting | What a hostile `.env` could do with it |
 | --- | --- |
 | `credential-helper` | Run any program, the next time you call an agent |
 | `unix-socket` | Send every request, with your credentials, to a socket it chose |
 | `ca-cert` | Make the CLI trust a certificate it chose, and accept a server impersonating the agent |
+| `oauth`, `oauth-clients`, `oauth-default-client-id` | Turn on OAuth and attach your stored grants, or sign you in with a client it chose |
 
 The CLI ignores them in a discovered `.env` and prints a warning. The same file passed with `--config` is trusted, because you named it.
 
@@ -19,7 +20,7 @@ All other settings are read from a discovered `.env`. In particular it can:
 - Set `agent-card` or `endpoint`, so an `a2a send` without `-a` goes to an agent the file chose, with the headers of any unscoped credential helper you configured.
 - Set `svc-param` or `auth`, which adds headers to your requests.
 - Set `file-part`, which attaches a local file of its choice to every `send`.
-- Set `insecure`, which turns off TLS for gRPC.
+- Set `insecure`, which turns off TLS for gRPC. OAuth tokens are not sent over plaintext gRPC when `insecure` comes from a discovered `.env`.
 - Set `transport`, which can select a transport plugin you installed.
 - Set `plugins-enabled`, which turns on command plugins you installed.
 

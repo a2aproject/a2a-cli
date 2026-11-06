@@ -24,7 +24,7 @@ import (
 )
 
 func newPushConfigDeleteCmd(cfg *globalConfig) *cobra.Command {
-	return &cobra.Command{
+	return agentCall(&cobra.Command{
 		Use:     "delete <task-id> <config-id>",
 		Short:   "Delete a task's push-notification configuration",
 		Example: `  a2a task push-config delete -a https://agent.example.com <task-id> <config-id>`,
@@ -49,5 +49,5 @@ func newPushConfigDeleteCmd(cfg *globalConfig) *cobra.Command {
 			}
 			return cfg.PrintPushConfigDeleted(args[0], args[1])
 		},
-	}
+	})
 }

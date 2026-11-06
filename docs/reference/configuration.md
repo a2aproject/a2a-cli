@@ -23,6 +23,9 @@ These apply to every command. The environment variable is `A2ACLI_` followed by 
 | `--ca-cert` | `A2ACLI_CA_CERT` | path | | no | Trust only the PEM certificates in the file, for HTTP and gRPC. Read when a command connects. |
 | `--unix-socket` | `A2ACLI_UNIX_SOCKET` | path | | no | Send every HTTP request and gRPC connection through the socket. |
 | `--credential-helper` | `A2ACLI_CREDENTIAL_HELPER` | list of helpers | | no | `[scope=]path` on the command line and in the environment; `{scope, command}` objects in YAML and JSON. See [below](#credential-helper-entries). |
+| `--oauth` | `A2ACLI_OAUTH` | `off`, `auto`, `cached` | `off` | no | OAuth for agent calls. `auto` signs in when an agent requires it and stderr is a terminal; `cached` only uses stored grants. |
+| `--oauth-clients` | `A2ACLI_OAUTH_CLIENTS` | list of registrations | | no | One per authorization server: `{"authority":"<issuer>","client_id":"<id or CIMD URL>","scopes":[...],"omit_resource":false}`. JSON on the command line and in the environment; a list of objects in YAML and JSON. |
+| `--oauth-default-client-id` | `A2ACLI_OAUTH_DEFAULT_CLIENT_ID` | client ID or URL | `https://a2a-protocol.org/oauth/a2a-cli.json` | no | Used with servers that support Client ID Metadata Documents when no registration matches. Empty disables it. |
 | `--config` | never read | path | | | Use this file as the local file in place of the discovered `.env`. |
 | | `A2ACLI_PLUGINS_ENABLED` | bool | `false` | yes | Config key `plugins-enabled`. Discover command plugins. Not read from the `--config` file. |
 
@@ -51,6 +54,8 @@ The flags of each command bind the same way, through `A2ACLI_<NAME>` or the flag
 | `--url`, `--id`, `--token`, `--auth-scheme`, `--auth-credentials` | `A2ACLI_URL`, ... | `task push-config create` |
 | `--extended` | `A2ACLI_EXTENDED` | `card get` |
 | `--reveal` | `A2ACLI_REVEAL` | `auth get` |
+| `--device`, `--scope` | `A2ACLI_DEVICE`, `A2ACLI_SCOPE` | `auth login` |
+| `--all` | `A2ACLI_ALL` | `auth logout` |
 | `--no-descriptions` | `A2ACLI_NO_DESCRIPTIONS` | `completion` subcommands |
 | `--discovery`, `--discovery-allow-host`, `--discovery-scan-tools` | `A2ACLI_DISCOVERY`, ... | `hook`; see [Coding Agents](../guide/coding-agents.md#contacts-and-agent-discovery). `discovery-allow-host` is not read from a discovered `.env`. |
 
