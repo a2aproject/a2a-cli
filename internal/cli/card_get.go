@@ -62,7 +62,7 @@ func newCardGetCmd(cfg *globalConfig) *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&extended, "extended", false, "Fetch the extended agent card")
-	return cmd
+	return agentCall(cmd)
 }
 
 func getExtendedAgentCard(ctx context.Context, cfg *globalConfig) (*a2a.AgentCard, error) {

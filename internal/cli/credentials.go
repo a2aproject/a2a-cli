@@ -21,7 +21,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
 
@@ -91,7 +90,6 @@ func (g *globalConfig) cardHeaders(ctx context.Context, ref string) (map[string]
 // credentialInterceptor adds the helper headers to every A2A call, chosen
 // by the host of the interface the client is connected to.
 func (g *globalConfig) credentialInterceptor() a2aclient.FactoryOption {
-	var warn sync.Once
 	return a2aclient.WithCallInterceptors(&credhelper.Interceptor{
 		Source: g.credentials,
 		OnApply: func(headers map[string][]string) {
@@ -100,7 +98,7 @@ func (g *globalConfig) credentialInterceptor() a2aclient.FactoryOption {
 			}
 			for name := range headers {
 				if strings.EqualFold(name, "Authorization") {
-					warn.Do(func() { _, _ = fmt.Fprintln(g.stderr(), insecureCredentialWarning) })
+					g.warnInsecure()
 				}
 			}
 		},

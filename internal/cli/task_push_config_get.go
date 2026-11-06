@@ -24,7 +24,7 @@ import (
 )
 
 func newPushConfigGetCmd(cfg *globalConfig) *cobra.Command {
-	return &cobra.Command{
+	return agentCall(&cobra.Command{
 		Use:   "get <task-id> <config-id>",
 		Short: "Get a task's push-notification configuration",
 		Args:  cobra.ExactArgs(2),
@@ -52,5 +52,5 @@ func newPushConfigGetCmd(cfg *globalConfig) *cobra.Command {
 			}
 			return nil
 		},
-	}
+	})
 }

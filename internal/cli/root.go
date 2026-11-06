@@ -33,6 +33,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/commandplugin"
 	"github.com/a2aproject/a2a-cli/internal/credhelper"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
+	"github.com/a2aproject/a2a-cli/internal/oauth"
 	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-cli/internal/polling"
 )
@@ -46,6 +47,17 @@ type deps struct {
 	cfgLoader       cfgLoaderFunc
 	isTerminal      func() bool
 	notifyInterrupt func(context.Context) (context.Context, context.CancelFunc)
+
+	// authInteractive reports whether an interactive sign-in may start.
+	authInteractive func() bool
+	// openURL, if set, is called with the URL the user has to visit to sign in.
+	openURL func(string)
+	// oauthDir is where grants are stored; defaults to ~/.config/a2a-cli/oauth.
+	oauthDir string
+	// authTimeout bounds an interactive sign-in.
+	authTimeout time.Duration
+	// authSleep, if set, replaces the wait between device flow polls.
+	authSleep func(context.Context, time.Duration) error
 }
 
 func (d *deps) setDefaults() {
@@ -62,6 +74,12 @@ func (d *deps) setDefaults() {
 		d.notifyInterrupt = func(ctx context.Context) (context.Context, context.CancelFunc) {
 			return signal.NotifyContext(ctx, os.Interrupt)
 		}
+	}
+	if d.authInteractive == nil {
+		d.authInteractive = stderrIsTerminal
+	}
+	if d.authTimeout == 0 {
+		d.authTimeout = 5 * time.Minute
 	}
 }
 
@@ -83,6 +101,14 @@ type globalConfig struct {
 	credentialHelpers credhelper.Flag
 	credentials       *credhelper.Source
 
+	oauthMode            string
+	oauthClients         oauth.ClientsFlag
+	oauthDefaultClientID string
+	oauth                *oauth.Manager
+
+	// insecureWarning prints insecureCredentialWarning at most once.
+	insecureWarning sync.Once
+
 	pluginsEnabled bool
 
 	bindings []clicfg.FlagBinding
@@ -92,7 +118,8 @@ type globalConfig struct {
 	httpTransport http.RoundTripper
 	rootCAs       *x509.CertPool
 
-	handlers []handleEventFunc
+	handlers      []handleEventFunc
+	eventsHandled int
 	*output.Printer
 }
 
@@ -189,6 +216,9 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 			}
 			cfg.initHTTPTransport()
 			cfg.initCredentials()
+			if err := cfg.initOAuth(deps); err != nil {
+				return err
+			}
 
 			switch output.Mode(cfg.output) {
 			case output.ModeText, output.ModeJson, output.ModeJSONL:
@@ -215,8 +245,11 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	pf.StringVar(&cfg.caCert, "ca-cert", "", "Trust only the CA certificates in this PEM file for TLS connections")
 	pf.StringVar(&cfg.unixSocket, "unix-socket", "", "Send every HTTP request and gRPC connection through the Unix socket at this path")
 	pf.Var(&cfg.credentialHelpers, "credential-helper", "Credential helper returning the headers for an agent: [scope=]path (repeatable; see a2a auth get --help)")
+	pf.StringVar(&cfg.oauthMode, "oauth", oauthAuto, "OAuth sign-in for agents that require it: auto (sign in when needed), cached (use stored grants only), or off (see a2a auth login --help)")
+	pf.Var(&cfg.oauthClients, "oauth-clients", `OAuth client registration as JSON: {"authority":"<issuer>","client_id":"<id or CIMD URL>","scopes":[...]} (repeatable; a JSON array is also accepted)`)
+	pf.StringVar(&cfg.oauthDefaultClientID, "oauth-default-client-id", oauth.DefaultClientID, "OAuth client ID used with authorization servers that support Client ID Metadata Documents when no oauth-clients entry matches; empty disables it")
 	pf.StringVar(&cfg.configPath, "config", "", "Load configuration from an explicit file (.yaml, .json, or .env) in place of the local .env")
-	for _, name := range []string{"unix-socket", "credential-helper", "ca-cert"} {
+	for _, name := range []string{"unix-socket", "credential-helper", "ca-cert", "oauth-clients", "oauth-default-client-id"} {
 		if err := pf.SetAnnotation(name, clicfg.AnnotationNotFromDiscoveredFile, []string{"true"}); err != nil {
 			return nil, err
 		}
@@ -228,7 +261,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 		newChatCmd(cfg, deps),
 		newTaskCmd(cfg),
 		newConfigCmd(cfg),
-		newAuthCmd(cfg),
+		newAuthCmd(cfg, deps),
 		newServeCmd(cfg),
 		newTransportCmd(cfg),
 		newPluginCmd(cfg),
@@ -247,6 +280,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 
 	cmd.SetUsageTemplate(rootUsageTemplate)
 	markUsageErrors(cmd)
+	wrapSignIn(cfg, deps, cmd)
 
 	return cmd, nil
 }
