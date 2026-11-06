@@ -56,14 +56,20 @@ func agentCall(cmd *cobra.Command) *cobra.Command {
 	return cmd
 }
 
-// initOAuth checks --oauth and sets up the OAuth manager when OAuth is on. With
-// OAuth off the manager is built only when an a2a auth command needs it, so
-// other commands don't need a home directory or a valid grant store.
+// initOAuth checks --oauth and --oauth-store and sets up the OAuth manager when
+// OAuth is on. With OAuth off the manager is built only when an a2a auth
+// command needs it, so other commands don't need a home directory or a working
+// grant store.
 func (g *globalConfig) initOAuth(d deps) error {
 	switch g.oauthMode {
 	case oauthAuto, oauthCached, oauthOff:
 	default:
 		return clierr.Usage(fmt.Sprintf("invalid --oauth %q (want auto, cached or off)", g.oauthMode))
+	}
+	switch g.oauthStore {
+	case "", "file", "keychain":
+	default:
+		return clierr.Usage(fmt.Sprintf("invalid --oauth-store %q (want file or keychain)", g.oauthStore))
 	}
 	g.buildOAuth = func() error {
 		store, err := g.newOAuthStore(d)
@@ -156,7 +162,18 @@ func (g *globalConfig) newOAuthStore(d deps) (oauth.Store, error) {
 			return nil, err
 		}
 	}
-	return &oauthstore.FileStore{Dir: dir}, nil
+	switch g.oauthStore {
+	case "", "file":
+		return &oauthstore.FileStore{Dir: dir}, nil
+	case "keychain":
+		kr := d.keyring
+		if kr == nil {
+			kr = oauthstore.SystemKeyring{}
+		}
+		return &oauthstore.KeyringStore{Index: &oauthstore.FileStore{Dir: dir, Name: oauthstore.KeyringIndexName}, Keyring: kr}, nil
+	default:
+		return nil, clierr.Usage(fmt.Sprintf("invalid --oauth-store %q (want file or keychain)", g.oauthStore))
+	}
 }
 
 // wrapSignIn makes every command marked with [agentCall] sign in when the agent

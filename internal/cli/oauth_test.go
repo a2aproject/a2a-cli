@@ -488,6 +488,162 @@ func TestAuthUsageErrors(t *testing.T) {
 	}
 }
 
+type memKeyring struct {
+	mu      sync.Mutex
+	secrets map[string]string
+	reads   int
+}
+
+func (k *memKeyring) Get(service, user string) (string, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.reads++
+	if s, ok := k.secrets[service+"/"+user]; ok {
+		return s, nil
+	}
+	return "", oauthstore.ErrSecretNotFound
+}
+
+func (k *memKeyring) Set(service, user, secret string) error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.secrets == nil {
+		k.secrets = map[string]string{}
+	}
+	k.secrets[service+"/"+user] = secret
+	return nil
+}
+
+func (k *memKeyring) Delete(service, user string) error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	delete(k.secrets, service+"/"+user)
+	return nil
+}
+
+func TestOAuthKeychainStore(t *testing.T) {
+	t.Parallel()
+	e := newOAuthEnv(t, oauthtest.ServerOptions{}, oauthtest.AgentOptions{Card: oauthtest.CardMetadataURL})
+	kr := &memKeyring{}
+	e.deps.keyring = kr
+	args := []string{"send", "-a", e.agent.URL, e.clients(), "--oauth-store", "keychain", oauthTestMessage}
+	e.mustRun(t, args...)
+
+	index, err := os.ReadFile(filepath.Join(e.deps.oauthDir, oauthstore.KeyringIndexName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(index), "access_token") || strings.Contains(string(index), "refresh_token") {
+		t.Fatalf("%s contains tokens: %s", oauthstore.KeyringIndexName, index)
+	}
+	if _, err := os.Stat(filepath.Join(e.deps.oauthDir, "grants.json")); !os.IsNotExist(err) {
+		t.Fatalf("grants.json exists with --oauth-store keychain (stat error %v)", err)
+	}
+	if len(kr.secrets) != 2 {
+		t.Fatalf("keychain entries = %d, want one per token", len(kr.secrets))
+	}
+	if _, stderr := e.mustRun(t, args...); strings.Contains(stderr, "To authorize") {
+		t.Fatalf("second send stderr = %q, want the grant read from the keychain", stderr)
+	}
+	e.mustRun(t, "auth", "logout", "--all", "--oauth-store", "keychain")
+	if len(kr.secrets) != 0 {
+		t.Fatalf("keychain entries after logout = %d, want 0", len(kr.secrets))
+	}
+}
+
+func (k *memKeyring) readCount() int {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.reads
+}
+
+// TestOAuthKeychainReadsSecretsOnlyWhenUsed checks that listing grants and
+// calling an agent that no grant applies to don't read the keychain.
+func TestOAuthKeychainReadsSecretsOnlyWhenUsed(t *testing.T) {
+	t.Parallel()
+	e := newOAuthEnv(t, oauthtest.ServerOptions{}, oauthtest.AgentOptions{Card: oauthtest.CardMetadataURL})
+	kr := &memKeyring{}
+	e.deps.keyring = kr
+	e.mustRun(t, "auth", "login", e.agent.URL, e.clients(), "--oauth-store", "keychain")
+	plain, _ := startAuthRecordingServer(t)
+
+	before := kr.readCount()
+	out, _ := e.mustRun(t, "auth", "list", "--oauth-store", "keychain")
+	if !strings.Contains(out, "(refreshable)") {
+		t.Fatalf("auth list = %q, want the grant shown as refreshable", out)
+	}
+	if got := kr.readCount() - before; got != 0 {
+		t.Fatalf("auth list read %d keychain entries, want none", got)
+	}
+
+	before = kr.readCount()
+	e.mustRun(t, "send", "-a", plain, e.clients(), "--oauth-store", "keychain", "hello")
+	if got := kr.readCount() - before; got != 0 {
+		t.Fatalf("a2a send to an agent without OAuth read %d keychain entries, want none", got)
+	}
+
+	// --reveal reads the tokens the listing leaves out.
+	out, _ = e.mustRun(t, "auth", "get", e.agent.URL, "--reveal", "--oauth-store", "keychain", "-o", "json")
+	var got struct {
+		OAuth []grantView `json:"oauth"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("json.Unmarshal(%q) error = %v", out, err)
+	}
+	if len(got.OAuth) != 1 || !e.as.Valid(got.OAuth[0].AccessToken, e.agent.URL, nil) {
+		t.Fatalf("auth get --reveal with the keychain = %+v, want the stored access token", got.OAuth)
+	}
+}
+
+func TestOAuthKeychainGrantWithoutTokens(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		mutate func(*memKeyring)
+		store  []string
+	}{
+		{name: "file store", store: nil},
+		{name: "keychain entries removed", mutate: func(k *memKeyring) { k.secrets = nil }, store: []string{"--oauth-store", "keychain"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			e := newOAuthEnv(t, oauthtest.ServerOptions{}, oauthtest.AgentOptions{Card: oauthtest.CardMetadataURL})
+			kr := &memKeyring{}
+			e.deps.keyring = kr
+			e.mustRun(t, "auth", "login", e.agent.URL, e.clients(), "--oauth-store", "keychain")
+			if tc.mutate != nil {
+				tc.mutate(kr)
+			}
+			sent := len(e.agent.AuthorizationHeaders())
+			e.deps.authInteractive = func() bool { return false }
+			args := append([]string{"send", "-a", e.agent.URL, e.clients(), oauthTestMessage}, tc.store...)
+			_, _, err := e.run(t, args...)
+			if got := errCode(err); got != clierr.CodeCredentialsMissing {
+				t.Fatalf("a2a send error = %v (code %s), want %s", err, got, clierr.CodeCredentialsMissing)
+			}
+			if got := e.agent.AuthorizationHeaders()[sent:]; len(got) != 0 {
+				t.Fatalf("the agent received %q, want no request without a usable token", got)
+			}
+		})
+	}
+}
+
+// TestOAuthStoreChecked checks that an invalid --oauth-store is a usage error
+// in every mode, like an invalid --oauth, even for commands that don't open the
+// store.
+func TestOAuthStoreChecked(t *testing.T) {
+	t.Parallel()
+	e := newOAuthEnv(t, oauthtest.ServerOptions{}, oauthtest.AgentOptions{})
+	for _, run := range []func(*testing.T, ...string) (string, string, error){e.runDefault, e.run} {
+		for _, args := range [][]string{{"version", "--oauth-store", "bogus"}, {"auth", "list", "--oauth-store", "bogus"}} {
+			if _, _, err := run(t, args...); errCode(err) != clierr.CodeUsage {
+				t.Errorf("a2a %s error = %v, want a usage error", strings.Join(args, " "), err)
+			}
+		}
+	}
+}
+
 func TestOAuthOffByDefault(t *testing.T) {
 	t.Parallel()
 	metadataHits := func(e *oauthEnv) int {
@@ -1234,10 +1390,13 @@ func TestAuthLoginAgentRejectsGET(t *testing.T) {
 func TestOAuthFlagsIgnoredFromDiscoveredEnv(t *testing.T) {
 	t.Parallel()
 	e := newOAuthEnv(t, oauthtest.ServerOptions{CIMD: true}, oauthtest.AgentOptions{Card: oauthtest.CardMetadataURL})
+	// A fake keychain, so the test can't reach the real one if the .env were read.
+	kr := &memKeyring{}
+	e.deps.keyring = kr
 	e.mustRun(t, "auth", "login", e.agent.URL)
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, ".env")
-	env := fmt.Sprintf("A2ACLI_OAUTH=auto\nA2ACLI_OAUTH_CLIENTS={\"authority\":%q,\"client_id\":\"from-env\"}\nA2ACLI_OAUTH_DEFAULT_CLIENT_ID=https://evil.example/c.json\n", e.as.URL)
+	env := fmt.Sprintf("A2ACLI_OAUTH=auto\nA2ACLI_OAUTH_CLIENTS={\"authority\":%q,\"client_id\":\"from-env\"}\nA2ACLI_OAUTH_DEFAULT_CLIENT_ID=https://evil.example/c.json\nA2ACLI_OAUTH_STORE=keychain\n", e.as.URL)
 	if err := os.WriteFile(envPath, []byte(env), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -1260,7 +1419,7 @@ func TestOAuthFlagsIgnoredFromDiscoveredEnv(t *testing.T) {
 			t.Fatalf("the agent received Authorization %q, want no grant sent", h)
 		}
 	}
-	for _, flag := range []string{"oauth", "oauth-clients", "oauth-default-client-id"} {
+	for _, flag := range []string{"oauth", "oauth-clients", "oauth-default-client-id", "oauth-store"} {
 		if want := "warning: ignoring " + flag + " from " + envPath; !strings.Contains(stderr, want) {
 			t.Errorf("a2a send stderr = %q, want %q", stderr, want)
 		}
@@ -1271,6 +1430,13 @@ func TestOAuthFlagsIgnoredFromDiscoveredEnv(t *testing.T) {
 	e.mustRun(t, "auth", "login", e.agent.URL)
 	if got := e.as.LastAuthorizeQuery().Get("client_id"); got != oauthstore.DefaultClientID {
 		t.Fatalf("client_id = %q, want %q: the .env must not choose the client", got, oauthstore.DefaultClientID)
+	}
+	// Nor is the store: the grant went to grants.json, not the keychain.
+	if n := len(kr.secrets); n != 0 {
+		t.Fatalf("keychain entries = %d, want none: the .env must not choose the store", n)
+	}
+	if _, err := os.Stat(filepath.Join(e.deps.oauthDir, "grants.json")); err != nil {
+		t.Fatalf("grants.json after auth login: %v, want the file store used", err)
 	}
 }
 
