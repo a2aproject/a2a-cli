@@ -30,6 +30,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/transportplugin"
 	"github.com/a2aproject/a2a-cli/internal/unixsocket"
+	"github.com/a2aproject/a2a-cli/internal/utils"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
 	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
@@ -162,7 +163,8 @@ func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
 	}
 	// The a2a-go default HTTP client caps every request at 3 minutes. Use one without a
 	// total timeout so the --timeout context deadline is what bounds a request.
-	httpClient := &http.Client{Transport: cfg.httpTransport}
+	// ActivityTransport lets SSE keep-alives reset the --stream inactivity timeout.
+	httpClient := &http.Client{Transport: utils.ActivityTransport(cfg.httpTransport)}
 	opts := []a2aclient.FactoryOption{a2aclient.WithDefaultsDisabled()}
 	if cfg.credentials != nil {
 		opts = append(opts, cfg.credentialInterceptor())
