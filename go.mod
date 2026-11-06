@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/a2aproject/a2a-go v0.3.15
-	github.com/a2aproject/a2a-go/v2 v2.6.0
+	github.com/a2aproject/a2a-go/v2 v2.8.0
 	github.com/google/go-cmp v0.7.0
 	github.com/joho/godotenv v1.5.1
 	github.com/spf13/cobra v1.10.2
