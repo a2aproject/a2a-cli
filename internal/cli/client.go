@@ -43,8 +43,13 @@ const insecureCredentialWarning = "warning: --insecure disables TLS for gRPC; a 
 // warnInsecureCredential warns once when a credential is sent with --insecure.
 func warnInsecureCredential(cfg *globalConfig) {
 	if cfg.insecureGRPC && cfg.svcParams.HasCredential() {
-		_, _ = fmt.Fprintln(cfg.stderr(), insecureCredentialWarning)
+		cfg.warnInsecure()
 	}
+}
+
+// warnInsecure prints insecureCredentialWarning, once per command.
+func (g *globalConfig) warnInsecure() {
+	g.insecureWarning.Do(func() { _, _ = fmt.Fprintln(g.stderr(), insecureCredentialWarning) })
 }
 
 func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
@@ -116,6 +121,7 @@ func newClientFromCard(ctx context.Context, cfg *globalConfig, ref string, extra
 			a2aclient.Config{PreferredTransports: transportPrefs},
 		))
 	}
+	cfg.resolvedCard = card
 	cfg.logf("creating client for %s", card.Name)
 	return a2aclient.NewFromCard(ctx, card, factoryOpts...)
 }
@@ -146,7 +152,7 @@ func resolveCard(ctx context.Context, cfg *globalConfig, ref string) (*a2a.Agent
 }
 
 func cardResolver(cfg *globalConfig) *agentcard.Resolver {
-	resolver := agentcard.NewResolver(&http.Client{Transport: cfg.httpTransport})
+	resolver := agentcard.NewResolver(&http.Client{Transport: cfg.agentTransport()})
 	resolver.CardParser = a2av0.NewAgentCardParser()
 	return resolver
 }
@@ -162,10 +168,16 @@ func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
 	}
 	// The a2a-go default HTTP client caps every request at 3 minutes. Use one without a
 	// total timeout so the --timeout context deadline is what bounds a request.
-	httpClient := &http.Client{Transport: cfg.httpTransport}
+	httpClient := &http.Client{Transport: cfg.agentTransport()}
 	opts := []a2aclient.FactoryOption{a2aclient.WithDefaultsDisabled()}
 	if cfg.credentials != nil {
 		opts = append(opts, cfg.credentialInterceptor())
+	}
+	if cfg.oauthEnabled() {
+		opts = append(opts, a2aclient.WithCallInterceptors(oauthInterceptor{CallInterceptor: cfg.oauth.Interceptor(), cfg: cfg}))
+		if cfg.insecureGRPC {
+			opts = append(opts, a2aclient.WithCallInterceptors(insecureTokenWarning{cfg: cfg}))
+		}
 	}
 	if cfg.a2aVersion == "" || cfg.a2aVersion == "1.0" {
 		opts = append(

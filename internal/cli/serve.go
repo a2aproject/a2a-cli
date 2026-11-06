@@ -111,6 +111,9 @@ func newServeCmd(cfg *globalConfig) *cobra.Command {
 			case echo:
 				return localsrv.ServeEcho(ctx, sc)
 			case proxy:
+				// The proxy serves other clients, so it never sends the
+				// user's OAuth grants upstream or signs in for them.
+				cfg.oauthMode = oauthOff
 				var proxyOpts []a2aclient.FactoryOption
 				if !quiet {
 					proxyOpts = append(proxyOpts, localsrv.ProxyLogInterceptorOption())

@@ -76,7 +76,7 @@ func newPushConfigCreateCmd(cfg *globalConfig) *cobra.Command {
 	fl.StringVar(&f.token, "token", "", "Optional token the agent echoes back so the receiver can validate calls")
 	fl.StringVar(&f.authScheme, "auth-scheme", "", "Optional auth scheme the agent uses when calling the webhook (e.g. Bearer)")
 	fl.StringVar(&f.authCredentials, "auth-credentials", "", "Optional credentials the agent presents to the webhook")
-	return cmd
+	return agentCall(cmd)
 }
 
 func buildPushConfig(f pushConfigCreateFlags) (*a2a.PushConfig, error) {

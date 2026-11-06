@@ -101,7 +101,7 @@ func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 	flags.parts.Attach(f)
 	flags.meta.Attach(f, "metadata", "Attach request metadata as a JSON object (repeatable)")
 
-	return cmd
+	return agentCall(cmd)
 }
 
 func buildRequest(cmd *cobra.Command, cfg *globalConfig, flags *sendFlags, args []string) (*a2a.SendMessageRequest, error) {

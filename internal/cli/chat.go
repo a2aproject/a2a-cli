@@ -55,17 +55,27 @@ func newChatCmd(cfg *globalConfig, deps deps) *cobra.Command {
 			}
 
 			baseCtx := withServiceParams(cmd.Context(), cfg)
-			ctx, cancel := context.WithTimeout(baseCtx, cfg.timeout)
-			client, err := newAgentClient(ctx, cfg)
-			cancel()
+			var client *a2aclient.Client
+			err := cfg.withSignIn(baseCtx, deps, func() error {
+				ctx, cancel := context.WithTimeout(baseCtx, cfg.timeout)
+				defer cancel()
+				c, err := newAgentClient(ctx, cfg)
+				if err != nil {
+					return fmt.Errorf("failed to create a client: %w", err)
+				}
+				client = c
+				return nil
+			})
 			if err != nil {
-				return fmt.Errorf("failed to create a client: %w", err)
+				return err
 			}
 			defer destroyClient(cfg, client)
 
 			session := chat.NewSession(chat.Config{
 				Send: func(ctx context.Context, msg *a2a.Message) error {
-					return sendChatMessage(ctx, cfg, client, &flags, deps.poller, msg)
+					return cfg.withSignIn(ctx, deps, func() error {
+						return sendChatMessage(ctx, cfg, client, &flags, deps.poller, msg)
+					})
 				},
 				Cancel: func(ctx context.Context, id a2a.TaskID) error {
 					ctx, cancel := context.WithTimeout(ctx, cfg.timeout)

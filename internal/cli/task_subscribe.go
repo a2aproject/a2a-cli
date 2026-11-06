@@ -60,5 +60,5 @@ func newTaskSubscribeCmd(cfg *globalConfig) *cobra.Command {
 
 	f := cmd.Flags()
 	flagparse.AttachFilePartsOutDir(f)
-	return cmd
+	return agentCall(cmd)
 }
