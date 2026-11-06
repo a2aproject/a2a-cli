@@ -25,3 +25,10 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261012220534-4341edf3f941 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
+
+// Temporary: builds against the a2aclient/oauth package on the oauth-manager
+// branch of mykytanetipa/a2a-go. Remove this replace, and require the a2a-go
+// release that ships a2aclient/oauth, before the next a2a-cli release:
+// `go install github.com/a2aproject/a2a-cli@latest` refuses a module with a
+// replace directive.
+replace github.com/a2aproject/a2a-go/v2 => github.com/mykytanetipa/a2a-go/v2 v2.0.0-20261108233611-e0b9420fded5
