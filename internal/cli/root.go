@@ -196,6 +196,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 			default:
 				return clierr.Usage(fmt.Sprintf("invalid --output %q (want text or json)", cfg.output))
 			}
+			cfg.AgentFlags = agentFlags(cfg)
 
 			return cfg.initEventHandlers(cmd)
 		},

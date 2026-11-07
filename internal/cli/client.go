@@ -63,8 +63,47 @@ func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclie
 		}
 		return newClientFromCard(ctx, cfg, cfg.agentCard.URL(), extraOpts...)
 	default:
-		return nil, clierr.Usage("either '--agent-card <ref>' or '--endpoint <url> --transport <t>' must be provided")
+		err := clierr.Usage("either '--agent-card <ref>' or '--endpoint <url> --transport <t>' must be provided")
+		err.Hint = "pass -a <agent URL or card> to name the agent"
+		return nil, err
 	}
+}
+
+// agentFlags returns the flags that select the agent, quoted for a shell, so a
+// printed command can name the same agent. A reference that may carry a
+// credential, in its query string or user info, is left out, and so is a
+// missing one; the caller then shows a placeholder.
+func agentFlags(cfg *globalConfig) string {
+	switch {
+	case cfg.agentCard.IsSet():
+		if mayCarryCredential(cfg.agentCard.URL()) {
+			return ""
+		}
+		return "-a " + shellQuote(cfg.agentCard.String())
+	case cfg.url != "":
+		if mayCarryCredential(cfg.url) || len(cfg.transports) != 1 {
+			return ""
+		}
+		return "-e " + shellQuote(cfg.url) + " --transport " + shellQuote(cfg.transports[0])
+	default:
+		return ""
+	}
+}
+
+// mayCarryCredential reports whether a URL has a query string or user info,
+// either of which may hold a token, or does not parse at all.
+func mayCarryCredential(ref string) bool {
+	u, err := url.Parse(ref)
+	return err != nil || u.RawQuery != "" || u.ForceQuery || u.User != nil
+}
+
+// shellQuote returns s as a single shell word, wrapping it in single quotes
+// unless it holds only characters a POSIX shell treats literally.
+func shellQuote(s string) string {
+	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@%+=:,./_-") == "" {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // newClientFromEndpoint connects straight to an agent interface URL without resolving an
