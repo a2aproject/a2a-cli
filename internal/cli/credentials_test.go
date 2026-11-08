@@ -36,6 +36,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/clicfg"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/localsrv"
+	"github.com/a2aproject/a2a-cli/internal/polling"
 )
 
 type recordedRequest struct {
@@ -330,17 +331,17 @@ func TestAuthGet(t *testing.T) {
 		{
 			name: "redacted",
 			args: []string{"auth", "get", "https://agent.example.com", "--credential-helper", helper, "-o", "json"},
-			want: map[string]any{"url": "https://agent.example.com", "helper": helper, "headers": map[string]any{"Authorization": []any{"<redacted>"}}, "expires": ""},
+			want: map[string]any{"url": "https://agent.example.com", "helper": helper, "headers": map[string]any{"Authorization": []any{"<redacted>"}}, "expires": "", "oauth": []any{}, "alsoApplies": []any{}},
 		},
 		{
 			name: "revealed",
 			args: []string{"auth", "get", "https://agent.example.com", "--credential-helper", helper, "--reveal", "-o", "json"},
-			want: map[string]any{"url": "https://agent.example.com", "helper": helper, "headers": map[string]any{"Authorization": []any{"Bearer https://agent.example.com"}}, "expires": ""},
+			want: map[string]any{"url": "https://agent.example.com", "helper": helper, "headers": map[string]any{"Authorization": []any{"Bearer https://agent.example.com"}}, "expires": "", "oauth": []any{}, "alsoApplies": []any{}},
 		},
 		{
 			name: "ignores the helper of the configured agent",
 			args: []string{"auth", "get", "https://other.example.com", "-a", "https://agent.example.com", "--credential-helper", "agent.example.com=false", "--credential-helper", "other.example.com=" + helper, "-o", "json"},
-			want: map[string]any{"url": "https://other.example.com", "helper": "other.example.com=" + helper, "headers": map[string]any{"Authorization": []any{"<redacted>"}}, "expires": ""},
+			want: map[string]any{"url": "https://other.example.com", "helper": "other.example.com=" + helper, "headers": map[string]any{"Authorization": []any{"<redacted>"}}, "expires": "", "oauth": []any{}, "alsoApplies": []any{}},
 		},
 		{
 			name:    "local file",
@@ -356,7 +357,8 @@ func TestAuthGet(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			out, err := runCMD(t, tc.args...)
+			// A temporary grant store keeps the user's grants out of the test.
+			out, err := runCMDWithConfig(t, deps{poller: polling.Stream, cfgLoader: clicfg.LoadEmpty, oauthDir: t.TempDir()}, tc.args...)
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("a2a %s error = %v, want %q", strings.Join(tc.args, " "), err, tc.wantErr)

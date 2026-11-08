@@ -73,7 +73,7 @@ func newTaskGetCmd(cfg *globalConfig) *cobra.Command {
 	f.BoolVar(&wait, "wait", false, "Poll until the task reaches a terminal or interrupted (input/auth-required) state")
 	f.DurationVar(&pollInterval, "poll-interval", 2*time.Second, "Duration between polls while waiting; only used with --wait. Overall wait budget is --timeout.")
 	flagparse.AttachFilePartsOutDir(f)
-	return cmd
+	return agentCall(cmd)
 }
 
 func getTask(ctx context.Context, cfg *globalConfig, client *a2aclient.Client, req *a2a.GetTaskRequest, wait bool, interval time.Duration) (*a2a.Task, error) {

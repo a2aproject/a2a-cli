@@ -41,6 +41,9 @@ These apply to every client-mode command. Each command selects the agent it talk
 | `--auth <creds>` | | Shorthand for `--svc-param "Authorization=<creds>"`. |
 | `--credential-helper <spec>` | | Credential helper returning the headers for an agent: `[scope=]path`. Repeatable. Not read from the local `.env`. See [Credentials](#credentials). |
 | `--unix-socket <path>` | | Send every HTTP request and gRPC connection through the Unix socket at `<path>`, whatever the URL's host. Applies to the card request and the REST, JSON-RPC and gRPC transports. Not read from the local `.env`. |
+| `--oauth <mode>` | | OAuth for agent calls: `off` (default), `auto`, or `cached`. Not read from the local `.env`. See [OAuth](#oauth). |
+| `--oauth-clients <json>` | | OAuth client registration per authorization server. Repeatable. Not read from the local `.env`. |
+| `--oauth-default-client-id <id>` | | OAuth client ID for authorization servers that support Client ID Metadata Documents when no registration matches; empty disables it. Not read from the local `.env`. |
 | `--tenant <id>` | | Tenant identifier. Passed on every request. |
 | `--timeout <dur>` | | Request timeout. Default `30s`. |
 | `--verbose` | `-v` | Verbose output to stderr. |
@@ -315,12 +318,85 @@ credential-helper:
 
 a2a executes the configured helper command, so `credential-helper`, `--unix-socket` and `--ca-cert` are not read from the local `.env` found by walking up from the current directory: a `.env` in a cloned repository could otherwise run a command, redirect requests or choose the certificates a2a trusts. a2a ignores them there with a warning. Set them with the flag, the environment, `~/.config/a2a-cli/config.yaml`, or a file passed with `--config`.
 
-### `auth get` - Inspect credentials
+### OAuth
+
+When an agent requires OAuth, a2a can sign you in, store the grant and attach it to later calls, so you don't fetch and paste tokens. It is off by default, so agents you reach with other credentials behave as before; turn it on with `--oauth auto`, or once with `oauth: auto` in `~/.config/a2a-cli/config.yaml` or `A2ACLI_OAUTH=auto`. With OAuth off, a 401 that asks for a Bearer token comes with a hint to sign in, unless the request carried an `Authorization` header of yours.
 
 ```bash
-a2a auth get https://agent.example.com            # header names, values redacted
-a2a auth get https://agent.example.com --reveal   # header values
+a2a send -a https://agent.example.com --oauth auto "hello"        # prompts once, saves the grant, sends
+a2a send -a https://agent.example.com --oauth auto "again"        # reuses the grant, refreshing it when needed
+a2a auth login https://agent.example.com --device                 # sign in ahead of time, no browser needed
+a2a send -a https://agent.example.com --oauth cached "from CI"    # never prompts; fails if no grant is stored
 ```
+
+| Flag | Values | Description |
+|---|---|---|
+| `--oauth` | `off` (default), `auto`, `cached` | `off` sends agent requests without OAuth; `a2a auth` commands still work. `auto` signs in when an agent requires it and stderr is a terminal; without a terminal it fails like `cached`. `cached` only uses stored grants and otherwise fails with `A2ACLI_ERR_CREDENTIALS_MISSING` (exit 4). Not read from the local `.env`. |
+| `--oauth-clients` | JSON object or array | Client registrations, one per authorization server: `{"authority":"<issuer>","client_id":"<client id or CIMD URL>","scopes":[...],"omit_resource":false}` on the command line and in `A2ACLI_OAUTH_CLIENTS`; a list of such objects in config files. Not read from the local `.env`. See [Client registrations](#client-registrations). |
+| `--oauth-default-client-id` | Client ID or CIMD URL, empty to disable | Client ID used with servers that support Client ID Metadata Documents when no registration matches. Default `https://a2a-protocol.org/oauth/a2a-cli.json`. Not read from the local `.env`. |
+
+#### Where a2a learns how to sign in
+
+| Source | When | What a2a reads |
+|---|---|---|
+| Agent card | Before the first request | An `oauth2` scheme: its `oauth2MetadataUrl` ([RFC 8414](https://www.rfc-editor.org/rfc/rfc8414) metadata), or inline `authorizationCode` / `deviceCode` endpoints. An `openIdConnect` scheme: its discovery document. The first `securityRequirements` entry made of one such scheme is used, with its scopes. |
+| `401` with a `Bearer` challenge | `--endpoint`, a protected card, or a card that declares no OAuth | `resource_metadata`, or the well-known location, for the Protected Resource Metadata ([RFC 9728](https://www.rfc-editor.org/rfc/rfc9728)); redirects stay on the same origin. Then the first listed authorization server whose metadata validates and that has a usable client. |
+
+With OAuth on, it is enforced only when the agent card requires it. A card that also accepts other credentials, such as an API key, or an agent that declares nothing, gets a stored grant when one applies, and the request is sent either way. Explicit credentials win too: when you pass `--auth` or any `--svc-param`, a credential helper covers the agent's host, or requests go through `--unix-socket`, a card that requires OAuth doesn't stop the request, not even when its OAuth requirement can't be resolved (no matching client, unreachable metadata). A stored grant is still attached when there is one, and OAuth signs in only when the agent answers 401.
+
+#### Sign-in
+
+| Flow | Used when | What you see |
+|---|---|---|
+| Authorization code with PKCE ([RFC 7636](https://www.rfc-editor.org/rfc/rfc7636), [RFC 8252](https://www.rfc-editor.org/rfc/rfc8252)) | Default | A URL to open; a2a waits for the redirect on `http://127.0.0.1:<port>/oauth/callback`. |
+| Device authorization ([RFC 8628](https://www.rfc-editor.org/rfc/rfc8628)) | `--device`, or the server has no authorization endpoint | A URL and a code to enter on any device. |
+
+Over HTTP, tokens are only sent over `https`, or `http` to a loopback host. Over gRPC the token goes to the agent's address whatever its scheme: the connection's TLS settings decide, and with `--insecure` a2a warns that the token travels in plaintext. Every request to the authorization server carries the grant's resource as `resource` ([RFC 8707](https://www.rfc-editor.org/rfc/rfc8707)), unless the client registration sets `omit_resource`: the interface URL when the agent card declares OAuth, or the `resource` of the agent's protected resource metadata when a 401 led to it, which is often the whole host. The token then works for that resource and everything below it. These requests go through the same transport as agent requests, so `--unix-socket` and `--ca-cert` apply to them. Signing in has its own 5-minute limit; `--timeout` covers the agent requests, which start after it. If signing in fails or the agent still rejects the token, the command fails with `A2ACLI_ERR_AUTH_FAILED` (exit 4).
+
+Grants are stored per issuer, client ID, resource and scopes in `~/.config/a2a-cli/oauth/grants.json` (mode 0600). On Windows, where a file another process has open can't be replaced, a write retries for up to half a second while another `a2a` reads the file. A grant also serves agents below its URL, and one obtained with more scopes than an agent asks for is reused. a2a refreshes a token shortly before it expires, or once when the agent rejects it with `error="invalid_token"`, and retries the request once.
+
+#### Client registrations
+
+The authorization server only talks to clients it knows. Configure one registration per authorization server, not per agent:
+
+```yaml
+# ~/.config/a2a-cli/config.yaml
+oauth-clients:
+  - authority: https://login.example.com
+    client_id: 0f1e2d3c
+    scopes: [a2a.invoke]          # optional; used when the agent names none
+  - authority: https://login.microsoftonline.com/<tenant>/v2.0
+    client_id: 9a8b7c6d
+    omit_resource: true           # optional; for servers that reject the RFC 8707 resource parameter
+```
+
+When no registration matches and the server advertises `client_id_metadata_document_supported`, a2a uses the [Client ID Metadata Document](https://datatracker.ietf.org/doc/draft-ietf-oauth-client-id-metadata-document/) `https://a2a-protocol.org/oauth/a2a-cli.json` as its client ID, so no registration is needed. Set `--oauth-default-client-id` to use another document, or to an empty value to turn this off. For a flow the agent card declares inline, without a metadata URL, this needs the server to publish metadata for an issuer at its token endpoint's URL or above it, naming that token endpoint.
+
+#### Precedence
+
+`--auth` and `--svc-param Authorization=…` win over a credential helper, which wins over OAuth. OAuth leaves alone any request that already carries an `Authorization` header, including the agent's 401 to it. Other explicit credentials (any `--svc-param`, a credential helper for the agent's host, `--unix-socket`) don't keep OAuth from attaching a stored grant, but OAuth no longer stops the request before it is sent; see above.
+
+`a2a server --proxy` never uses OAuth for its upstream calls, whatever `--oauth` is set to: it serves other clients and doesn't pass on your grants.
+
+### `auth` - Manage credentials
+
+| Command | Flags | Description |
+|---|---|---|
+| `auth login <agent>` | `--device`, `--scope <scope>` (repeatable) | Sign in and store the grant without sending a message. |
+| `auth list` | | Stored grants: resource, issuer, client, scopes and expiry. |
+| `auth get <agent>` | `--reveal` | Credential helper headers and the agent's stored grants, redacted unless `--reveal`. Other grants that may apply are listed apart (`alsoApplies` in JSON). The JSON always has `url`, `helper`, `headers`, `expires`, `oauth` and `alsoApplies`. With neither a helper nor a grant it fails with `A2ACLI_ERR_CREDENTIALS_MISSING` (exit 4). |
+| `auth logout <agent>` | `--all` | Revoke the agent's grants at the authorization server when it supports [RFC 7009](https://www.rfc-editor.org/rfc/rfc7009), then delete them locally. Other grants that may apply are kept, each named in a note with the `a2a auth logout <resource>` that removes it (`kept` in JSON); `--all` removes every grant. |
+
+```bash
+a2a auth login https://agent.example.com --scope a2a.invoke
+a2a auth list
+a2a auth get https://agent.example.com --reveal
+a2a auth logout --all
+```
+
+A grant is stored under its resource, which may differ from the URL you pass: the interface URL from the agent card when the card declares OAuth, or the resource the agent's protected resource metadata names when a 401 led to the sign-in, often the whole host. `auth get` and `auth logout` select the grant for exactly the URL you pass, and read the agent card to also select the grants for its interface URLs and, when the URL has a path, those below it. When the card can't be read, they select only the grant for exactly the URL, so a card outage never removes other agents' grants. Other grants that may apply, such as one for the whole host that sibling agents share, are never selected implicitly; remove one by passing its resource URL, which `auth logout` prints.
+
+`a2a auth` commands work whatever `--oauth` is set to. A script or a sandboxed agent can sign in once with `a2a auth login` and then run with `--oauth cached`. Both have to use the same `~/.config/a2a-cli`, so a sandbox with its own home directory doesn't see a grant stored outside it.
 
 ---
 
@@ -369,7 +445,7 @@ a2a server --proxy -a https://upstream-agent.com \
   --svc-param "X-Trace-ID=debug-session-1"
 ```
 
-The proxy creates an `a2aclient.Client` for the upstream agent and forwards each A2A operation. It injects any `--svc-param` service parameters into every forwarded request via `a2aclient.AttachServiceParams`, and derives its own agent card from the upstream card, substituting the local interface address.
+The proxy creates an `a2aclient.Client` for the upstream agent and forwards each A2A operation. It doesn't use OAuth for the upstream agent, even with `--oauth auto`: pass upstream credentials with `--auth` or `--svc-param`. It injects any `--svc-param` service parameters into every forwarded request via `a2aclient.AttachServiceParams`, and derives its own agent card from the upstream card, substituting the local interface address.
 
 ### `--exec` - Exec Mode
 

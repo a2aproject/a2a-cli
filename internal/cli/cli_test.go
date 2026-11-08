@@ -1320,6 +1320,9 @@ func mustRunCMD(t *testing.T, args ...string) string {
 
 func mustNewRoot(t *testing.T, cfg *globalConfig, deps deps) *cobra.Command {
 	t.Helper()
+	if deps.oauthDir == "" {
+		deps.oauthDir = t.TempDir()
+	}
 	r, err := newRootCmd(cfg, deps)
 	if err != nil {
 		t.Fatalf("newRootCmd() error = %v", err)

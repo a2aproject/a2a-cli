@@ -190,6 +190,27 @@ func TestUsage(t *testing.T) {
 	}
 }
 
+func TestAuthErrors(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("cause")
+	tests := []struct {
+		name     string
+		err      *Error
+		wantCode string
+	}{
+		{name: "credentials missing", err: CredentialsMissing("needs sign-in", "run a2a auth login", cause), wantCode: CodeCredentialsMissing},
+		{name: "auth failed", err: AuthFailed("token rejected", cause), wantCode: CodeAuthFailed},
+	}
+	for _, tc := range tests {
+		if tc.err.Code != tc.wantCode || tc.err.Exit != 4 {
+			t.Errorf("%s: code %q exit %d, want %q exit 4", tc.name, tc.err.Code, tc.err.Exit, tc.wantCode)
+		}
+		if !errors.Is(tc.err, cause) {
+			t.Errorf("%s: error does not wrap its cause", tc.name)
+		}
+	}
+}
+
 func TestCardResolution(t *testing.T) {
 	t.Parallel()
 
@@ -219,14 +240,14 @@ func TestCardResolution(t *testing.T) {
 			err:      &agentcard.ErrStatusNotOK{StatusCode: 401, Status: "401 Unauthorized"},
 			wantCode: CodeCardInvalid,
 			wantExit: 4,
-			wantHint: "pass or check credentials (--auth, --svc-param or --credential-helper)",
+			wantHint: "pass or check credentials (--auth, --svc-param or --credential-helper); if the agent uses OAuth, run `a2a auth login` and retry with --oauth auto",
 		},
 		{
 			name:     "forbidden card request asks for credentials",
 			err:      &agentcard.ErrStatusNotOK{StatusCode: 403, Status: "403 Forbidden"},
 			wantCode: CodeCardInvalid,
 			wantExit: 4,
-			wantHint: "pass or check credentials (--auth, --svc-param or --credential-helper)",
+			wantHint: "pass or check credentials (--auth, --svc-param or --credential-helper); if the agent uses OAuth, run `a2a auth login` and retry with --oauth auto",
 		},
 		{
 			name:     "server error on card request points at the agent",

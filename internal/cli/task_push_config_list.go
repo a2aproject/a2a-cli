@@ -63,5 +63,5 @@ func newPushConfigListCmd(cfg *globalConfig) *cobra.Command {
 	f := cmd.Flags()
 	f.IntVar(&limit, "limit", 0, "Page size")
 	f.StringVar(&pageToken, "page-token", "", "Pagination token")
-	return cmd
+	return agentCall(cmd)
 }

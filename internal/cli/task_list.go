@@ -98,5 +98,5 @@ func newTaskListCmd(cfg *globalConfig) *cobra.Command {
 	f.StringVar(&since, "since", "", "Only tasks with status updates after this timestamp (RFC 3339)")
 	f.BoolVar(&withArtifacts, "with-artifacts", false, "Include artifacts in the response")
 
-	return cmd
+	return agentCall(cmd)
 }
