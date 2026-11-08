@@ -49,6 +49,17 @@ const (
 // [oauth.ErrGrantNotFound] when there is no grant for the key.
 type FileStore struct {
 	Dir string
+	// Name replaces grants.json as the file name, so stores with different
+	// formats in one directory don't read each other's grants.
+	Name string
+}
+
+func (s *FileStore) path() string {
+	name := s.Name
+	if name == "" {
+		name = grantsFileName
+	}
+	return filepath.Join(s.Dir, name)
 }
 
 var (
@@ -67,7 +78,7 @@ func (s *FileStore) List(context.Context) ([]oauth.Grant, error) {
 }
 
 func (s *FileStore) read() ([]oauth.Grant, error) {
-	data, err := os.ReadFile(filepath.Join(s.Dir, grantsFileName))
+	data, err := os.ReadFile(s.path())
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
@@ -76,10 +87,10 @@ func (s *FileStore) read() ([]oauth.Grant, error) {
 	}
 	var f grantsFile
 	if err := json.Unmarshal(data, &f); err != nil {
-		return nil, fmt.Errorf("parsing %s: %w", filepath.Join(s.Dir, grantsFileName), err)
+		return nil, fmt.Errorf("parsing %s: %w", s.path(), err)
 	}
 	if f.Version > storeVersion {
-		return nil, fmt.Errorf("%s was written by a newer a2a (version %d)", filepath.Join(s.Dir, grantsFileName), f.Version)
+		return nil, fmt.Errorf("%s was written by a newer a2a (version %d)", s.path(), f.Version)
 	}
 	for i := range f.Grants {
 		// Files written before Grant.Refreshable existed only have the token.
@@ -147,7 +158,7 @@ func (s *FileStore) write(grants []oauth.Grant) error {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(s.Dir, grantsFileName+".*.tmp")
+	tmp, err := os.CreateTemp(s.Dir, filepath.Base(s.path())+".*.tmp")
 	if err != nil {
 		return fmt.Errorf("writing grants: %w", err)
 	}
@@ -168,7 +179,7 @@ func (s *FileStore) write(grants []oauth.Grant) error {
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("writing grants: %w", err)
 	}
-	if err := renameFile(tmpName, filepath.Join(s.Dir, grantsFileName)); err != nil {
+	if err := renameFile(tmpName, s.path()); err != nil {
 		return fmt.Errorf("writing grants: %w", err)
 	}
 	return nil
