@@ -70,24 +70,35 @@ func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclie
 }
 
 // agentFlags returns the flags that select the agent, quoted for a shell, so a
-// printed command can name the same agent. A reference that may carry a
-// credential, in its query string or user info, is left out, and so is a
-// missing one; the caller then shows a placeholder.
+// printed command can reach the same agent: the agent reference, then --tenant
+// and --unix-socket when set. A reference that may carry a credential, in its
+// query string or user info, is left out, and so is a missing one; it is
+// replaced by a placeholder, or, with no other flags, the caller shows one.
 func agentFlags(cfg *globalConfig) string {
+	var flags []string
 	switch {
 	case cfg.agentCard.IsSet():
-		if mayCarryCredential(cfg.agentCard.URL()) {
-			return ""
+		if !mayCarryCredential(cfg.agentCard.URL()) {
+			flags = append(flags, "-a "+shellQuote(cfg.agentCard.String()))
 		}
-		return "-a " + shellQuote(cfg.agentCard.String())
 	case cfg.url != "":
-		if mayCarryCredential(cfg.url) || len(cfg.transports) != 1 {
-			return ""
+		if !mayCarryCredential(cfg.url) && len(cfg.transports) == 1 {
+			flags = append(flags, "-e "+shellQuote(cfg.url)+" --transport "+shellQuote(cfg.transports[0]))
 		}
-		return "-e " + shellQuote(cfg.url) + " --transport " + shellQuote(cfg.transports[0])
-	default:
-		return ""
 	}
+	if cfg.tenant == "" && cfg.unixSocket == "" {
+		return strings.Join(flags, " ")
+	}
+	if len(flags) == 0 {
+		flags = append(flags, "-a <agent>")
+	}
+	if cfg.tenant != "" {
+		flags = append(flags, "--tenant "+shellQuote(cfg.tenant))
+	}
+	if cfg.unixSocket != "" {
+		flags = append(flags, "--unix-socket "+shellQuote(cfg.unixSocket))
+	}
+	return strings.Join(flags, " ")
 }
 
 // mayCarryCredential reports whether a URL has a query string or user info,

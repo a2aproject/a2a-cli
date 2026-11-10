@@ -270,6 +270,8 @@ func TestAgentFlags(t *testing.T) {
 		agentCard  string
 		endpoint   string
 		transports []string
+		tenant     string
+		unixSocket string
 		want       string
 	}{
 		{name: "url", agentCard: "https://agent.example.com", want: "-a https://agent.example.com"},
@@ -281,11 +283,13 @@ func TestAgentFlags(t *testing.T) {
 		{name: "endpoint", endpoint: "http://127.0.0.1:9000", transports: []string{"rest"}, want: "-e http://127.0.0.1:9000 --transport rest"},
 		{name: "endpoint with token", endpoint: "http://127.0.0.1:9000/?key=secret", transports: []string{"rest"}},
 		{name: "no agent"},
+		{name: "tenant and unix socket", agentCard: "http://localhost", tenant: "acme", unixSocket: "/tmp/a2a.sock", want: "-a http://localhost --tenant acme --unix-socket /tmp/a2a.sock"},
+		{name: "unix socket with token", agentCard: "http://localhost/?token=secret", unixSocket: "/tmp/my sock", want: "-a <agent> --unix-socket '/tmp/my sock'"},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			cfg := &globalConfig{url: tc.endpoint, transports: tc.transports}
+			cfg := &globalConfig{url: tc.endpoint, transports: tc.transports, tenant: tc.tenant, unixSocket: tc.unixSocket}
 			if err := cfg.agentCard.Set(tc.agentCard); err != nil {
 				t.Fatalf("agentCard.Set() error = %v", err)
 			}
