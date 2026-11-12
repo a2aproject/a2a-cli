@@ -16,12 +16,82 @@ package output
 
 import (
 	"bytes"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 )
+
+func TestPrintEventStructuredResume(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		schema string
+		want   string
+	}{
+		{
+			name:   "numbered approval",
+			schema: `{"type":"object","properties":{"option":{"type":"string"},"seq":{"const":2}},"required":["option"]}`,
+			want:   `--data-part '{"option":"<option>","seq":2}'`,
+		},
+		{
+			name:   "generic constants including null and false",
+			schema: `{"type":"object","properties":{"answer":{"type":"string"},"nonce":{"const":"question-2"},"empty":{"const":null},"enabled":{"const":false}},"required":["answer"]}`,
+			want:   `--data-part '{"answer":"<answer>","empty":null,"enabled":false,"nonce":"question-2"}'`,
+		},
+		{
+			name:   "required constant is not replaced with a placeholder",
+			schema: `{"type":"object","properties":{"seq":{"const":2}},"required":["seq"]}`,
+			want:   `--data-part '{"seq":2}'`,
+		},
+		{
+			name:   "schema without constants retains text reply",
+			schema: `{"type":"object","properties":{"option":{"type":"string"}},"required":["option"]}`,
+			want:   `"<reply>"`,
+		},
+		{
+			name:   "array schema retains text reply",
+			schema: `{"type":"array","properties":{"seq":{"const":2}}}`,
+			want:   `"<reply>"`,
+		},
+		{
+			name:   "apostrophes and shell substitutions remain literal",
+			schema: `{"type":"object","properties":{"nonce":{"const":"it's $HOME ` + "`id`" + `"}}}`,
+			want:   `--data-part '{"nonce":"it'"'"'s $HOME ` + "`id`" + `"}'`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var schema any
+			if err := json.Unmarshal([]byte(tt.schema), &schema); err != nil {
+				t.Fatalf("json.Unmarshal() error = %v, want nil", err)
+			}
+			part := a2a.NewDataPart(schema)
+			part.Metadata = map[string]any{
+				"https://github.com/a2aproject/experimental-ext-structured-input/tree/main/v1": map[string]any{"type": "input_schema"},
+			}
+			task := &a2a.Task{ID: "task-1", Status: a2a.TaskStatus{State: a2a.TaskStateInputRequired, Message: &a2a.Message{Parts: a2a.ContentParts{part}}}}
+			var out bytes.Buffer
+			printer := NewPrinter(&out, ModeText)
+			if err := printer.PrintEvent(task); err != nil {
+				t.Fatalf("Printer.PrintEvent() error = %v, want nil", err)
+			}
+			_, got, found := strings.Cut(out.String(), "Resume:     ")
+			if !found {
+				t.Fatalf("Printer.PrintEvent() = %q, want resume hint", out.String())
+			}
+			want := "a2a send --task-id task-1 " + tt.want + "\n"
+			if diff := cmp.Diff(want, got); diff != "" {
+				t.Fatalf("Printer.PrintEvent() wrong result (-want +got) diff = %s", diff)
+			}
+		})
+	}
+}
 
 func TestPrintTable(t *testing.T) {
 	t.Parallel()
