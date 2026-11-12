@@ -26,6 +26,7 @@ import (
 
 	"github.com/a2aproject/a2a-cli/internal/aicatalog"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
+	"github.com/a2aproject/a2a-cli/internal/contacts"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2acompat/a2av0"
 )
@@ -37,21 +38,63 @@ const (
 	allCatalogsScope = "the registered catalogs"
 )
 
-// resolveAgentCard resolves --agent-card. An entry identifier, or any reference
-// combined with --catalog, is looked up in AI Catalogs. A reference that serves
-// an AI Catalog resolves to the catalog's only A2A agent.
+// resolvedAgent is the agent --agent-card names.
+type resolvedAgent struct {
+	card *a2a.AgentCard
+	// entry is the catalog entry that lists the agent, or nil for an agent
+	// named by its card URL.
+	entry *aicatalog.Entry
+	// cardURL is where the card was fetched from, or "" for a card embedded
+	// in its entry.
+	cardURL string
+}
+
 func resolveAgentCard(ctx context.Context, cfg *globalConfig) (*a2a.AgentCard, error) {
-	ref := cfg.agentCard.String()
-	if cfg.catalog != "" || aicatalog.IsIdentifier(ref) {
-		return resolveCatalogAgent(ctx, cfg, cfg.catalog, ref)
+	agent, err := resolveAgent(ctx, cfg)
+	if err != nil {
+		return nil, err
 	}
+	return agent.card, nil
+}
+
+// resolveAgent resolves --agent-card. With --catalog the reference is an
+// identifier looked up in that catalog. Otherwise a contact name or identifier
+// resolves to the contact, an identifier that is not a contact is looked up in
+// the registered catalogs, and anything else is a card reference. A card
+// reference that serves an AI Catalog resolves to the catalog's only A2A agent.
+func resolveAgent(ctx context.Context, cfg *globalConfig) (*resolvedAgent, error) {
+	ref := cfg.agentCard.String()
+	if cfg.catalog != "" {
+		return agentFromCatalog(ctx, cfg, cfg.catalog, ref)
+	}
+	if contacts.IsName(ref) || aicatalog.IsIdentifier(ref) {
+		book, err := cfg.loadContacts()
+		if err != nil {
+			return nil, err
+		}
+		if c, ok := book.Get(ref); ok {
+			cfg.logf("using contact %q", ref)
+			return agentFromEntry(ctx, cfg, c.Entry)
+		}
+		if aicatalog.IsIdentifier(ref) {
+			if entry, err := aicatalog.FindAgent(book.Entries(), ref, contacts.CatalogLabel); err == nil {
+				cfg.logf("found %s in contacts", ref)
+				return agentFromEntry(ctx, cfg, entry)
+			}
+			return agentFromCatalog(ctx, cfg, "", ref)
+		}
+	}
+
 	if err := cfg.agentCard.Validate(); err != nil {
 		return nil, clierr.Usage(err.Error())
 	}
 	cardURL := cfg.agentCard.URL()
 	card, raw, err := fetchCardDocument(ctx, cfg, cardURL, true)
-	if err != nil || card != nil {
-		return card, err
+	if err != nil {
+		return nil, err
+	}
+	if card != nil {
+		return &resolvedAgent{card: card, cardURL: cardRequestURL(cardURL)}, nil
 	}
 
 	cfg.logf("%s is an AI Catalog, looking for its A2A agent", cardURL)
@@ -61,15 +104,15 @@ func resolveAgentCard(ctx context.Context, cfg *globalConfig) (*a2a.AgentCard, e
 	if err != nil {
 		return nil, catalogError(err)
 	}
-	entry, err := aicatalog.SingleAgent(entries, cfg.agentCard.String())
+	entry, err := aicatalog.SingleAgent(entries, ref)
 	if err != nil {
 		return nil, catalogError(err)
 	}
-	return cardFromEntry(ctx, cfg, entry)
+	return agentFromEntry(ctx, cfg, entry)
 }
 
-func resolveCatalogAgent(ctx context.Context, cfg *globalConfig, scope, id string) (*a2a.AgentCard, error) {
-	entries, label, err := catalogEntries(ctx, cfg, scope)
+func agentFromCatalog(ctx context.Context, cfg *globalConfig, scope, id string) (*resolvedAgent, error) {
+	entries, label, err := catalogEntries(ctx, cfg, scope, true)
 	if err != nil {
 		return nil, err
 	}
@@ -78,13 +121,35 @@ func resolveCatalogAgent(ctx context.Context, cfg *globalConfig, scope, id strin
 		return nil, catalogError(err)
 	}
 	cfg.logf("found %s in %s", id, entry.Catalog)
-	return cardFromEntry(ctx, cfg, entry)
+	return agentFromEntry(ctx, cfg, entry)
+}
+
+// agentFromEntry returns the agent a catalog entry embeds or points to.
+func agentFromEntry(ctx context.Context, cfg *globalConfig, entry aicatalog.Entry) (*resolvedAgent, error) {
+	if len(entry.Data) > 0 {
+		card, err := a2av0.NewAgentCardParser()(entry.Data)
+		if err != nil {
+			return nil, clierr.CardResolution(fmt.Errorf("card parsing failed: %w", err))
+		}
+		return &resolvedAgent{card: card, entry: &entry}, nil
+	}
+	cardURL, err := aicatalog.CardURL(entry)
+	if err != nil {
+		return nil, clierr.CardResolution(err)
+	}
+	card, _, err := fetchCardDocument(ctx, cfg, cardURL, false)
+	if err != nil {
+		return nil, err
+	}
+	return &resolvedAgent{card: card, entry: &entry, cardURL: cardURL}, nil
 }
 
 // catalogEntries returns the entries of the catalog scope, a registered catalog
 // name or source or a catalog URL or path, or of every registered catalog when
 // scope is empty. It also returns a description of the scope for messages.
-func catalogEntries(ctx context.Context, cfg *globalConfig, scope string) ([]aicatalog.Entry, string, error) {
+// skipContacts leaves out the registered copy of the contact book from every
+// registered catalog, for lookups that consult the contact book itself.
+func catalogEntries(ctx context.Context, cfg *globalConfig, scope string, skipContacts bool) ([]aicatalog.Entry, string, error) {
 	reg, err := cfg.openCatalogs()
 	if err != nil {
 		return nil, "", err
@@ -92,7 +157,17 @@ func catalogEntries(ctx context.Context, cfg *globalConfig, scope string) ([]aic
 	if scope == "" {
 		entries, warnings, err := reg.Entries(ctx, "")
 		cfg.logWarnings(warnings)
-		return entries, allCatalogsScope, err
+		if err != nil || !skipContacts {
+			return entries, allCatalogsScope, err
+		}
+		path, err := cfg.contactsPath()
+		if err != nil {
+			return nil, "", err
+		}
+		if c, ok := reg.Lookup(contacts.FileURL(path)); ok {
+			entries = slices.DeleteFunc(entries, func(e aicatalog.Entry) bool { return e.Catalog == c.Name })
+		}
+		return entries, allCatalogsScope, nil
 	}
 	if c, ok := reg.Lookup(scope); ok {
 		entries, warnings, err := reg.Entries(ctx, c.Name)
@@ -132,23 +207,6 @@ func isCatalogLocation(scope string) bool {
 	}
 	_, err := os.Stat(scope)
 	return err == nil
-}
-
-// cardFromEntry returns the Agent Card a catalog entry embeds or points to.
-func cardFromEntry(ctx context.Context, cfg *globalConfig, entry aicatalog.Entry) (*a2a.AgentCard, error) {
-	if len(entry.Data) > 0 {
-		card, err := a2av0.NewAgentCardParser()(entry.Data)
-		if err != nil {
-			return nil, clierr.CardResolution(fmt.Errorf("card parsing failed: %w", err))
-		}
-		return card, nil
-	}
-	cardURL, err := aicatalog.CardURL(entry)
-	if err != nil {
-		return nil, clierr.CardResolution(err)
-	}
-	card, _, err := fetchCardDocument(ctx, cfg, cardURL, false)
-	return card, err
 }
 
 // cardRequestURL returns the URL the card resolver requests for ref, which has

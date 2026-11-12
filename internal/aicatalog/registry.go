@@ -167,7 +167,7 @@ func (r *Registry) fetch(ctx context.Context, f *Fetcher, sourceURL string) (*Re
 	if err != nil {
 		return nil, err
 	}
-	doc, err := catalog.Parse(data)
+	doc, err := parseDocument(data)
 	if err != nil {
 		return nil, fmt.Errorf("%s is not an AI Catalog: %w", sourceURL, err)
 	}
@@ -216,7 +216,7 @@ func (r *Registry) Entries(ctx context.Context, nameOrSource string) ([]Entry, [
 			warnings = append(warnings, fmt.Sprintf("skipping catalog %q: %v", e.Name, err))
 			continue
 		}
-		doc, err := catalog.Parse(data)
+		doc, err := parseDocument(data)
 		if err != nil {
 			warnings = append(warnings, fmt.Sprintf("skipping catalog %q: %v", e.Name, err))
 			continue
@@ -232,7 +232,7 @@ func (r *Registry) Entries(ctx context.Context, nameOrSource string) ([]Entry, [
 // Load fetches the catalog document data was served from at sourceURL, and
 // the catalogs nested in it, without storing anything.
 func Load(ctx context.Context, f *Fetcher, sourceURL string, data []byte) ([]Entry, []string, error) {
-	doc, err := catalog.Parse(data)
+	doc, err := parseDocument(data)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%s is not an AI Catalog: %w", sourceURL, err)
 	}

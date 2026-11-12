@@ -1,0 +1,26 @@
+{
+  "description": "Tell the agent about your a2a contacts and about A2A agents discovered on sites in the conversation",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "a2a", "args": ["hook"], "timeout": 5 }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "a2a", "args": ["hook"], "timeout": 5 }
+        ]
+      }
+    ],
+    "PostToolBatch": [
+      {
+        "hooks": [
+          { "type": "command", "command": "a2a", "args": ["hook"], "timeout": 5 }
+        ]
+      }
+    ]
+  }
+}

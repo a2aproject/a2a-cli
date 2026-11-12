@@ -32,6 +32,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/commandplugin"
 	"github.com/a2aproject/a2a-cli/internal/credhelper"
+	"github.com/a2aproject/a2a-cli/internal/discover"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-cli/internal/polling"
@@ -46,8 +47,11 @@ type deps struct {
 	cfgLoader       cfgLoaderFunc
 	isTerminal      func() bool
 	notifyInterrupt func(context.Context) (context.Context, context.CancelFunc)
-	// catalogDir overrides the AI Catalog store directory.
-	catalogDir string
+	spawnDetached   func(args []string) error
+	// catalogDir, contactsFile and cacheDir override the default locations.
+	catalogDir   string
+	contactsFile string
+	cacheDir     string
 }
 
 func (d *deps) setDefaults() {
@@ -59,6 +63,9 @@ func (d *deps) setDefaults() {
 	}
 	if d.isTerminal == nil {
 		d.isTerminal = stdioIsTerminal
+	}
+	if d.spawnDetached == nil {
+		d.spawnDetached = discover.SpawnDetached
 	}
 	if d.notifyInterrupt == nil {
 		d.notifyInterrupt = func(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -72,6 +79,8 @@ type globalConfig struct {
 	agentCard    flagparse.URLOrPath
 	catalog      string
 	catalogDir   string
+	contactsFile string
+	cacheDir     string
 	url          string
 	transports   []string
 	svcParams    *flagparse.ServiceParams
@@ -159,6 +168,8 @@ func (g *globalConfig) renderError(err error) int {
 func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	deps.setDefaults()
 	cfg.catalogDir = deps.catalogDir
+	cfg.contactsFile = deps.contactsFile
+	cfg.cacheDir = deps.cacheDir
 
 	cmd := &cobra.Command{
 		Use:           "a2a",
@@ -234,6 +245,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 		newChatCmd(cfg, deps),
 		newTaskCmd(cfg),
 		newCatalogCmd(cfg),
+		newContactCmd(cfg),
 		newConfigCmd(cfg),
 		newAuthCmd(cfg),
 		newServeCmd(cfg),
@@ -242,6 +254,11 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 		newSkillCmd(cfg),
 		newVersionCmd(cfg),
 	)
+	hookCmd, err := newHookCmd(cfg, deps.spawnDetached)
+	if err != nil {
+		return nil, err
+	}
+	cmd.AddCommand(hookCmd)
 
 	preStore, err := deps.cfgLoader(clicfg.LoadOpts{})
 	if err != nil {
