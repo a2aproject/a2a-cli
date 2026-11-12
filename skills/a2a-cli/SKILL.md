@@ -131,7 +131,8 @@ Run `a2a <command> --help` for the full, current set. The load-bearing ones:
 
 | Flag | Use |
 |---|---|
-| `-a, --agent-card <host\|url\|path>` | Resolve the agent's card (picks the transport). |
+| `-a, --agent-card <host\|url\|path\|urn>` | Resolve the agent's card (picks the transport). A `urn:` is an agent identifier looked up in AI Catalogs. |
+| `--catalog <name\|url>` | AI Catalog to look the `-a` identifier up in (experimental). |
 | `-e, --endpoint <url>` + `--transport <rest\|jsonrpc\|grpc>` | Connect to one interface directly, skipping card resolution. |
 | `-o, --output json` | Machine-readable output; add `--stream` for a live event stream. |
 | `--async` | Return immediately with the identifiers instead of blocking; poll later with `task get`. |
@@ -149,6 +150,11 @@ Every setting can come from a flag, an `A2ACLI_*` environment variable, a
 user-level `~/.config/a2a-cli/config.yaml`; precedence is flag > env var >
 local file > user `config.yaml` > global `.env`. Inspect the effective values
 and where each resolved from with `a2a config show` (secrets redacted).
+
+AI Catalogs (experimental) list agents by identifier. `a2a catalog add <name>
+<url>` registers one, `a2a catalog search [query]` finds A2A agents and their
+identifiers, and `a2a send -a <identifier>` talks to one. Registered catalogs are
+shared with ai-catalog-cli.
 
 Command plugins — `a2a-<name>` binaries on `PATH` that add top-level commands —
 are opt-in and disabled by default. Enable discovery with `a2a plugin

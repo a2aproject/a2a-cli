@@ -87,6 +87,11 @@ a2a send -a https://agent.example.com --stream "Summarize this document"
 # Send asynchronously and poll until completion
 a2a send -a https://agent.example.com --async "Analyze this dataset"
 a2a task get -a https://agent.example.com <task-id> --wait --timeout 60s
+
+# Find agents in an AI Catalog and talk to one by its identifier (experimental)
+a2a catalog add corp https://acme.com
+a2a catalog search finance
+a2a send -a urn:air:acme.com:agent:finance "What were last quarter's expenses?"
 ```
 
 See the **[full command reference](./internal/README.md)** for all commands, flags, configuration, and server mode.

@@ -28,7 +28,7 @@ func newCardGetCmd(cfg *globalConfig) *cobra.Command {
 	var extended bool
 
 	cmd := &cobra.Command{
-		Use:   "get [url]",
+		Use:   "get [ref]",
 		Short: "Fetch and display an agent card",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -84,8 +84,5 @@ func getPublicAgentCard(ctx context.Context, cfg *globalConfig) (*a2a.AgentCard,
 	if !cfg.agentCard.IsSet() {
 		return nil, clierr.Usage("specify the agent card URL as an argument or with --agent-card")
 	}
-	if err := cfg.agentCard.Validate(); err != nil {
-		return nil, clierr.Usage(err.Error())
-	}
-	return resolveCard(ctx, cfg, cfg.agentCard.URL())
+	return resolveAgentCard(ctx, cfg)
 }

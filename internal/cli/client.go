@@ -17,6 +17,7 @@ package cli
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -26,6 +27,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/a2aproject/a2a-cli/internal/aicatalog"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/transportplugin"
@@ -55,13 +57,14 @@ func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclie
 	switch {
 	case cfg.url != "" && cfg.agentCard.IsSet():
 		return nil, clierr.Usage("--endpoint and --agent-card are mutually exclusive")
+	case cfg.url != "" && cfg.catalog != "":
+		return nil, clierr.Usage("--catalog applies to --agent-card, not --endpoint")
 	case cfg.url != "":
 		return newClientFromEndpoint(ctx, cfg, cfg.url, extraOpts...)
 	case cfg.agentCard.IsSet():
-		if err := cfg.agentCard.Validate(); err != nil {
-			return nil, clierr.Usage(err.Error())
-		}
-		return newClientFromCard(ctx, cfg, cfg.agentCard.URL(), extraOpts...)
+		return newClientFromCard(ctx, cfg, extraOpts...)
+	case cfg.catalog != "":
+		return nil, clierr.Usage("--catalog requires --agent-card <identifier>")
 	default:
 		return nil, clierr.Usage("either '--agent-card <ref>' or '--endpoint <url> --transport <t>' must be provided")
 	}
@@ -94,13 +97,13 @@ func newClientFromEndpoint(ctx context.Context, cfg *globalConfig, ref string, e
 
 // newClientFromCard resolves the Agent Card and builds a client for it, honoring
 // --transport as an ordered client preference over the card's declared interfaces.
-func newClientFromCard(ctx context.Context, cfg *globalConfig, ref string, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
+func newClientFromCard(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
 	transportPrefs, err := flagparse.Transports(cfg.transports)
 	if err != nil {
 		return nil, err
 	}
 
-	card, err := resolveCard(ctx, cfg, ref)
+	card, err := resolveAgentCard(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -120,11 +123,16 @@ func newClientFromCard(ctx context.Context, cfg *globalConfig, ref string, extra
 	return a2aclient.NewFromCard(ctx, card, factoryOpts...)
 }
 
-// resolveCard fetches the agent card with every service parameter sent as a request
-// header, so a gateway authenticating the card fetch sees what the transport sends.
-func resolveCard(ctx context.Context, cfg *globalConfig, ref string) (*a2a.AgentCard, error) {
+// errCatalogDocument marks a card request answered with an AI Catalog.
+var errCatalogDocument = errors.New("the document is an AI Catalog, not an Agent Card")
+
+// fetchCardDocument fetches the agent card with every service parameter sent as a
+// request header, so a gateway authenticating the card fetch sees what the transport
+// sends. It also returns the card as served. When allowCatalog is set and ref serves
+// an AI Catalog, it returns a nil card and the catalog.
+func fetchCardDocument(ctx context.Context, cfg *globalConfig, ref string, allowCatalog bool) (*a2a.AgentCard, []byte, error) {
 	if err := cfg.initTLS(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var opts []agentcard.ResolveOption
 	for k, vals := range cfg.svcParams.Params() {
@@ -132,17 +140,30 @@ func resolveCard(ctx context.Context, cfg *globalConfig, ref string) (*a2a.Agent
 	}
 	headers, err := cfg.cardHeaders(ctx, ref)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for k, vals := range headers {
 		opts = append(opts, agentcard.WithRequestHeader(k, strings.Join(vals, ", ")))
 	}
-	cfg.logf("resolving agent card from %s", ref)
-	card, err := cardResolver(cfg).Resolve(ctx, ref, opts...)
-	if err != nil {
-		return nil, clierr.CardResolution(err)
+	var raw []byte
+	resolver := cardResolver(cfg)
+	parse := resolver.CardParser
+	resolver.CardParser = func(body []byte) (*a2a.AgentCard, error) {
+		raw = body
+		if aicatalog.IsCatalogDocument(body) {
+			return nil, errCatalogDocument
+		}
+		return parse(body)
 	}
-	return card, nil
+	cfg.logf("resolving agent card from %s", ref)
+	card, err := resolver.Resolve(ctx, ref, opts...)
+	if allowCatalog && errors.Is(err, errCatalogDocument) {
+		return nil, raw, nil
+	}
+	if err != nil {
+		return nil, nil, clierr.CardResolution(err)
+	}
+	return card, raw, nil
 }
 
 func cardResolver(cfg *globalConfig) *agentcard.Resolver {
