@@ -182,6 +182,10 @@ func (h *Hook) sessionStart(source string, st *sessionState, contactsBlock, dige
 		}
 	}
 	blocks := []string{contactsBlock}
+	if source == "compact" && contactsBlock == "" {
+		// The summary may still treat removed contacts as trusted.
+		blocks = []string{contactsChange(st, contactsBlock, digest)}
+	}
 	if source == "compact" && h.Discovery {
 		blocks = append(blocks, FormatDiscovered(h.injectedEntries(st)))
 	}

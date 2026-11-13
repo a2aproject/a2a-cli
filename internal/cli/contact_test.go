@@ -461,30 +461,56 @@ func TestContactAddJSON(t *testing.T) {
 	}
 }
 
+// failingLocalConfig fails to load the configuration unless --config replaces
+// the local .env.
+func failingLocalConfig(loadErr error) cfgLoaderFunc {
+	return func(opts clicfg.LoadOpts) (*clicfg.Store, error) {
+		if opts.ConfigPath == "" {
+			return nil, loadErr
+		}
+		return clicfg.LoadEmpty(opts)
+	}
+}
+
 func TestConfigErrorReportedByCommands(t *testing.T) {
 	t.Parallel()
 	loadErr := errors.New("unterminated quoted value")
 
 	tests := []struct {
-		name string
-		args []string
+		name    string
+		args    []string
+		wantErr error
 	}{
-		{name: "command", args: []string{"contact", "list"}},
-		{name: "explicit config", args: []string{"--config", "a2a.yaml", "plugin", "list"}},
-		{name: "unknown flag", args: []string{"contact", "list", "--no-such-flag"}},
-		{name: "unknown command", args: []string{"no-such-command", "--no-such-flag"}},
+		{name: "command", args: []string{"contact", "list"}, wantErr: loadErr},
+		{name: "unknown flag", args: []string{"contact", "list", "--no-such-flag"}, wantErr: loadErr},
+		{name: "unknown command", args: []string{"no-such-command"}, wantErr: loadErr},
+		{name: "missing argument", args: []string{"task", "get"}, wantErr: loadErr},
+		{name: "explicit config replaces the local file", args: []string{"--config", "a2a.yaml", "contact", "list"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			env := newContactEnv(t)
-			env.cfgLoader = func(clicfg.LoadOpts) (*clicfg.Store, error) { return nil, loadErr }
+			env.cfgLoader = failingLocalConfig(loadErr)
 
 			_, _, err := env.run("", tc.args...)
-			if !errors.Is(err, loadErr) {
-				t.Fatalf("run(%v) error = %v, want %v", tc.args, err, loadErr)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("run(%v) error = %v, want %v", tc.args, err, tc.wantErr)
 			}
 		})
+	}
+}
+
+func TestHookCmdExplicitConfigWithBrokenLocalConfig(t *testing.T) {
+	t.Parallel()
+	agentURL := startTestServer(t)
+	env := newContactEnv(t)
+	env.mustRun("contact", "add", "echo", agentURL)
+	env.cfgLoader = failingLocalConfig(errors.New("unterminated quoted value"))
+
+	out, _, err := env.run(`{"hook_event_name":"SessionStart","session_id":"s1","source":"startup"}`, "hook", "--config", "a2a.yaml")
+	if err != nil || !strings.Contains(out, "- echo") {
+		t.Fatalf("hook --config with a broken local config = %q, %v; want the contacts", out, err)
 	}
 }
 

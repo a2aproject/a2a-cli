@@ -132,6 +132,21 @@ func TestHookRun(t *testing.T) {
 			},
 		},
 		{
+			name: "contacts emptied before compaction reported",
+			steps: []step{
+				{event: start("startup"), contacts: []ContactEntry{nimbus}, want: []string{"- nimbus"}},
+				{event: start("compact"), want: []string{"contact book is now empty"}},
+				{event: prompt("hello")},
+			},
+		},
+		{
+			name: "empty contact book stays silent on compaction",
+			steps: []step{
+				{event: start("startup")},
+				{event: start("compact")},
+			},
+		},
+		{
 			name:      "compaction skips discovered agents that became contacts",
 			discovery: true,
 			steps: []step{

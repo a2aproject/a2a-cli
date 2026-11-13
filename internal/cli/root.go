@@ -176,10 +176,18 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	// the hook, which must not fail, can ignore it while every other command
 	// reports it as before, even when its flags don't parse.
 	preStore, preErr := deps.cfgLoader(clicfg.LoadOpts{})
+	// configErr is the pre-load error, unless --config replaces the local file
+	// it failed on.
+	configErr := func() error {
+		if cfg.configPath != "" {
+			return nil
+		}
+		return preErr
+	}
 
 	preRun := func(cmd *cobra.Command, args []string) error {
-		if preErr != nil {
-			return preErr
+		if err := configErr(); err != nil {
+			return err
 		}
 		store, err := deps.cfgLoader(clicfg.LoadOpts{ConfigPath: cfg.configPath})
 		if err != nil {
@@ -279,7 +287,14 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	cmd.SetUsageTemplate(rootUsageTemplate)
 	markUsageErrors(cmd)
 	if preErr != nil {
-		cmd.SetFlagErrorFunc(func(*cobra.Command, error) error { return preErr })
+		cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+			if cerr := configErr(); cerr != nil {
+				return cerr
+			}
+			return clierr.Usage(err.Error())
+		})
+		// Cobra validates arguments before preRun runs.
+		reportConfigErrBeforeArgs(cmd, hookCmd, configErr)
 	}
 
 	return cmd, nil
@@ -374,6 +389,23 @@ func markUsageErrors(cmd *cobra.Command) {
 		return clierr.Usage(err.Error())
 	})
 	wrapArgsUsage(cmd)
+}
+
+func reportConfigErrBeforeArgs(cmd, skip *cobra.Command, configErr func() error) {
+	if cmd == skip {
+		return
+	}
+	if validate := cmd.Args; validate != nil {
+		cmd.Args = func(c *cobra.Command, args []string) error {
+			if err := configErr(); err != nil {
+				return err
+			}
+			return validate(c, args)
+		}
+	}
+	for _, sub := range cmd.Commands() {
+		reportConfigErrBeforeArgs(sub, skip, configErr)
+	}
 }
 
 func wrapArgsUsage(cmd *cobra.Command) {
