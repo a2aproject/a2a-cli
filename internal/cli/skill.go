@@ -25,10 +25,11 @@ import (
 
 func newSkillCmd(cfg *globalConfig) *cobra.Command {
 	return &cobra.Command{
-		Use:   "skill",
-		Short: "Print the a2a-cli agent skill",
-		Long:  "Print the a2a-cli SKILL.md bundled into this binary: instructions for teaching an agent to drive A2A agents with this CLI.",
-		Args:  cobra.NoArgs,
+		Use:     "skill",
+		Short:   "Print the a2a-cli agent skill",
+		Example: `  a2a skill > ~/.claude/skills/a2a-cli/SKILL.md`,
+		Long:    "Print the a2a-cli SKILL.md bundled into this binary: instructions for teaching an agent to drive A2A agents with this CLI.",
+		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			content := skills.A2ACLI
 			if !strings.HasSuffix(content, "\n") {

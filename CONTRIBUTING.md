@@ -1,15 +1,15 @@
 # How to contribute
 
-We'd love to accept your patches and contributions to this project. This repository holds two things: the **A2A CLI specification** (`specification/SPEC.md`, `specification/COMPLIANCE.md`) and its **Go reference implementation** (`a2a`). Contributions to either are welcome.
+We'd love to accept your patches and contributions to this project. This repository holds the `a2a` CLI, its documentation site, and its lessons and examples. Contributions to any of them are welcome.
 
 ## Ways to contribute
 
 Code is only one way to help. The project grows through many kinds of contribution:
 
-- **Request a feature.** Open a [feature request](https://github.com/a2aproject/a2a-cli/issues/new?template=feature-request.yml) to propose a new command, flag, or specification change.
+- **Request a feature.** Open a [feature request](https://github.com/a2aproject/a2a-cli/issues/new?template=feature-request.yml) to propose a new command or flag, or a change to an existing one.
 - **Report a bug.** File a [bug report](https://github.com/a2aproject/a2a-cli/issues/new?template=bug-report.yml) with steps to reproduce, your CLI version, and your OS.
 - **Contribute code.** Fix a bug or build a feature — see the workflow below.
-- **Improve the docs.** Clarify the README, the specification, or these guidelines.
+- **Improve the docs.** Clarify the [documentation](https://a2aproject.github.io/a2a-cli/), the lessons and examples, or these guidelines. [Documentation](#documentation) below explains how they are built.
 - **Share feedback.** Tell us how you use the tool, what works, and what's rough — on our [Discord server](https://discord.com/invite/9UpukKSpRN) or in an issue.
 - **Help the community.** Answer questions, help reproduce and triage issues, and review pull requests.
 
@@ -24,8 +24,7 @@ Code is only one way to help. The project grows through many kinds of contributi
 Commit messages and pull request titles follow the [Conventional Commits](https://www.conventionalcommits.org/) specification. PR titles are lint-checked. Choose the type and scope based on what you changed:
 
 - **CLI code** — `feat:` for new behavior, `fix:` for bug fixes (e.g., `feat: add subscribe command`).
-- **SPEC or COMPLIANCE file** — `docs(spec):` for changes to `specification/SPEC.md` or `specification/COMPLIANCE.md`.
-- **Other doc files** — `docs:` for all other documentation.
+- **Documentation** — `docs:` for the docs, lessons and examples.
 
 ## Contribution process
 
@@ -59,3 +58,20 @@ A few checks run on every pull request. Follow these tips to pass them:
   go test -race ./...
   golangci-lint run
   ```
+
+## Documentation
+
+The documentation site is built with [MkDocs Material](https://squidfunk.github.io/mkdocs-material/) from `docs/`, `lessons/` and `examples/`, and published to GitHub Pages from `main`. The markdown renders on GitHub as well, so link between pages with relative links to the `.md` files.
+
+- `docs/guide/` is the User Guide: one short page per task.
+- `docs/advanced/` explains how the CLI works inside.
+- `docs/reference/commands/` is generated from the command definitions. After changing a command or flag, run `go run ./internal/tools/gendocs`; a test fails while the pages are out of date.
+- `lessons/` is the course, and `examples/` holds recipes. Each has a `demo.gif` recorded from a scenario in `tools/demo/scenarios/`; [tools/demo/README.md](tools/demo/README.md) explains how to record one. When you change the commands in a lesson or example, change its scenario too: CI plays every scenario.
+
+Build the site locally:
+
+```sh
+pip install -r site/requirements.txt
+site/build.sh          # build into site/.out/site
+site/build.sh serve    # serve with live reload
+```

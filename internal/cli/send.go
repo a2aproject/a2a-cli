@@ -51,7 +51,20 @@ func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "send [message]",
 		Short: "Send a message to an agent",
-		Args:  cobra.ArbitraryArgs,
+		Long: "Send a message to an agent and print the result.\n\n" +
+			"The message is built from the positional text and the --text-part,\n" +
+			"--file-part and --data-part flags, in the order they appear. Without\n" +
+			"--stream or --async, send waits for the task to finish or to ask for input.\n" +
+			"--stream prints each event as it arrives, and polls when the agent doesn't\n" +
+			"stream. --async returns as soon as the agent accepts the task.",
+		Example: `  a2a send -a https://agent.example.com "What can you do?"
+  a2a send -a https://agent.example.com --stream "Summarize the report"
+  a2a send -a https://agent.example.com --async "Analyze the dataset"
+  a2a send -a https://agent.example.com --task-id <task-id> "yes, go ahead"
+  a2a send -a https://agent.example.com --context-id <context-id> "And the next one?"
+  a2a send -a https://agent.example.com --text-part "Review this" --file-part report.pdf
+  a2a send -a https://agent.example.com --data-part '{"priority":"high"}' "Triage"`,
+		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if flags.stream && flags.async {
 				return clierr.Usage("--stream is incompatible with --async")

@@ -28,9 +28,10 @@ func newTaskCancelCmd(cfg *globalConfig) *cobra.Command {
 	var meta flagparse.Metadata
 
 	cmd := &cobra.Command{
-		Use:   "cancel <task-id>",
-		Short: "Cancel a task",
-		Args:  cobra.ExactArgs(1),
+		Use:     "cancel <task-id>",
+		Short:   "Cancel a task",
+		Example: `  a2a task cancel -a https://agent.example.com <task-id>`,
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithTimeout(cmd.Context(), cfg.timeout)
 			defer cancel()

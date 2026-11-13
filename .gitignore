@@ -62,5 +62,7 @@ Temporary Items
 # gitignore temporary AI worktree directories
 aiwt-*
 
-# generated demo recording (intermediate; run.sh regenerates it)
-docs/demo/a2a-demo.cast
+# Documentation site builds
+site/.build/
+site/.out/
+__pycache__/

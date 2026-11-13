@@ -30,7 +30,16 @@ func newCardGetCmd(cfg *globalConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get [ref]",
 		Short: "Fetch and display an agent card",
-		Args:  cobra.MaximumNArgs(1),
+		Long: "Fetch an agent card and print it.\n\n" +
+			"The reference is a host (the CLI fetches /.well-known/agent-card.json from\n" +
+			"it, over http for loopback hosts and https otherwise), a full card URL, or\n" +
+			"a local file. --extended asks the agent for the card it shows to\n" +
+			"authenticated callers.",
+		Example: `  a2a card get https://agent.example.com
+  a2a card get localhost:8080 -o json
+  a2a card get ./agent-card.json
+  a2a card get https://agent.example.com --extended --auth "Bearer $TOKEN"`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 

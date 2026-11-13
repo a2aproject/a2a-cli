@@ -1,0 +1,126 @@
+site_name: a2a
+site_description: Discover, message, and manage A2A agents from your terminal.
+site_url: https://a2aproject.github.io/a2a-cli/
+repo_url: https://github.com/a2aproject/a2a-cli
+repo_name: a2aproject/a2a-cli
+edit_uri: ""
+docs_dir: .build/docs
+site_dir: .out/site
+copyright: Copyright 2026 The A2A Authors
+
+validation:
+  links:
+    anchors: warn
+    unrecognized_links: warn
+
+theme:
+  name: material
+  custom_dir: overrides
+  logo: assets/a2a_icon_color.svg
+  favicon: assets/a2a_icon_color.svg
+  features:
+    - navigation.tabs
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - content.code.copy
+    - content.tabs.link
+    - toc.follow
+  palette:
+    - scheme: slate
+      primary: custom
+      accent: custom
+  font:
+    text: Geist
+    code: Geist Mono
+  icon:
+    repo: fontawesome/brands/github
+
+hooks:
+  - hooks.py
+
+extra_css:
+  - css/extra.css
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 2
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - github-callouts
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - User Guide:
+      - Agent Cards: guide/agent-cards.md
+      - AI Catalogs: guide/ai-catalogs.md
+      - Messages: guide/messages.md
+      - Streaming and Async: guide/streaming-and-async.md
+      - Conversations: guide/conversations.md
+      - Tasks: guide/tasks.md
+      - Push Notifications: guide/push-notifications.md
+      - Files: guide/files.md
+      - Configuration: guide/configuration.md
+      - Credentials: guide/credentials.md
+      - Transports: guide/transports.md
+      - Scripting: guide/scripting.md
+      - Coding Agents: guide/coding-agents.md
+      - Plugins: guide/plugins.md
+      - Shell Completion: guide/shell-completion.md
+  - Lessons:
+      - Overview: lessons/index.md
+      - 1. Your First Message: lessons/01-first-message/index.md
+      - 2. Configuration: lessons/02-configuration/index.md
+      - 3. Messages and Tasks: lessons/03-messages-and-tasks/index.md
+      - 4. Conversations: lessons/04-conversations/index.md
+      - 5. Credentials: lessons/05-credentials/index.md
+  - Examples:
+      - Overview: examples/index.md
+      - Scripting with jq: examples/scripting-with-jq/index.md
+      - A Credential Helper: examples/credential-helper/index.md
+      - A Command Plugin: examples/a2a-hello/index.md
+      - A Transport Plugin: examples/a2a-transport-echo/index.md
+  - Advanced:
+      - Architecture: advanced/architecture.md
+      - Discovery and Transports: advanced/discovery.md
+      - Configuration Layers: advanced/configuration.md
+      - Streaming and Timeouts: advanced/streaming.md
+      - Credential Helpers: advanced/credential-helpers.md
+      - Command Plugins: advanced/command-plugins.md
+      - Transport Plugins: advanced/transport-plugins.md
+      - Security: advanced/security.md
+  - Reference:
+      - Commands:
+          - a2a: reference/commands/a2a.md
+          - send: reference/commands/send.md
+          - chat: reference/commands/chat.md
+          - card: reference/commands/card.md
+          - catalog: reference/commands/catalog.md
+          - task: reference/commands/task.md
+          - config: reference/commands/config.md
+          - auth: reference/commands/auth.md
+          - plugin: reference/commands/plugin.md
+          - transport: reference/commands/transport.md
+          - skill: reference/commands/skill.md
+          - completion: reference/commands/completion.md
+          - version: reference/commands/version.md
+      - Configuration: reference/configuration.md
+      - Output: reference/output.md
+      - Errors and Exit Codes: reference/errors.md
+      - Credential Helper Protocol: reference/credential-helper-protocol.md
+      - Command Plugin Protocol: reference/command-plugin-protocol.md
+      - Transport Plugin Protocol: reference/transport-plugin-protocol.md

@@ -1,38 +1,61 @@
-# a2a-hello
+# A Command Plugin
 
-A reference [A2A CLI command plugin](../../docs/command-plugins.md) built with
-the [`cliplugin` devkit](../../devkit/cliplugin).
+`a2a-hello` adds a command, `a2a hello`, to the CLI without rebuilding it. It is a complete command plugin in about 40 lines of Go, built with the [`cliplugin`](../../devkit/cliplugin) devkit.
 
-It implements the optional `info` subcommand and accepts an optional name
-argument. It exists to demonstrate the command plugin contract end to end.
+![Building a2a-hello, enabling command plugins, listing and running it](demo.gif)
 
 ## Build and install
 
-```console
-$ go build -o a2a-hello .
-$ mv a2a-hello ~/bin/    # anywhere on your PATH
+From this directory, build the binary with its required name and put it on your `PATH`:
+
+```bash
+go build -o ~/bin/a2a-hello .    # any directory on PATH
+```
+
+Command plugins are off by default. Turn them on once:
+
+```bash
+a2a plugin set-enabled true
 ```
 
 ## Try it
 
-```console
-$ a2a plugin list
-NAME   VERSION  DESCRIPTION                              PATH
-hello  1.0.0    Greets the world — reference command plugin  …/a2a-hello
-
-$ a2a hello
-Hello, World! (from a2a-hello plugin)
-
-$ a2a hello Alice
-Hello, Alice! (from a2a-hello plugin)
-
-$ a2a --help
-# "hello" appears in the Available Commands list
+```bash
+a2a plugin list
 ```
 
-## What to look at
+```text
+Command plugins: enabled
+NAME   VERSION  DESCRIPTION                                  PATH
+hello  1.0.0    Greets the world — reference command plugin  /home/you/bin/a2a-hello
+```
 
-* [`main.go`](main.go) — the entire plugin; wires info via `cliplugin.ServeInfo`.
+```bash
+a2a hello
+a2a hello Alice
+```
 
-Everything else — PATH discovery, invocation, argument forwarding, and
-`--help` registration — is handled automatically by the `a2a` CLI.
+```text
+Hello, World! (from a2a-hello plugin)
+Hello, Alice! (from a2a-hello plugin)
+```
+
+`hello` also appears under **Available Commands** in `a2a --help`.
+
+## How it works
+
+`a2a` finds every executable named `a2a-<name>` on `PATH` and registers it as a command. `a2a hello Alice` runs `a2a-hello Alice`: the plugin gets every argument and your environment, and owns its output and exit code.
+
+The one thing a plugin may implement for `a2a` is the `info` subcommand, which describes it in `plugin list` and `--help`. [`main.go`](main.go) answers it with `cliplugin.ServeInfo`:
+
+```go
+if len(os.Args) > 1 && os.Args[1] == cliplugin.SubcommandInfo {
+	cliplugin.ServeInfo(cliplugin.Info{
+		Name:        "hello",
+		Version:     "1.0.0",
+		Description: "Greets the world — reference command plugin",
+	})
+}
+```
+
+Any language works; `info` only has to print `{"name": ..., "version": ..., "description": ...}`. The [command plugin protocol](../../docs/reference/command-plugin-protocol.md) has the contract, and [Command plugins](../../docs/advanced/command-plugins.md) explains discovery and conflicts.
