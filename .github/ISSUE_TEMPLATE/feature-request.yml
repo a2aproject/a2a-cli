@@ -16,7 +16,6 @@ body:
       options:
         - New command or flag
         - Change to an existing command or behavior
-        - Specification change (SPEC.md / COMPLIANCE.md)
         - Documentation
         - Developer experience / ergonomics
         - Other

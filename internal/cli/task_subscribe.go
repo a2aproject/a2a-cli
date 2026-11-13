@@ -28,7 +28,12 @@ func newTaskSubscribeCmd(cfg *globalConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "subscribe <task-id>",
 		Short: "Subscribe to task events",
-		Args:  cobra.ExactArgs(1),
+		Long: "Stream the events of a running task until it finishes or needs input.\n\n" +
+			"--timeout bounds the time between two events, so a task that keeps\n" +
+			"sending events is followed for as long as it runs.",
+		Example: `  a2a task subscribe -a https://agent.example.com <task-id>
+  a2a task subscribe -a https://agent.example.com <task-id> -o jsonl`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := withServiceParams(cmd.Context(), cfg)
 			ctx, debounceTimeout := utils.WithInactivityTimeout(ctx, cfg.timeout)

@@ -37,7 +37,9 @@ func newTransportListCmd(cfg *globalConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List installed transport plugins discovered on PATH",
-		Args:  cobra.NoArgs,
+		Example: `  a2a transport list
+  a2a transport list -o json`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			entries := collectTransportEntries(cmd)
 			if cfg.IsJSON() {

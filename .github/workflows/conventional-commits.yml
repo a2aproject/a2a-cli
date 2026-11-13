@@ -10,8 +10,7 @@ name: "Conventional Commits"
 #
 # Picking a type (see CONTRIBUTING.md):
 #   feat / fix   -> CLI code            e.g. "feat: add subscribe command"
-#   docs(spec)   -> specification/SPEC.md or COMPLIANCE.md
-#   docs         -> any other docs      e.g. "docs: clarify README install steps"
+#   docs         -> documentation       e.g. "docs: clarify README install steps"
 #   chore/ci/... -> tooling, config, tests, refactors
 
 on:
@@ -52,7 +51,7 @@ jobs:
             chore
             revert
             style
-          # Scope is optional and free-form, so `docs(spec):`, `feat(cli):`, or no
+          # Scope is optional and free-form, so `docs(lessons):`, `feat(cli):`, or no
           # scope at all are all accepted.
           requireScope: false
           # Good-title hygiene: subject starts lowercase and has no trailing period.

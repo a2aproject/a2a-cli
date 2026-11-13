@@ -34,6 +34,9 @@ func newConfigShowCmd(cfg *globalConfig) *cobra.Command {
 	return &cobra.Command{
 		Use:   "show",
 		Short: "Show the effective configuration and where each value resolved from",
+		Example: `  a2a config show
+  a2a config show -o json
+  a2a --config ./prod.yaml config show`,
 		Long: "Show the effective configuration and where each value resolved from.\n\n" +
 			"Change settings by exporting the matching A2ACLI_* environment variables or adding them to a .env file.",
 		Args: cobra.NoArgs,
