@@ -48,7 +48,7 @@ answer="$(jq -r '[.task.artifacts[]?.parts[]?.text // empty] | join(" ")' <<<"$r
 
 States arrive as protocol names such as `TASK_STATE_COMPLETED`; the `jq` filter shortens them. A task can end `failed` or `input-required` while `a2a` exits 0, because the call itself succeeded, so the script checks the state.
 
-## Adapt it
+## Variations
 
 - Send files with each question: add `--file-part "$file"` to the `send`.
 - Stream progress for one task: `a2a send --stream -o jsonl "..." | jq -r 'select(.artifactUpdate) | .artifactUpdate.artifact.parts[].text // empty'`.

@@ -42,6 +42,6 @@ Authorization  <redacted>
 
 [A credential helper](../../examples/credential-helper/README.md) shows how to write one, and [Credential helpers](../advanced/credential-helpers.md) how they're chosen.
 
-## Keep secrets out of shared files
+## Storing secrets
 
 `config show` redacts `--auth` and `Authorization` parameters, but a `.env` file stores them in plain text. Keep tokens in the environment, a private `~/.config/a2a-cli` file, or a helper. `--credential-helper` is ignored when it comes from a project `.env`, so a cloned repository can't make `a2a` run a helper of its choice. [Security](../advanced/security.md) lists what a project `.env` can set.

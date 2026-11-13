@@ -29,7 +29,7 @@ scene() {
   pause 4
 
   clear_pane B
-  say B "Step 2: one setting, four places"
+  say B "Step 2: set one value in four places"
   run B 'echo "timeout: 45s" >> ~/.config/a2a-cli/config.yaml'
   run B "a2a config show | grep timeout"
   wait_text B 'timeout +45s +user-file' 5

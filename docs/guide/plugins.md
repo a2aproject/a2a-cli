@@ -48,7 +48,7 @@ NAME  VERSION  PROTOCOL  DESCRIPTION                                           P
 echo  1.0.0    1.0       Echoes the caller's message back as a completed task  /home/me/bin/a2a-transport-echo
 ```
 
-## Write one
+## Writing plugins
 
 - [A command plugin](../../examples/a2a-hello/README.md) and [a transport plugin](../../examples/a2a-transport-echo/README.md) are runnable examples in Go.
 - [Command plugins](../advanced/command-plugins.md) and [Transport plugins](../advanced/transport-plugins.md) explain how they run.

@@ -15,7 +15,7 @@ Your agent served you in every lesson, but it doesn't serve just anyone: a2a-ser
 
 The agent from [lesson 1](../01-first-message/README.md), and the `.env` in `~/a2a-lessons` that points at it.
 
-## Step 1: Who signed your requests?
+## Step 1: Find the credential helper
 
 ```bash
 a2a config show | grep credential-helper
@@ -76,7 +76,7 @@ The agent refused the request, and `a2a` exited with code 1, the code for errors
 a2a card get --auth "Bearer not-a-real-token"
 ```
 
-## Step 4: Other agents, other credentials
+## Step 4: Credentials for other agents
 
 Agents you didn't start need their own credentials. Pick the option that fits how the agent authenticates:
 

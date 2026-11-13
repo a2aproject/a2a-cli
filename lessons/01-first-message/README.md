@@ -90,7 +90,7 @@ Your message started a **task**: a unit of work with an ID, a status and results
 - **Status** is where the task ended, here `completed`.
 - **Artifacts** are the results. a2a-serve names the agent's answer `response`.
 
-## Step 4: Watch it work
+## Step 4: Stream the reply
 
 A task can take a while. `--stream` prints each event as the agent sends it:
 
@@ -113,7 +113,7 @@ History:
 
 First comes the task as the agent accepted it, `submitted`, with your message in its history. Then `[status]` lines report progress, such as the tools the agent runs, and `[artifact]` lines carry the answer as it is written.
 
-## Step 5: Stop typing the address
+## Step 5: Save the agent in .env
 
 `a2a` reads settings from a `.env` file in the working directory or above it. Save the agent there:
 

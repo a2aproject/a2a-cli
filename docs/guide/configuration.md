@@ -25,7 +25,7 @@ A2ACLI_TRANSPORT=jsonrpc,rest
 
 Lists are comma-separated in variables and `.env` files.
 
-## Your defaults
+## The user configuration file
 
 ```yaml title="~/.config/a2a-cli/config.yaml"
 output: text
@@ -34,7 +34,7 @@ credential-helper:
   - command: [a2a-serve, credential]
 ```
 
-## See what won
+## Check the effective configuration
 
 ```bash
 a2a config show

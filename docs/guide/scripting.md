@@ -20,7 +20,7 @@ jq -r '.task.artifacts[].parts[].text // empty' <<<"$result"  # 2, 3 and 5.
 
 States are spelled as in the protocol, such as `TASK_STATE_COMPLETED` and `TASK_STATE_INPUT_REQUIRED`.
 
-## Check the task, not only the exit code
+## Check the task state
 
 A task that ends `failed`, `canceled`, `rejected` or `input-required` is still a successful call, and `a2a` exits 0. Check the state:
 
@@ -49,7 +49,7 @@ a2a send -a localhost:8080 --stream -o jsonl "Run the tests" |
   jq -r 'select(.artifactUpdate) | .artifactUpdate.artifact.parts[].text // empty'
 ```
 
-## Fan out
+## Run tasks in parallel
 
 ```bash
 for f in src/*.go; do

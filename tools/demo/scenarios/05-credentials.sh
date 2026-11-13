@@ -24,7 +24,7 @@ layout() {
 }
 
 scene() {
-  say B "Step 1: who signed your requests?"
+  say B "Step 1: find the credential helper"
   run B "a2a config show | grep credential-helper"
   run B "cat ~/.config/a2a-cli/config.yaml"
   pause 3

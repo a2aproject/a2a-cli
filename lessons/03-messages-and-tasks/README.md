@@ -42,7 +42,7 @@ a2a send --data-part '{"id": 1042, "items": 3}' "How many items are in this orde
 
 The text you write without a flag becomes a text part at the start. Whether an agent understands a part depends on the agent: its card lists the media types it accepts under `defaultInputModes`.
 
-## Step 2: Start a task and come back later
+## Step 2: Send asynchronously
 
 Some tasks take minutes. `--async` returns as soon as the agent accepts the task, with its ID:
 

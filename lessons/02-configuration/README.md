@@ -49,7 +49,7 @@ verbose            false                   default
 
 Every global flag is listed with its value and where the value came from. Two are already set: `agent-card` from your `.env` (`local-file`), and `credential-helper` from `~/.config/a2a-cli/config.yaml` (`user-file`), where `a2a-serve doctor --fix` put it. Lesson 5 explains the helper.
 
-## Step 2: One setting, four places
+## Step 2: Set one value in four places
 
 Take `--timeout`, which bounds how long `a2a` waits. Its default is `30s`.
 

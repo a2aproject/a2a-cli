@@ -32,7 +32,7 @@ The first event is the task, then status updates and artifacts as they happen. A
 
 If the agent doesn't stream, `--stream` sends the message, polls the task every `--poll-interval` (default `2s`) and prints the same kinds of events.
 
-## Start now, check later
+## Send asynchronously
 
 ```bash
 a2a send -a localhost:8080 --async "Run the full test suite"

@@ -47,13 +47,13 @@ scene() {
   pause 3
 
   clear_pane B
-  say B "Step 4: watch it work"
+  say B "Step 4: stream the reply"
   run B 'a2a send -a "$AGENT" --stream "List the files in your workspace."'
   wait_text B '\[status\] completed' 10
   pause 3
 
   clear_pane B
-  say B "Step 5: stop typing the address"
+  say B "Step 5: save the agent in .env"
   run B 'echo "A2ACLI_AGENT_CARD=$AGENT" > .env'
   run B 'a2a send "Thanks!"'
   expect_status B completed

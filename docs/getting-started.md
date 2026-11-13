@@ -104,7 +104,7 @@ Or hold a conversation:
 a2a chat -a "$AGENT"
 ```
 
-## Stop typing the URL
+## Save the agent in .env
 
 Put the agent in a `.env` file. `a2a` reads the nearest `.env` above the working directory:
 

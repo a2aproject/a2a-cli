@@ -56,7 +56,7 @@ scene() {
   pause 3
 
   clear_pane B
-  say B "Step 2: start a task and come back later"
+  say B "Step 2: send asynchronously"
   run B 'a2a send --async "Count to twenty, slowly."'
   local task
   task="$(last_match B 'Task: +[^ ]+')"
