@@ -55,6 +55,11 @@ func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclie
 	if err := cfg.initTLS(); err != nil {
 		return nil, err
 	}
+	switch cfg.a2aVersion {
+	case "", "1.0", "0.3":
+	default:
+		return nil, clierr.Usage(fmt.Sprintf("invalid --a2a-version %q (want 1.0 or 0.3)", cfg.a2aVersion))
+	}
 	switch {
 	case cfg.url != "" && cfg.agentCard.IsSet():
 		return nil, clierr.Usage("--endpoint and --agent-card are mutually exclusive")
