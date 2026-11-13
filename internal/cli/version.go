@@ -45,7 +45,7 @@ func newVersionCmd(cfg *globalConfig) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			info := buildVersionInfo()
-			if cfg.output == "json" {
+			if cfg.IsJSON() {
 				return cfg.PrintJSON(info)
 			}
 			_, err := fmt.Fprintf(
