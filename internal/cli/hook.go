@@ -54,8 +54,8 @@ by a detached background process, and agents found are reported by a later
 event. Each piece of context is added once per session.
 
 Disable discovery with "discovery: false" in the user config or A2ACLI_DISCOVERY=false.
-Discovery refuses link-local addresses, such as cloud metadata endpoints, and
-redirects from a public address to an internal one, unless the host is allowed
+Discovery refuses link-local addresses, such as the IPv4 cloud metadata endpoint,
+and redirects from a public address to an internal one, unless the host is allowed
 with --discovery-allow-host.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {

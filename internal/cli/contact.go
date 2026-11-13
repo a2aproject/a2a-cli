@@ -122,7 +122,8 @@ func (g *globalConfig) cacheCard(cardURL string, card *a2a.AgentCard, fetchedAt 
 }
 
 // cachedContactCard returns the card a contact embeds or the one cached for its
-// card URL, without making requests. The time is zero for an embedded card.
+// card URL within [cardcache.FoundTTL], without making requests. The time is
+// zero for an embedded card.
 func (g *globalConfig) cachedContactCard(cache *cardcache.Cache, c contacts.Contact) (*a2a.AgentCard, time.Time, bool) {
 	if len(c.Entry.Data) > 0 {
 		card, err := a2av0.NewAgentCardParser()(c.Entry.Data)
@@ -133,7 +134,7 @@ func (g *globalConfig) cachedContactCard(cache *cardcache.Cache, c contacts.Cont
 		return card, time.Time{}, true
 	}
 	e, ok := cache.Get(c.CardURL())
-	if !ok || !e.Found() {
+	if !ok || !e.Found() || !e.Fresh(time.Now(), cardcache.FoundTTL) {
 		return nil, time.Time{}, false
 	}
 	return e.Card, e.FetchedAt, true

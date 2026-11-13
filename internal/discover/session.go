@@ -55,8 +55,9 @@ type openSession struct {
 }
 
 // open loads the state of session, holding its lock until close. When the lock
-// can't be taken in time it proceeds without it: a duplicate injection beats
-// stalling the harness.
+// can't be taken in time it proceeds without it and close doesn't save the
+// state: a duplicate injection beats stalling the harness or overwriting the
+// lock holder's updates.
 func (s sessionStore) open(session string) *openSession {
 	base := filepath.Join(s.dir, hashName(session))
 	o := &openSession{path: base + ".json"}
@@ -78,6 +79,9 @@ func (s sessionStore) open(session string) *openSession {
 }
 
 func (o *openSession) close() error {
+	if o.lock == nil {
+		return nil
+	}
 	var errs []error
 	data, err := json.Marshal(o.state)
 	if err != nil {
@@ -85,10 +89,8 @@ func (o *openSession) close() error {
 	} else if err := atomicfile.Write(o.path, data, 0o600); err != nil {
 		errs = append(errs, err)
 	}
-	if o.lock != nil {
-		if err := o.lock.unlock(); err != nil {
-			errs = append(errs, err)
-		}
+	if err := o.lock.unlock(); err != nil {
+		errs = append(errs, err)
 	}
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("saving session state: %w", err)

@@ -23,6 +23,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/a2aproject/a2a-cli/internal/aicatalog"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
@@ -68,19 +69,16 @@ func resolveAgent(ctx context.Context, cfg *globalConfig) (*resolvedAgent, error
 		return agentFromCatalog(ctx, cfg, cfg.catalog, ref)
 	}
 	if contacts.IsName(ref) || aicatalog.IsIdentifier(ref) {
-		book, err := cfg.loadContacts()
-		if err != nil {
-			return nil, err
-		}
-		if c, ok := book.Get(ref); ok {
-			cfg.logf("using contact %q", ref)
-			return agentFromEntry(ctx, cfg, c.Entry)
+		if entry, ok := findContact(cfg, ref); ok {
+			agent, err := agentFromEntry(ctx, cfg, entry)
+			if err != nil {
+				return nil, err
+			}
+			// Keeps the card the hook describes the contact with current.
+			cfg.cacheCard(agent.cardURL, agent.card, time.Now().UTC().Truncate(time.Second))
+			return agent, nil
 		}
 		if aicatalog.IsIdentifier(ref) {
-			if entry, err := aicatalog.FindAgent(book.Entries(), ref, contacts.CatalogLabel); err == nil {
-				cfg.logf("found %s in contacts", ref)
-				return agentFromEntry(ctx, cfg, entry)
-			}
 			return agentFromCatalog(ctx, cfg, "", ref)
 		}
 	}
@@ -109,6 +107,32 @@ func resolveAgent(ctx context.Context, cfg *globalConfig) (*resolvedAgent, error
 		return nil, catalogError(err)
 	}
 	return agentFromEntry(ctx, cfg, entry)
+}
+
+// findContact returns the entry of the contact named or identified by ref. An
+// unreadable contact book is reported and treated as empty, so it can't break
+// references that don't name a contact.
+func findContact(cfg *globalConfig, ref string) (aicatalog.Entry, bool) {
+	book, err := cfg.loadContacts()
+	if err != nil {
+		if _, werr := fmt.Fprintf(cfg.stderr(), "warning: ignoring contacts: %v\n", err); werr != nil {
+			cfg.logf("writing warning: %v", werr)
+		}
+		return aicatalog.Entry{}, false
+	}
+	if c, ok := book.Get(ref); ok {
+		cfg.logf("using contact %q", ref)
+		return c.Entry, true
+	}
+	if !aicatalog.IsIdentifier(ref) {
+		return aicatalog.Entry{}, false
+	}
+	entry, err := aicatalog.FindAgent(book.Entries(), ref, contacts.CatalogLabel)
+	if err != nil {
+		return aicatalog.Entry{}, false
+	}
+	cfg.logf("found %s in contacts", ref)
+	return entry, true
 }
 
 func agentFromCatalog(ctx context.Context, cfg *globalConfig, scope, id string) (*resolvedAgent, error) {

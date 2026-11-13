@@ -31,7 +31,7 @@ var sharedAddressSpace = netip.MustParsePrefix("100.64.0.0/10")
 
 // Guard decides which addresses discovery may connect to. Probing fetches URLs
 // that merely appeared in a conversation, so it refuses link-local addresses
-// (such as cloud metadata endpoints) and, within one redirect chain, an
+// (such as the IPv4 cloud metadata endpoint) and, within one redirect chain, an
 // internal address reached after a public one: a public site can't steer the
 // prober into the local network. The checks run at dial time on the resolved
 // address, so DNS rebinding can't bypass them.

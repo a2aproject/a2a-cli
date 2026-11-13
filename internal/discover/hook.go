@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	positiveTTL = 24 * time.Hour
+	positiveTTL = cardcache.FoundTTL
 	negativeTTL = 6 * time.Hour
 	// probeRetry is how long a pending origin waits before its probe is restarted.
 	probeRetry    = time.Minute

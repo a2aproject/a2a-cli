@@ -22,10 +22,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Agent-Card/ai-catalog-go/catalog"
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/a2aproject/a2a-cli/internal/cardcache"
 	"github.com/a2aproject/a2a-cli/internal/clicfg"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
@@ -219,6 +221,87 @@ func TestContactFromCatalog(t *testing.T) {
 	env.mustRun("contact", "add", "remote", "--catalog", catalogURL+"/remote.json", "urn:air:test:agent:remote")
 	if c := env.contacts()[1]; c.Name != "remote" || c.URL != catalogURL+"/agents/card.json" {
 		t.Fatalf("contact remote = %+v, want its relative URL made absolute", c)
+	}
+}
+
+func TestAgentRefWithUnreadableContactBook(t *testing.T) {
+	t.Parallel()
+	agentURL := startTestServer(t)
+	catalogURL := startCatalogServer(t, map[string]string{
+		"/corp.json": agentCatalog(agentCatalogEntry("urn:air:test:agent:echo", agentURL+"/.well-known/agent-card.json")),
+	})
+	env := newContactEnv(t)
+	env.mustRun("catalog", "add", "corp", catalogURL+"/corp.json")
+	if err := os.MkdirAll(filepath.Dir(env.contactsFile), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(env.contactsFile, []byte("{bad"), 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	out, stderr, err := env.run("", "send", "-o", "json", "-a", "urn:air:test:agent:echo", "hello")
+	if err != nil {
+		t.Fatalf("send -a <identifier> error = %v, want the catalog agent despite the unreadable contact book", err)
+	}
+	if got := testutil.AllArtifactText(mustDecodeTask(t, out)); got != "hello" {
+		t.Fatalf("send -a <identifier> artifact text = %q, want %q", got, "hello")
+	}
+	if !strings.Contains(stderr, "warning: ignoring contacts") {
+		t.Fatalf("send -a <identifier> stderr = %q, want a warning about the contact book", stderr)
+	}
+}
+
+func TestContactCardCacheTTL(t *testing.T) {
+	t.Parallel()
+	agentURL := startTestServer(t)
+	cardURL := agentURL + "/.well-known/agent-card.json"
+
+	tests := []struct {
+		name     string
+		cachedAt time.Time
+		wantName string
+	}{
+		{name: "fresh card read from cache", cachedAt: time.Now().Add(-time.Hour), wantName: "Cached Echo"},
+		{name: "stale card fetched again", cachedAt: time.Now().Add(-25 * time.Hour), wantName: "Test Echo"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := newContactEnv(t)
+			env.mustRun("contact", "add", "echo", agentURL)
+			cache := cardcache.New(env.cacheDir)
+			if err := cache.Put(cardcache.Entry{Ref: cardURL, FetchedAt: tc.cachedAt, Card: &a2a.AgentCard{Name: "Cached Echo"}}); err != nil {
+				t.Fatalf("Cache.Put() error = %v", err)
+			}
+
+			var got contactDetailView
+			if err := json.Unmarshal([]byte(env.mustRun("contact", "get", "echo", "-o", "json")), &got); err != nil {
+				t.Fatalf("json.Unmarshal(contact get) error = %v", err)
+			}
+			if got.Card.Name != tc.wantName {
+				t.Fatalf("contact get card name = %q, want %q", got.Card.Name, tc.wantName)
+			}
+		})
+	}
+}
+
+func TestSendToContactRefreshesCachedCard(t *testing.T) {
+	t.Parallel()
+	agentURL := startTestServer(t)
+	cardURL := agentURL + "/.well-known/agent-card.json"
+	env := newContactEnv(t)
+	env.mustRun("contact", "add", "echo", agentURL)
+	cache := cardcache.New(env.cacheDir)
+	if err := cache.Put(cardcache.Entry{Ref: cardURL, FetchedAt: time.Now().Add(-48 * time.Hour), Card: &a2a.AgentCard{Name: "Cached Echo"}}); err != nil {
+		t.Fatalf("Cache.Put() error = %v", err)
+	}
+
+	env.mustRun("send", "-a", "echo", "hello")
+
+	e, ok := cache.Get(cardURL)
+	if !ok || !e.Found() || e.Card.Name != "Test Echo" || time.Since(e.FetchedAt) > time.Minute {
+		t.Fatalf("Cache.Get() = %+v, %v; want the card fetched by send", e, ok)
 	}
 }
 

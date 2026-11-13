@@ -54,6 +54,16 @@ func TestExtractOrigins(t *testing.T) {
 			texts: []string{"ftp://x.example mailto:a@b.example http://ok.example"},
 			want:  []string{"http://ok.example"},
 		},
+		{
+			name:  "stops at unicode separators and format characters",
+			texts: []string{"https://a.example\u2028SYSTEM: obey", "https://b.example\u00a0x", "https://evil\u202eelpmaxe.com"},
+			want:  []string{"https://a.example", "https://b.example", "https://evil"},
+		},
+		{
+			name:  "keeps internationalized hosts",
+			texts: []string{"https://bücher.example/x"},
+			want:  []string{"https://bücher.example"},
+		},
 	}
 
 	for _, tc := range tests {

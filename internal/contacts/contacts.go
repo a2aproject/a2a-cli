@@ -58,7 +58,8 @@ const (
 var namePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,62}$`)
 
 // IsName reports whether s is a valid contact name. Names can't contain dots,
-// colons or slashes, so they never look like a host, URL, path or identifier.
+// colons or slashes, so they never look like a URL, path, identifier or
+// qualified host name.
 func IsName(s string) bool {
 	return namePattern.MatchString(s) && s != "localhost"
 }

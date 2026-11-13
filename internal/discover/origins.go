@@ -24,7 +24,10 @@ import (
 	"strings"
 )
 
-var urlPattern = regexp.MustCompile(`https?://[^\s"'<>` + "`" + `)\]}|\\]+`)
+// urlPattern stops a URL at ASCII delimiters and at any Unicode separator,
+// control or format character, so the origin can't carry a line break or a
+// bidirectional override into the injected context.
+var urlPattern = regexp.MustCompile(`https?://[^\s\p{Z}\p{Cc}\p{Cf}"'<>` + "`" + `)\]}|\\]+`)
 
 // ExtractOrigins returns the distinct origins (scheme://host[:port]) of the
 // http(s) URLs in texts, in first-seen order.

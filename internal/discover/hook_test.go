@@ -16,6 +16,7 @@ package discover
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -292,6 +293,41 @@ func TestHookRunWithoutSession(t *testing.T) {
 	}
 	if got := env.run(h, `{"hook_event_name":"UserPromptSubmit","prompt":"hi"}`); got != "" {
 		t.Fatalf("Hook.Run(UserPromptSubmit) = %q, want no output", got)
+	}
+}
+
+func TestHookRunWithLockedSession(t *testing.T) {
+	t.Parallel()
+	env := newHookEnv(t)
+	h := env.hook([]ContactEntry{nimbus}, true)
+	env.run(h, start("startup"))
+	stateFile := filepath.Join(env.dir, "sessions", hashName("s1")+".json")
+	before, err := os.ReadFile(stateFile)
+	if err != nil {
+		t.Fatalf("os.ReadFile(state) error = %v", err)
+	}
+	lock, ok := tryLock(filepath.Join(env.dir, "sessions", hashName("s1")+".lock"), sessionLockStale)
+	if !ok {
+		t.Fatalf("tryLock() = false, want the session lock")
+	}
+	t.Cleanup(func() {
+		if err := lock.unlock(); err != nil {
+			t.Errorf("lockFile.unlock() error = %v", err)
+		}
+	})
+	if err := env.cards.Put(found("https://agent.example", "Agent", testNow)); err != nil {
+		t.Fatalf("Cache.Put() error = %v", err)
+	}
+
+	if got := env.run(h, prompt("https://agent.example")); !strings.Contains(got, "- https://agent.example") {
+		t.Fatalf("Hook.Run() = %q, want the discovered agent", got)
+	}
+	after, err := os.ReadFile(stateFile)
+	if err != nil {
+		t.Fatalf("os.ReadFile(state) error = %v", err)
+	}
+	if diff := cmp.Diff(string(before), string(after)); diff != "" {
+		t.Fatalf("session state written without the lock (-want +got) diff = %s", diff)
 	}
 }
 

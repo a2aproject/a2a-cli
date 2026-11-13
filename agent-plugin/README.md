@@ -62,7 +62,7 @@ Agents in AI Catalogs you registered with `a2a catalog add` are not listed, sinc
 
 The hooks don't make network requests, so they don't slow down a turn. A detached background process fetches cards for sites it hasn't seen, and the agent hears about them at its next step. Cards are cached under the user cache directory (`~/.cache/a2a-cli` on Linux), and each agent is listed once per session.
 
-Discovery probes public and internal hosts. It never connects to link-local addresses such as cloud metadata endpoints, and it doesn't follow a redirect from a public site to an internal address. To make an exception for a host, list it in `~/.config/a2a-cli/config.yaml`:
+Discovery probes public and internal hosts. It never connects to link-local addresses, which covers the IPv4 cloud metadata endpoint `169.254.169.254`, and it doesn't follow a redirect from a public site to an internal address. To make an exception for a host, list it in `~/.config/a2a-cli/config.yaml`:
 
 ```yaml
 discovery-allow-host: [agents.internal.example]

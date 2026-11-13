@@ -35,6 +35,9 @@ import (
 
 const wellKnownPath = "/.well-known/agent-card.json"
 
+// FoundTTL is how long a fetched card is used before it is fetched again.
+const FoundTTL = 24 * time.Hour
+
 // Entry is the outcome of fetching the card at Ref.
 type Entry struct {
 	Ref       string    `json:"ref"`
