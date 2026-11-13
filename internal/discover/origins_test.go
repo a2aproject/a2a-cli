@@ -64,6 +64,11 @@ func TestExtractOrigins(t *testing.T) {
 			texts: []string{"https://bücher.example/x"},
 			want:  []string{"https://bücher.example"},
 		},
+		{
+			name:  "skips hosts that are not DNS names or IP addresses",
+			texts: []string{"http://a;curl+-s+x.example$(id/docs", "https://a%24b.example/", "http://10.0.0.1/"},
+			want:  []string{"http://10.0.0.1"},
+		},
 	}
 
 	for _, tc := range tests {

@@ -350,9 +350,9 @@ a2a contact remove fin
 
 - A contact name can be passed to `--agent-card` (`-a`) or `card get` in place of a card reference. Names use lowercase letters, digits, `-` and `_`, so they never look like a URL, path or identifier. A name can match a single-label host such as `agentbox`; the contact takes precedence, and `-a https://agentbox` reaches the host.
 - If the contact book can't be read, `-a` prints a warning and resolves the reference as if there were no contacts.
-- An agent from a catalog is copied with its identifier, publisher and trust manifest, so its signature can still be verified. An agent added by its card gets the identifier `urn:ai-catalog:a2a-cli:<name>`.
+- An agent from a catalog is copied with its identifier, publisher and trust manifest, so its signature can still be verified. A relative card URL is made absolute, unless the trust manifest signs it; then it is kept as listed and resolved against the catalog it was added from. An agent added by its card gets the identifier `urn:ai-catalog:a2a-cli:<name>`.
 - A contact's identifier takes precedence over the same identifier in registered catalogs, so `-a <identifier>` resolves to the contact.
-- Two contacts can't share an identifier. Pass `--replace` to overwrite a contact of the same name.
+- Two contacts can't share an identifier, even with different versions. Pass `--replace` to overwrite a contact of the same name.
 - `contact add` fetches the card first and fails if it can't, using the same credentials, `--svc-param` headers and `--ca-cert` as `card get`. Fetched cards are cached under the user cache directory (`~/.cache/a2a-cli` on Linux) for 24 hours. An older card is fetched again by `contact get` and `-a <contact>`; until then the hook describes the contact from its catalog entry.
 - If the AI Catalog store can't be updated, the contact is still saved and `a2a` prints a warning.
 
@@ -365,7 +365,9 @@ a2a contact remove fin
 - It probes the origins of URLs in prompts and in `WebFetch` and `WebSearch` calls (`discovery-scan-tools`) for an agent card. Agents it finds are listed as unverified, and the model is told to ask the user before delegating to them.
 - Agents in registered AI Catalogs are not listed, since a catalog can list hundreds. The model finds them with `a2a catalog search`.
 
-The hook itself makes no network requests. Origins without a cached card are probed by a detached `a2a hook probe` process, and agents it finds are reported by a later event. Each agent is reported once per session. Found cards are cached for 24 hours, and origins without a card for 6 hours. A connection failure, a server error or a rate limit isn't cached, so the origin is probed again when it's next mentioned. A document at the well-known path without an agent name and interface doesn't count as a card.
+The hook itself makes no network requests. Origins without a cached card are probed by a detached `a2a hook probe` process, and agents it finds are reported by a later event. Each agent is reported once per session. Found cards are cached for 24 hours, and origins without a card for 6 hours. A connection failure, a timeout, a server error or a rate limit isn't cached, so the origin is probed again when it's next mentioned. A document at the well-known path without an agent name and interface doesn't count as a card, and neither does one larger than 512 KiB.
+
+The hook never fails the harness event: an unreadable configuration file, contact book or event makes it print nothing, and `-v` shows why.
 
 | Setting | Default | Description |
 |---|---|---|
@@ -379,7 +381,7 @@ Discovery fetches URLs that only appeared in a conversation, so it limits where 
 - It never connects to link-local addresses, which covers the IPv4 cloud metadata endpoint `169.254.169.254`, or to unspecified or multicast addresses. Metadata endpoints at other addresses, such as AWS's IPv6 `fd00:ec2::254`, count as internal: they are probed when a URL names them directly, but a redirect from a public site can't reach them.
 - It follows at most 3 redirects, and refuses a redirect from a public address to an internal one, so a public site can't point a probe into your network.
 
-The checks run on the address a probe connects to, so DNS rebinding can't get around them, and probes don't reuse connections, so every redirect hop is checked. Probes use the proxy from `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`. A proxied target is checked against its address as resolved locally, and a name that doesn't resolve locally is treated as public. The proxy resolves the name again on its own, so for proxied requests the checks are best effort. A refused probe isn't cached, so a change to `discovery-allow-host` applies at once. `discovery-allow-host` is not read from a `.env` found by walking up from the working directory.
+The checks run on the addresses a probe's host resolves to when it connects, so DNS rebinding can't reach a link-local address or turn a redirect from a public host into an internal one; a host with both public and internal addresses counts as public. Probes don't reuse connections, so every redirect hop is checked. Probes use the proxy from `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`. A proxied target is checked against its address as resolved locally, and a name that doesn't resolve locally is treated as public. The proxy resolves the name again on its own, so for proxied requests the checks are best effort. A refused probe isn't cached, so a change to `discovery-allow-host` applies at once. `discovery-allow-host` is not read from a `.env` found by walking up from the working directory.
 
 ---
 

@@ -257,6 +257,61 @@ func TestProberProxy(t *testing.T) {
 	}
 }
 
+func TestProberBodyFailures(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		handler       func(w http.ResponseWriter)
+		wantCached    bool
+		wantErrSubstr string
+	}{
+		{
+			name: "stalled body not cached",
+			handler: func(w http.ResponseWriter) {
+				w.Header().Set("Content-Length", "100")
+				if _, err := w.Write([]byte(`{"name":`)); err != nil {
+					t.Errorf("ResponseWriter.Write() error = %v", err)
+				}
+				w.(http.Flusher).Flush()
+				time.Sleep(time.Second)
+			},
+		},
+		{
+			name: "oversized card cached with a size error",
+			handler: func(w http.ResponseWriter) {
+				body := `{"name":"Big","description":"` + strings.Repeat("x", maxCardBytes) + `"}`
+				if _, err := w.Write([]byte(body)); err != nil {
+					t.Errorf("ResponseWriter.Write() error = %v", err)
+				}
+			},
+			wantCached:    true,
+			wantErrSubstr: "larger than",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { tc.handler(w) }))
+			t.Cleanup(srv.Close)
+			dir := t.TempDir()
+			cards := cardcache.New(dir)
+			p := &Prober{Cards: cards, LockDir: filepath.Join(dir, "probes"), Timeout: 300 * time.Millisecond}
+
+			p.Probe(t.Context(), []string{srv.URL})
+
+			e, ok := cards.Get(srv.URL)
+			if ok != tc.wantCached {
+				t.Fatalf("Cache.Get(%s) = %+v, %v; want cached %v", srv.URL, e, ok, tc.wantCached)
+			}
+			if !strings.Contains(e.Error, tc.wantErrSubstr) {
+				t.Fatalf("Cache.Get(%s).Error = %q, want containing %q", srv.URL, e.Error, tc.wantErrSubstr)
+			}
+		})
+	}
+}
+
 func TestProberConnectionFailureNotCached(t *testing.T) {
 	t.Parallel()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

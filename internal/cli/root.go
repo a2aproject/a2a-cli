@@ -171,6 +171,38 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	cfg.contactsFile = deps.contactsFile
 	cfg.cacheDir = deps.cacheDir
 
+	preRun := func(cmd *cobra.Command, args []string) error {
+		store, err := deps.cfgLoader(clicfg.LoadOpts{ConfigPath: cfg.configPath})
+		if err != nil {
+			return err
+		}
+		bindings, err := clicfg.Bind(cmd.Flags(), store)
+		if err != nil {
+			return err
+		}
+		cfg.bindings = bindings
+		cfg.store = store
+		for _, b := range bindings {
+			if b.Ignored == "" {
+				continue
+			}
+			if _, err := fmt.Fprintf(cfg.stderr(), "warning: ignoring %s from %s; pass --config %s to use it\n", b.Name, b.Ignored, b.Ignored); err != nil {
+				return err
+			}
+		}
+		cfg.initHTTPTransport()
+		cfg.initCredentials()
+
+		switch output.Mode(cfg.output) {
+		case output.ModeText, output.ModeJson, output.ModeJSONL:
+			cfg.Mode = output.Mode(cfg.output)
+		default:
+			return clierr.Usage(fmt.Sprintf("invalid --output %q (want text or json)", cfg.output))
+		}
+
+		return cfg.initEventHandlers(cmd)
+	}
+
 	cmd := &cobra.Command{
 		Use:           "a2a",
 		Short:         "CLI for the Agent-to-Agent protocol",
@@ -184,37 +216,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 			}
 			return clierr.Usage(fmt.Sprintf("unknown command %q for %q", args[0], cmd.CommandPath()))
 		},
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			store, err := deps.cfgLoader(clicfg.LoadOpts{ConfigPath: cfg.configPath})
-			if err != nil {
-				return err
-			}
-			bindings, err := clicfg.Bind(cmd.Flags(), store)
-			if err != nil {
-				return err
-			}
-			cfg.bindings = bindings
-			cfg.store = store
-			for _, b := range bindings {
-				if b.Ignored == "" {
-					continue
-				}
-				if _, err := fmt.Fprintf(cfg.stderr(), "warning: ignoring %s from %s; pass --config %s to use it\n", b.Name, b.Ignored, b.Ignored); err != nil {
-					return err
-				}
-			}
-			cfg.initHTTPTransport()
-			cfg.initCredentials()
-
-			switch output.Mode(cfg.output) {
-			case output.ModeText, output.ModeJson, output.ModeJSONL:
-				cfg.Mode = output.Mode(cfg.output)
-			default:
-				return clierr.Usage(fmt.Sprintf("invalid --output %q (want text or json)", cfg.output))
-			}
-
-			return cfg.initEventHandlers(cmd)
-		},
+		PersistentPreRunE: preRun,
 	}
 
 	pf := cmd.PersistentFlags()
@@ -254,17 +256,15 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 		newSkillCmd(cfg),
 		newVersionCmd(cfg),
 	)
-	hookCmd, err := newHookCmd(cfg, deps.spawnDetached)
+	hookCmd, err := newHookCmd(cfg, preRun, deps.spawnDetached)
 	if err != nil {
 		return nil, err
 	}
 	cmd.AddCommand(hookCmd)
 
-	preStore, err := deps.cfgLoader(clicfg.LoadOpts{})
-	if err != nil {
-		return nil, err
-	}
-	if preStore.LookupBool(pluginsEnabledKey) {
+	// A configuration error is reported when a command runs, by preRun, so
+	// that it doesn't break commands that tolerate it, such as the hook.
+	if preStore, err := deps.cfgLoader(clicfg.LoadOpts{}); err == nil && preStore.LookupBool(pluginsEnabledKey) {
 		cfg.pluginsEnabled = true
 		addCommandPlugins(cmd)
 	}

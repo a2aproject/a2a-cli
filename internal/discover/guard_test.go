@@ -69,6 +69,7 @@ var testHosts = map[string]string{
 	"public2.example":  "93.184.216.35",
 	"internal.example": "10.0.0.5",
 	"metadata.example": "169.254.169.254",
+	"mixed.example":    "93.184.216.36,10.0.0.6",
 }
 
 // fakeGuard resolves testHosts and records dialed addresses without opening connections.
@@ -77,11 +78,15 @@ func fakeGuard(allowHosts ...string) (Guard, *[]string) {
 	g := Guard{
 		AllowHosts: allowHosts,
 		lookup: func(_ context.Context, host string) ([]netip.Addr, error) {
-			ip, ok := testHosts[host]
+			ips, ok := testHosts[host]
 			if !ok {
 				return nil, fmt.Errorf("no such host %s", host)
 			}
-			return []netip.Addr{netip.MustParseAddr(ip)}, nil
+			var addrs []netip.Addr
+			for ip := range strings.SplitSeq(ips, ",") {
+				addrs = append(addrs, netip.MustParseAddr(ip))
+			}
+			return addrs, nil
 		},
 		dial: func(_ context.Context, _, addr string) (net.Conn, error) {
 			dialed = append(dialed, addr)
@@ -135,6 +140,20 @@ func TestGuardDialContext(t *testing.T) {
 			name:       "public redirects to internal literal",
 			chain:      true,
 			hosts:      []string{"public.example", "127.0.0.1"},
+			wantDialed: []string{"93.184.216.34:80"},
+			wantReason: "redirect from a public one",
+		},
+		{
+			name:       "host with public and internal addresses redirects to internal",
+			chain:      true,
+			hosts:      []string{"mixed.example", "internal.example"},
+			wantDialed: []string{"93.184.216.36:80"},
+			wantReason: "redirect from a public one",
+		},
+		{
+			name:       "public redirects to host with public and internal addresses",
+			chain:      true,
+			hosts:      []string{"public.example", "mixed.example"},
 			wantDialed: []string{"93.184.216.34:80"},
 			wantReason: "redirect from a public one",
 		},

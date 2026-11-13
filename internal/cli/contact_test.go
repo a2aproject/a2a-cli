@@ -44,6 +44,7 @@ type contactEnv struct {
 	contactsFile string
 	catalogDir   string
 	cacheDir     string
+	cfgLoader    cfgLoaderFunc
 	spawned      [][]string
 }
 
@@ -55,6 +56,7 @@ func newContactEnv(t *testing.T) *contactEnv {
 		contactsFile: filepath.Join(dir, "config", "catalog.json"),
 		catalogDir:   filepath.Join(dir, "ai-catalog"),
 		cacheDir:     filepath.Join(dir, "cache"),
+		cfgLoader:    clicfg.LoadEmpty,
 	}
 }
 
@@ -72,7 +74,7 @@ func (e *contactEnv) run(stdin string, args ...string) (stdout, stderr string, e
 	}
 	root := mustNewRoot(e.t, cfg, deps{
 		poller:        polling.Stream,
-		cfgLoader:     clicfg.LoadEmpty,
+		cfgLoader:     e.cfgLoader,
 		spawnDetached: spawn,
 		catalogDir:    e.catalogDir,
 		contactsFile:  e.contactsFile,
@@ -408,6 +410,22 @@ func TestHookCmdDiscoveryDisabled(t *testing.T) {
 	}
 	if out != "" || len(env.spawned) != 0 {
 		t.Fatalf("hook --discovery=false = %q, spawned %v; want no output and no probe", out, env.spawned)
+	}
+}
+
+func TestHookCmdConfigErrorIsSilent(t *testing.T) {
+	t.Parallel()
+	env := newContactEnv(t)
+	env.cfgLoader = func(clicfg.LoadOpts) (*clicfg.Store, error) {
+		return nil, errors.New("unterminated quoted value")
+	}
+
+	out, _, err := env.run(`{"hook_event_name":"UserPromptSubmit","session_id":"s1","prompt":"https://new.example"}`, "hook")
+	if err != nil || out != "" || len(env.spawned) != 0 {
+		t.Fatalf("hook with unreadable config = %q, %v, spawned %v; want no output, no error and no probe", out, err, env.spawned)
+	}
+	if _, _, err := env.run("", "contact", "list"); err == nil {
+		t.Fatalf("contact list with unreadable config error = nil, want the config error")
 	}
 }
 

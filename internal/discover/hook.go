@@ -144,14 +144,8 @@ func (h *Hook) handle(ev event, st *sessionState, tracked bool) []string {
 	}
 
 	var blocks []string
-	if tracked && digest != st.ContactsDigest {
-		switch {
-		case contactsBlock != "":
-			blocks = append(blocks, contactsUpdatedPrefix+contactsBlock)
-		case st.ContactsDigest != "":
-			blocks = append(blocks, contactsEmptied)
-		}
-		st.ContactsDigest = digest
+	if tracked {
+		blocks = append(blocks, contactsChange(st, contactsBlock, digest))
 	}
 	if h.Discovery {
 		blocks = append(blocks, FormatDiscovered(h.discover(ExtractOrigins(h.scanTexts(ev)...), st, now)))
@@ -159,22 +153,37 @@ func (h *Hook) handle(ev event, st *sessionState, tracked bool) []string {
 	return blocks
 }
 
+// contactsChange returns the block that brings a conversation given the
+// contacts block st records up to date with contactsBlock, or "".
+func contactsChange(st *sessionState, contactsBlock, digest string) string {
+	if digest == st.ContactsDigest {
+		return ""
+	}
+	previous := st.ContactsDigest
+	st.ContactsDigest = digest
+	switch {
+	case contactsBlock != "":
+		return contactsUpdatedPrefix + contactsBlock
+	case previous != "":
+		return contactsEmptied
+	}
+	return ""
+}
+
 func (h *Hook) sessionStart(source string, st *sessionState, contactsBlock, digest string, now time.Time) []string {
-	var blocks []string
 	switch source {
+	case "resume":
+		// A resumed conversation still holds the contacts block it was given.
+		return []string{contactsChange(st, contactsBlock, digest)}
 	case "startup", "clear":
 		*st = sessionState{Injected: map[string]time.Time{}, Pending: map[string]time.Time{}}
 		if err := (sessionStore{dir: h.StateDir}).prune(now); err != nil {
 			h.logf("pruning session state: %v", err)
 		}
-	case "compact":
-		if h.Discovery {
-			blocks = append(blocks, FormatDiscovered(h.injectedEntries(st)))
-		}
 	}
-	// A resumed conversation still holds the contacts block it was given.
-	if source != "resume" || digest != st.ContactsDigest {
-		blocks = append([]string{contactsBlock}, blocks...)
+	blocks := []string{contactsBlock}
+	if source == "compact" && h.Discovery {
+		blocks = append(blocks, FormatDiscovered(h.injectedEntries(st)))
 	}
 	st.ContactsDigest = digest
 	return blocks
@@ -210,12 +219,7 @@ func (h *Hook) scanTexts(ev event) []string {
 // Origins without a usable cache entry are probed in the background and
 // reported by a later event once their card is cached.
 func (h *Hook) discover(origins []string, st *sessionState, now time.Time) []DiscoveredEntry {
-	skip := map[string]bool{}
-	for _, c := range h.Contacts {
-		if c.Origin != "" {
-			skip[c.Origin] = true
-		}
-	}
+	skip := h.contactOrigins()
 
 	var candidates []string
 	for o, started := range st.Pending {
@@ -276,10 +280,15 @@ func (h *Hook) discover(origins []string, st *sessionState, now time.Time) []Dis
 	return found
 }
 
+// injectedEntries returns the discovered agents injected earlier, except those
+// that have since become contacts.
 func (h *Hook) injectedEntries(st *sessionState) []DiscoveredEntry {
+	skip := h.contactOrigins()
 	origins := make([]string, 0, len(st.Injected))
 	for o := range st.Injected {
-		origins = append(origins, o)
+		if !skip[o] {
+			origins = append(origins, o)
+		}
 	}
 	slices.Sort(origins)
 	var entries []DiscoveredEntry
@@ -289,6 +298,16 @@ func (h *Hook) injectedEntries(st *sessionState) []DiscoveredEntry {
 		}
 	}
 	return entries
+}
+
+func (h *Hook) contactOrigins() map[string]bool {
+	origins := map[string]bool{}
+	for _, c := range h.Contacts {
+		if c.Origin != "" {
+			origins[c.Origin] = true
+		}
+	}
+	return origins
 }
 
 func (h *Hook) now() time.Time {

@@ -31,9 +31,12 @@ type hookFlags struct {
 	allowHosts []string
 	scanTools  []string
 	spawn      func(args []string) error
+	// skip is set when the configuration can't be loaded, so settings such as
+	// "discovery: false" are unknown and the hook does nothing.
+	skip bool
 }
 
-func newHookCmd(cfg *globalConfig, spawn func(args []string) error) (*cobra.Command, error) {
+func newHookCmd(cfg *globalConfig, preRun func(*cobra.Command, []string) error, spawn func(args []string) error) (*cobra.Command, error) {
 	f := &hookFlags{spawn: spawn}
 	cmd := &cobra.Command{
 		Use:    "hook",
@@ -58,8 +61,18 @@ Discovery refuses link-local addresses, such as the IPv4 cloud metadata endpoint
 and redirects from a public address to an internal one, unless the host is allowed
 with --discovery-allow-host.`,
 		Args: cobra.NoArgs,
+		// A failing hook must not disrupt the harness: report only in verbose mode.
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if err := preRun(cmd, args); err != nil {
+				cfg.logf("hook: %v", err)
+				f.skip = true
+			}
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// A failing hook must not disrupt the harness: report only in verbose mode.
+			if f.skip {
+				return nil
+			}
 			if err := runHook(cmd, cfg, f); err != nil {
 				cfg.logf("hook: %v", err)
 			}

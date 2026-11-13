@@ -124,6 +124,22 @@ func TestHookRun(t *testing.T) {
 		steps     []step
 	}{
 		{
+			name: "contacts emptied while away reported on resume",
+			steps: []step{
+				{event: start("startup"), contacts: []ContactEntry{nimbus}, want: []string{"- nimbus"}},
+				{event: start("resume"), want: []string{"contact book is now empty"}},
+				{event: prompt("hello")},
+			},
+		},
+		{
+			name:      "compaction skips discovered agents that became contacts",
+			discovery: true,
+			steps: []step{
+				{event: prompt("https://nimbus.example"), cache: []cardcache.Entry{found(nimbus.Origin, "Nimbus", testNow)}, want: []string{"auto-discovered"}},
+				{event: start("compact"), contacts: []ContactEntry{nimbus}, want: []string{"A2A contacts"}, wantAbsent: []string{"auto-discovered"}},
+			},
+		},
+		{
 			name: "contacts injected on startup but not on resume",
 			steps: []step{
 				{event: start("startup"), contacts: []ContactEntry{nimbus}, want: []string{"A2A contacts", "- nimbus — Nimbus: Nimbus description", "User note: coffee orders", "Skills: skill-one"}},

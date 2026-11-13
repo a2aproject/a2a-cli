@@ -35,6 +35,9 @@ func newHookProbeCmd(cfg *globalConfig, f *hookFlags) *cobra.Command {
 		Short:  "Fetch the agent cards of origins into the card cache (started by a2a hook)",
 		Args:   cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if f.skip {
+				return nil
+			}
 			if err := cfg.initTLS(); err != nil {
 				return err
 			}

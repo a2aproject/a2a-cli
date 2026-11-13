@@ -19,9 +19,10 @@ package discover
 
 import (
 	"encoding/json"
-	"net/url"
 	"regexp"
 	"strings"
+
+	"github.com/a2aproject/a2a-cli/internal/contacts"
 )
 
 // urlPattern stops a URL at ASCII delimiters and at any Unicode separator,
@@ -36,13 +37,8 @@ func ExtractOrigins(texts ...string) []string {
 	seen := make(map[string]bool)
 	for _, text := range texts {
 		for _, raw := range urlPattern.FindAllString(text, -1) {
-			raw = strings.TrimRight(raw, ".,;:!?")
-			u, err := url.Parse(raw)
-			if err != nil || u.Hostname() == "" {
-				continue
-			}
-			origin := strings.ToLower(u.Scheme + "://" + u.Host)
-			if seen[origin] {
+			origin := contacts.Origin(strings.TrimRight(raw, ".,;:!?"))
+			if origin == "" || seen[origin] {
 				continue
 			}
 			seen[origin] = true

@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -34,6 +35,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/Agent-Card/ai-catalog-go/catalog"
 	"github.com/a2aproject/a2a-go/v2/a2a"
@@ -94,13 +96,17 @@ type Contact struct {
 	Entry aicatalog.Entry
 }
 
-// CardURL returns the URL of the contact's agent card, or "" when the entry
-// embeds the card.
+// CardURL returns the absolute URL of the contact's agent card, or "" when the
+// entry embeds the card.
 func (c Contact) CardURL() string {
 	if len(c.Entry.Data) > 0 {
 		return ""
 	}
-	return c.Entry.URL
+	u, err := aicatalog.CardURL(c.Entry)
+	if err != nil {
+		return ""
+	}
+	return u
 }
 
 // Origin returns scheme://host of the contact's card URL, or "" when the card
@@ -109,13 +115,31 @@ func (c Contact) Origin() string {
 	return Origin(c.CardURL())
 }
 
-// Origin returns scheme://host of an http(s) URL, or "" for anything else.
+// Origin returns scheme://host of an http(s) URL, or "" for anything else,
+// including a host that is neither a DNS name nor an IP address.
 func Origin(raw string) string {
 	u, err := url.Parse(raw)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || !validHost(u.Hostname()) {
 		return ""
 	}
 	return strings.ToLower(u.Scheme + "://" + u.Host)
+}
+
+// validHost reports whether host is an IP address or a DNS name, allowing
+// internationalized labels but none of the punctuation a URL host may carry.
+func validHost(host string) bool {
+	if host == "" {
+		return false
+	}
+	if _, err := netip.ParseAddr(host); err == nil {
+		return true
+	}
+	for _, r := range host {
+		if r != '.' && r != '-' && r != '_' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return true
 }
 
 type bookkeeping struct {
@@ -142,7 +166,9 @@ func FromCard(name, note, cardURL string, card *a2a.AgentCard, now time.Time) (C
 }
 
 // FromEntry returns a contact for an A2A agent listed by a catalog. The entry
-// is copied as listed, except that a relative URL is made absolute.
+// is copied as listed, except that a relative URL is made absolute unless the
+// trust manifest binds it; a bound URL keeps resolving against the catalog
+// the contact was added from.
 func FromEntry(name, note string, entry aicatalog.Entry, now time.Time) (Contact, error) {
 	if !aicatalog.IsAgent(&entry.CatalogEntry) {
 		return Contact{}, fmt.Errorf("%q is a %s entry, not an A2A agent", entry.Identifier, entry.Type)
@@ -156,20 +182,31 @@ func FromEntry(name, note string, entry aicatalog.Entry, now time.Time) (Contact
 		if err != nil {
 			return Contact{}, err
 		}
-		raw["url"] = mustMarshal(cardURL)
+		if !urlBound(entry.CatalogEntry) {
+			raw["url"] = mustMarshal(cardURL)
+		}
 	}
 	return newContact(raw, bookkeeping{Name: name, Note: note, AddedAt: now, Source: entry.Base})
+}
+
+// urlBound reports whether the entry's trust manifest signs its URL, which a
+// copy must then keep as listed.
+func urlBound(entry catalog.CatalogEntry) bool {
+	return entry.TrustManifest != nil && entry.TrustManifest.Subject != nil && entry.TrustManifest.Subject.URL != ""
 }
 
 func newContact(raw map[string]json.RawMessage, b bookkeeping) (Contact, error) {
 	if err := ValidateName(b.Name); err != nil {
 		return Contact{}, err
 	}
-	extensions := map[string]json.RawMessage{}
+	var extensions map[string]json.RawMessage
 	if data, ok := raw["extensions"]; ok {
 		if err := json.Unmarshal(data, &extensions); err != nil {
 			return Contact{}, fmt.Errorf("decoding entry extensions: %w", err)
 		}
+	}
+	if extensions == nil {
+		extensions = map[string]json.RawMessage{}
 	}
 	extensions[ExtensionKey] = mustMarshal(b)
 	raw["extensions"] = mustMarshal(extensions)
@@ -207,6 +244,9 @@ func parseContact(raw json.RawMessage, base string) (Contact, bool, error) {
 		return Contact{}, false, fmt.Errorf("contact %q has type %q, want %q", b.Name, entry.Type, catalog.MediaTypeA2AAgentCard)
 	case len(entry.Data) == 0 && entry.URL == "":
 		return Contact{}, false, fmt.Errorf("contact %q has neither data nor a URL", b.Name)
+	}
+	if urlBound(entry) && b.Source != "" {
+		base = b.Source
 	}
 	return Contact{
 		Name:    b.Name,
@@ -356,7 +396,8 @@ func (e *NotFoundError) Error() string {
 }
 
 // Add stores c, replacing a contact of the same name only when replace is set.
-// Two contacts can't share an identifier and version, as entries of one catalog.
+// Two contacts can't share an identifier, whatever their versions, so an
+// identifier names one contact.
 func (b *Book) Add(c Contact, replace bool) error {
 	if err := ValidateName(c.Name); err != nil {
 		return err
@@ -365,7 +406,7 @@ func (b *Book) Add(c Contact, replace bool) error {
 		return &ExistsError{Name: c.Name}
 	}
 	for _, other := range b.List() {
-		if other.Name != c.Name && other.Entry.Identifier == c.Entry.Identifier && other.Entry.Version == c.Entry.Version {
+		if other.Name != c.Name && other.Entry.Identifier == c.Entry.Identifier {
 			return &ExistsError{Name: other.Name, SameAgent: true}
 		}
 	}

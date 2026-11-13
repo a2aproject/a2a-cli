@@ -111,13 +111,15 @@ func (g Guard) CheckProxied(ctx context.Context, host string) error {
 }
 
 func (g Guard) checkAddrs(ctx context.Context, host string, addrs []netip.Addr) error {
-	internal := false
+	internal, public := false, false
 	for _, a := range addrs {
 		if reason := blockedReason(a); reason != "" {
 			return &BlockedError{Host: host, Addr: a, Reason: reason}
 		}
 		if isInternal(a) {
 			internal = true
+		} else {
+			public = true
 		}
 	}
 	chain, ok := ctx.Value(redirectChainKey{}).(*redirectChain)
@@ -129,7 +131,9 @@ func (g Guard) checkAddrs(ctx context.Context, host string, addrs []netip.Addr) 
 	if internal && chain.public {
 		return &BlockedError{Host: host, Addr: addrs[0], Reason: "internal address reached by a redirect from a public one"}
 	}
-	if !internal {
+	// The dial may land on any of the addresses, so one public address is
+	// enough to treat the rest of the chain as steered by a public site.
+	if public {
 		chain.public = true
 	}
 	return nil

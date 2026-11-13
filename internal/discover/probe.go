@@ -19,6 +19,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -139,6 +140,9 @@ func isTransient(err error) bool {
 	if _, ok := errors.AsType[*url.Error](err); ok {
 		return true
 	}
+	if _, ok := errors.AsType[*bodyReadError](err); ok {
+		return true
+	}
 	status, ok := errors.AsType[*agentcard.ErrStatusNotOK](err)
 	return ok && (status.StatusCode >= http.StatusInternalServerError || status.StatusCode == http.StatusTooManyRequests)
 }
@@ -223,7 +227,8 @@ func (p *Prober) logf(format string, args ...any) {
 }
 
 // limitBody caps response bodies so a hostile origin can't make the prober read
-// an unbounded card.
+// an unbounded card. It also marks read failures, which the card resolver
+// doesn't wrap in a *url.Error, so they count as transient.
 type limitBody struct {
 	next http.RoundTripper
 	max  int64
@@ -234,11 +239,44 @@ func (l limitBody) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp.Body = &limitedReadCloser{Reader: io.LimitReader(resp.Body, l.max), Closer: resp.Body}
+	resp.Body = &limitedReadCloser{body: resp.Body, remaining: l.max}
 	return resp, nil
 }
 
+// errCardTooLarge reports a card body over maxCardBytes.
+var errCardTooLarge = fmt.Errorf("card is larger than %d bytes", maxCardBytes)
+
+// bodyReadError is a failure to read a response body, such as a timeout or a
+// reset connection.
+type bodyReadError struct{ err error }
+
+func (e *bodyReadError) Error() string { return e.err.Error() }
+
+func (e *bodyReadError) Unwrap() error { return e.err }
+
 type limitedReadCloser struct {
-	io.Reader
-	io.Closer
+	body      io.ReadCloser
+	remaining int64
 }
+
+func (l *limitedReadCloser) Read(p []byte) (int, error) {
+	if l.remaining < 0 {
+		return 0, errCardTooLarge
+	}
+	// Reading one byte past the limit tells an oversized body from one that
+	// ends exactly at it.
+	if int64(len(p)) > l.remaining+1 {
+		p = p[:l.remaining+1]
+	}
+	n, err := l.body.Read(p)
+	l.remaining -= int64(n)
+	if l.remaining < 0 {
+		return n + int(l.remaining), errCardTooLarge
+	}
+	if err != nil && !errors.Is(err, io.EOF) {
+		return n, &bodyReadError{err: err}
+	}
+	return n, err
+}
+
+func (l *limitedReadCloser) Close() error { return l.body.Close() }

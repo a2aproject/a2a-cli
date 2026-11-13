@@ -102,9 +102,12 @@ func TestIsName(t *testing.T) {
 		{name: "", want: false},
 	}
 	for _, tt := range tests {
-		if got := IsName(tt.name); got != tt.want {
-			t.Fatalf("IsName(%q) = %v, want %v", tt.name, got, tt.want)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := IsName(tt.name); got != tt.want {
+				t.Fatalf("IsName(%q) = %v, want %v", tt.name, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -116,13 +119,18 @@ func TestOrigin(t *testing.T) {
 	}{
 		{ref: "https://Nimbus.example/.well-known/agent-card.json", want: "https://nimbus.example"},
 		{ref: "http://localhost:8080/card.json", want: "http://localhost:8080"},
+		{ref: "https://[::1]:8443/card.json", want: "https://[::1]:8443"},
 		{ref: "file:///tmp/card.json", want: ""},
+		{ref: "http://a;id.example/card.json", want: ""},
 		{ref: "", want: ""},
 	}
 	for _, tt := range tests {
-		if got := Origin(tt.ref); got != tt.want {
-			t.Fatalf("Origin(%q) = %v, want %v", tt.ref, got, tt.want)
-		}
+		t.Run(tt.ref, func(t *testing.T) {
+			t.Parallel()
+			if got := Origin(tt.ref); got != tt.want {
+				t.Fatalf("Origin(%q) = %v, want %v", tt.ref, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -214,6 +222,62 @@ func TestFromEntryRejectsNonAgents(t *testing.T) {
 	}
 }
 
+func TestFromEntryNullExtensions(t *testing.T) {
+	t.Parallel()
+	c := mustFromEntry(t, "fin", `{"identifier":"urn:x","type":"application/a2a-agent-card+json","url":"https://x.example/card.json","extensions":null}`)
+	if c.Name != "fin" {
+		t.Fatalf("FromEntry() name = %q, want %q", c.Name, "fin")
+	}
+}
+
+func TestFromEntryURL(t *testing.T) {
+	t.Parallel()
+	subject := `,"trustManifest":{"identity":"did:web:acme.com","signature":"e30..c2ln","subject":{"identifier":"urn:x","type":"application/a2a-agent-card+json","url":"agents/x.json"}}`
+
+	tests := []struct {
+		name        string
+		entry       string
+		wantURL     string
+		wantCardURL string
+	}{
+		{
+			name:        "relative URL made absolute",
+			entry:       `{"identifier":"urn:x","type":"application/a2a-agent-card+json","url":"agents/x.json"}`,
+			wantURL:     "https://acme.com/agents/x.json",
+			wantCardURL: "https://acme.com/agents/x.json",
+		},
+		{
+			name:        "relative URL bound by the trust manifest kept as listed",
+			entry:       `{"identifier":"urn:x","type":"application/a2a-agent-card+json","url":"agents/x.json"` + subject + `}`,
+			wantURL:     "agents/x.json",
+			wantCardURL: "https://acme.com/agents/x.json",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c := mustFromEntry(t, "x", tt.entry)
+			if c.Entry.URL != tt.wantURL {
+				t.Fatalf("FromEntry() entry URL = %q, want %q", c.Entry.URL, tt.wantURL)
+			}
+			if got := c.CardURL(); got != tt.wantCardURL {
+				t.Fatalf("Contact.CardURL() = %q, want %q", got, tt.wantCardURL)
+			}
+			b := mustLoad(t, filepath.Join(t.TempDir(), "catalog.json"))
+			if err := b.Add(c, false); err != nil {
+				t.Fatalf("Book.Add() error = %v", err)
+			}
+			if err := b.Save(); err != nil {
+				t.Fatalf("Book.Save() error = %v", err)
+			}
+			got, _ := mustLoad(t, b.Path()).Get("x")
+			if got.CardURL() != tt.wantCardURL || got.Origin() != "https://acme.com" {
+				t.Fatalf("loaded Contact.CardURL(), Origin() = %q, %q; want %q, %q", got.CardURL(), got.Origin(), tt.wantCardURL, "https://acme.com")
+			}
+		})
+	}
+}
+
 func TestBookAddConflicts(t *testing.T) {
 	t.Parallel()
 
@@ -226,6 +290,7 @@ func TestBookAddConflicts(t *testing.T) {
 	}{
 		{name: "name taken", contact: mustFromCard(t, "fin", "https://other.example"), wantErr: &ExistsError{Name: "fin"}},
 		{name: "same agent under another name", contact: mustFromEntry(t, "money", signedEntry), wantErr: &ExistsError{Name: "fin", SameAgent: true}},
+		{name: "same identifier with a version", contact: mustFromEntry(t, "money", strings.Replace(signedEntry, `"type"`, `"version":"2.0.0","type"`, 1)), wantErr: &ExistsError{Name: "fin", SameAgent: true}},
 		{name: "replace", contact: mustFromCard(t, "fin", "https://other.example"), replace: true, wantURL: "https://other.example"},
 	}
 	for _, tt := range tests {
