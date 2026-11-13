@@ -16,6 +16,7 @@ package output
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -265,6 +266,41 @@ func TestPrintCardInterfaces(t *testing.T) {
 				"Streaming:    false\n"
 			if diff := cmp.Diff(want, buf.String()); diff != "" {
 				t.Fatalf("PrintCard() wrong result (-want +got) diff = %s", diff)
+			}
+		})
+	}
+}
+
+func TestPrintEventResumeHintNamesTheAgent(t *testing.T) {
+	t.Parallel()
+
+	task := &a2a.Task{ID: "t1", Status: a2a.TaskStatus{State: a2a.TaskStateInputRequired}}
+	testCases := []struct {
+		name       string
+		agentFlags string
+		want       string
+	}{
+		{
+			name:       "agent flags",
+			agentFlags: "-a https://agent.example.com",
+			want:       "Resume:     a2a send -a https://agent.example.com --task-id t1 \"<reply>\"\n",
+		},
+		{
+			name: "placeholder",
+			want: "Resume:     a2a send -a <agent> --task-id t1 \"<reply>\"\n",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+			p := NewPrinter(&buf, ModeText)
+			p.AgentFlags = tc.agentFlags
+			if err := p.PrintEvent(task); err != nil {
+				t.Fatalf("PrintEvent() error = %v, want nil", err)
+			}
+			if !strings.HasSuffix(buf.String(), tc.want) {
+				t.Fatalf("PrintEvent() = %q, want suffix %q", buf.String(), tc.want)
 			}
 		})
 	}

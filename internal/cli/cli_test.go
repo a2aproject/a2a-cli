@@ -826,8 +826,16 @@ func TestSend_ResumeHintForInputRequiredTask(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	out := mustRunCMD(t, "send", "-e", server.URL, "--transport", "rest", "hello")
-	if !strings.Contains(out, "a2a send --task-id "+string(taskID)) {
-		t.Fatalf("send text output missing the resume hint:\n%s", out)
+	if want := "a2a send -e " + server.URL + " --transport rest --task-id " + string(taskID); !strings.Contains(out, want) {
+		t.Fatalf("send text output missing the resume hint %q:\n%s", want, out)
+	}
+
+	out = mustRunCMD(t, "send", "-e", server.URL+"/?token=secret", "--transport", "rest", "hello")
+	if strings.Contains(out, "secret") {
+		t.Fatalf("send text output leaks the endpoint query:\n%s", out)
+	}
+	if want := "a2a send -a <agent> --task-id " + string(taskID); !strings.Contains(out, want) {
+		t.Fatalf("send text output missing the resume hint %q:\n%s", want, out)
 	}
 }
 

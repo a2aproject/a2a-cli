@@ -260,3 +260,55 @@ func TestCACertFile(t *testing.T) {
 		})
 	}
 }
+
+func TestAgentFlags(t *testing.T) {
+	t.Parallel()
+
+	cardPath := testutil.MustWriteTmpCardFile(t, &a2a.AgentCard{Name: "card"})
+	testCases := []struct {
+		name       string
+		agentCard  string
+		endpoint   string
+		transports []string
+		tenant     string
+		unixSocket string
+		want       string
+	}{
+		{name: "url", agentCard: "https://agent.example.com", want: "-a https://agent.example.com"},
+		{name: "host", agentCard: "localhost:8080", want: "-a localhost:8080"},
+		{name: "card path", agentCard: cardPath, want: "-a " + shellQuote(cardPath)},
+		{name: "path with spaces", agentCard: "./my card's.json", want: `-a './my card'\''s.json'`},
+		{name: "token in query", agentCard: "https://agent.example.com/?token=secret"},
+		{name: "user info", agentCard: "https://user:secret@agent.example.com"},
+		{name: "endpoint", endpoint: "http://127.0.0.1:9000", transports: []string{"rest"}, want: "-e http://127.0.0.1:9000 --transport rest"},
+		{name: "endpoint with token", endpoint: "http://127.0.0.1:9000/?key=secret", transports: []string{"rest"}},
+		{name: "no agent"},
+		{name: "tenant and unix socket", agentCard: "http://localhost", tenant: "acme", unixSocket: "/tmp/a2a.sock", want: "-a http://localhost --tenant acme --unix-socket /tmp/a2a.sock"},
+		{name: "unix socket with token", agentCard: "http://localhost/?token=secret", unixSocket: "/tmp/my sock", want: "-a <agent> --unix-socket '/tmp/my sock'"},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := &globalConfig{url: tc.endpoint, transports: tc.transports, tenant: tc.tenant, unixSocket: tc.unixSocket}
+			if err := cfg.agentCard.Set(tc.agentCard); err != nil {
+				t.Fatalf("agentCard.Set() error = %v", err)
+			}
+			if got := agentFlags(cfg); got != tc.want {
+				t.Fatalf("agentFlags() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestMissingAgentHint(t *testing.T) {
+	t.Parallel()
+
+	_, err := runCMD(t, "send", "--task-id", "t1", "hello")
+	ce := clierr.Classify(err)
+	if ce == nil || ce.Code != clierr.CodeUsage {
+		t.Fatalf("send without an agent error = %v, want a usage error", err)
+	}
+	if want := "pass -a <agent URL or card> to name the agent"; ce.Hint != want {
+		t.Fatalf("send without an agent hint = %q, want %q", ce.Hint, want)
+	}
+}

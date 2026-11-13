@@ -67,8 +67,58 @@ func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclie
 	case cfg.catalog != "":
 		return nil, clierr.Usage("--catalog requires --agent-card <identifier>")
 	default:
-		return nil, clierr.Usage("either '--agent-card <ref>' or '--endpoint <url> --transport <t>' must be provided")
+		err := clierr.Usage("either '--agent-card <ref>' or '--endpoint <url> --transport <t>' must be provided")
+		err.Hint = "pass -a <agent URL or card> to name the agent"
+		return nil, err
 	}
+}
+
+// agentFlags returns the flags that select the agent, quoted for a shell, so a
+// printed command can reach the same agent: the agent reference, then --tenant
+// and --unix-socket when set. A reference that may carry a credential, in its
+// query string or user info, is left out, and so is a missing one; it is
+// replaced by a placeholder, or, with no other flags, the caller shows one.
+func agentFlags(cfg *globalConfig) string {
+	var flags []string
+	switch {
+	case cfg.agentCard.IsSet():
+		if !mayCarryCredential(cfg.agentCard.URL()) {
+			flags = append(flags, "-a "+shellQuote(cfg.agentCard.String()))
+		}
+	case cfg.url != "":
+		if !mayCarryCredential(cfg.url) && len(cfg.transports) == 1 {
+			flags = append(flags, "-e "+shellQuote(cfg.url)+" --transport "+shellQuote(cfg.transports[0]))
+		}
+	}
+	if cfg.tenant == "" && cfg.unixSocket == "" {
+		return strings.Join(flags, " ")
+	}
+	if len(flags) == 0 {
+		flags = append(flags, "-a <agent>")
+	}
+	if cfg.tenant != "" {
+		flags = append(flags, "--tenant "+shellQuote(cfg.tenant))
+	}
+	if cfg.unixSocket != "" {
+		flags = append(flags, "--unix-socket "+shellQuote(cfg.unixSocket))
+	}
+	return strings.Join(flags, " ")
+}
+
+// mayCarryCredential reports whether a URL has a query string or user info,
+// either of which may hold a token, or does not parse at all.
+func mayCarryCredential(ref string) bool {
+	u, err := url.Parse(ref)
+	return err != nil || u.RawQuery != "" || u.ForceQuery || u.User != nil
+}
+
+// shellQuote returns s as a single shell word, wrapping it in single quotes
+// unless it holds only characters a POSIX shell treats literally.
+func shellQuote(s string) string {
+	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@%+=:,./_-") == "" {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // newClientFromEndpoint connects straight to an agent interface URL without resolving an
