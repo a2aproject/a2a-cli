@@ -831,6 +831,59 @@ func TestSend_ResumeHintForInputRequiredTask(t *testing.T) {
 	}
 }
 
+func TestSend_NumberedResumeReplyCanBeRetried(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	question := 1
+	server := httptest.NewServer(a2asrv.NewRESTHandler(a2asrv.NewHandler(
+		a2asrv.AgentExecutorFunc(func(ctx context.Context, ec *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
+			return func(yield func(a2a.Event, error) bool) {
+				mu.Lock()
+				defer mu.Unlock()
+				for _, part := range ec.Message.Parts {
+					data, ok := part.Data().(map[string]any)
+					if ok && data["option"] == "once" && data["seq"] == float64(question) {
+						question++
+					}
+				}
+				part := a2a.NewDataPart(map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"option": map[string]any{"type": "string"},
+						"seq":    map[string]any{"const": question},
+					},
+					"required": []string{"option"},
+				})
+				part.Metadata = map[string]any{
+					"https://github.com/a2aproject/experimental-ext-structured-input/tree/main/v1": map[string]any{"type": "input_schema"},
+				}
+				yield(&a2a.Task{ID: ec.TaskID, ContextID: ec.ContextID, Status: a2a.TaskStatus{
+					State: a2a.TaskStateInputRequired, Message: &a2a.Message{Parts: a2a.ContentParts{part}},
+				}}, nil)
+			}
+		}),
+	)))
+	t.Cleanup(server.Close)
+
+	out := mustRunCMD(t, "send", "-e", server.URL, "--transport", "rest", "hello")
+	_, hint, found := strings.Cut(out, "Resume:     a2a send --task-id ")
+	if !found {
+		t.Fatalf("send output = %q, want resume hint", out)
+	}
+	taskID, data, found := strings.Cut(strings.TrimSpace(hint), " --data-part '")
+	if !found || !strings.HasSuffix(data, "'") {
+		t.Fatalf("resume hint = %q, want structured reply", hint)
+	}
+	reply := strings.ReplaceAll(strings.TrimSuffix(data, "'"), "<option>", "once")
+	for range 2 {
+		out = mustRunCMD(t, "send", "-e", server.URL, "--transport", "rest", "--task-id", taskID, "--data-part", reply)
+		if !strings.Contains(out, `--data-part '{"option":"<option>","seq":2}'`) {
+			t.Fatalf("retried send output = %q, want question 2 still waiting", out)
+		}
+	}
+}
+
 func TestSendWithVersionSelector(t *testing.T) {
 	t.Parallel()
 	url := startTestServer(t)

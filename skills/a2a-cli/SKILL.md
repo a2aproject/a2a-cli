@@ -112,6 +112,13 @@ transport) or `-e <url> --transport <rest|jsonrpc|grpc>` (connect directly).
    a2a send -a https://agent.example.com --task-id <task-id> "Yes, proceed"
    ```
 
+   When `Resume:` includes `--data-part`, fill in its `<field>` placeholders
+   and keep the other values unchanged. These are constants from the question's
+   Structured Input schema, such as its question number (`seq`). Retry the same
+   answer with the same constants after a timeout; fetching a newer question
+   and replacing them could answer a different question. The displayed JSON
+   uses POSIX shell quoting; pass it as one argument in other shells.
+
 6. **Continue the conversation** as a new task in the same context:
 
    ```bash
