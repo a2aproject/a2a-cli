@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.0](https://github.com/a2aproject/a2a-cli/compare/v0.4.0...v0.5.0) (2026-11-13)
+
+
+### Features
+
+* resolve --agent-card from AI Catalogs ([#152](https://github.com/a2aproject/a2a-cli/issues/152)) ([53f9904](https://github.com/a2aproject/a2a-cli/commit/53f9904564164e1d2a3c49a71dd39f59143876ff)), closes [#19](https://github.com/a2aproject/a2a-cli/issues/19)
+
+
+### Bug Fixes
+
+* bind the gRPC server's agent card listener to --host ([#133](https://github.com/a2aproject/a2a-cli/issues/133)) ([0d4d99e](https://github.com/a2aproject/a2a-cli/commit/0d4d99e1881401722b72a7dafa5049375fe5c23c))
+* drop the agent URL's query string from error messages ([#142](https://github.com/a2aproject/a2a-cli/issues/142)) ([5c95123](https://github.com/a2aproject/a2a-cli/commit/5c95123d1c8d50a1cd6dfc2f28a14f5533a383ae)), closes [#140](https://github.com/a2aproject/a2a-cli/issues/140)
+* escape local agent card paths when building the file URL ([#135](https://github.com/a2aproject/a2a-cli/issues/135)) ([40b9b79](https://github.com/a2aproject/a2a-cli/commit/40b9b795445fecc7df52391884519ced924d1b13)), closes [#134](https://github.com/a2aproject/a2a-cli/issues/134)
+* let SSE keep-alives reset the --stream inactivity timeout ([#143](https://github.com/a2aproject/a2a-cli/issues/143)) ([4deb709](https://github.com/a2aproject/a2a-cli/commit/4deb709ddc03e238dfe4fcf4e13f5744bfe7e65a)), closes [#137](https://github.com/a2aproject/a2a-cli/issues/137)
+
 ## [0.4.0](https://github.com/a2aproject/a2a-cli/compare/v0.3.1...v0.4.0) (2026-11-04)
 
 
