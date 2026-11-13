@@ -230,39 +230,50 @@ func TestFromEntryNullExtensions(t *testing.T) {
 	}
 }
 
-func TestFromEntryURL(t *testing.T) {
+func TestContactURLs(t *testing.T) {
 	t.Parallel()
 	subject := `,"trustManifest":{"identity":"did:web:acme.com","signature":"e30..c2ln","subject":{"identifier":"urn:x","type":"application/a2a-agent-card+json","url":"agents/x.json"}}`
 
 	tests := []struct {
 		name        string
-		entry       string
-		wantURL     string
+		contact     func(t *testing.T) Contact
 		wantCardURL string
+		wantOrigin  string
 	}{
 		{
-			name:        "relative URL made absolute",
-			entry:       `{"identifier":"urn:x","type":"application/a2a-agent-card+json","url":"agents/x.json"}`,
-			wantURL:     "https://acme.com/agents/x.json",
+			name: "relative entry URL made absolute",
+			contact: func(t *testing.T) Contact {
+				return mustFromEntry(t, "x", `{"identifier":"urn:x","type":"application/a2a-agent-card+json","url":"agents/x.json"}`)
+			},
 			wantCardURL: "https://acme.com/agents/x.json",
+			wantOrigin:  "https://acme.com",
 		},
 		{
-			name:        "relative URL bound by the trust manifest kept as listed",
-			entry:       `{"identifier":"urn:x","type":"application/a2a-agent-card+json","url":"agents/x.json"` + subject + `}`,
-			wantURL:     "agents/x.json",
+			name: "relative entry URL bound by the trust manifest made absolute",
+			contact: func(t *testing.T) Contact {
+				return mustFromEntry(t, "x", `{"identifier":"urn:x","type":"application/a2a-agent-card+json","url":"agents/x.json"`+subject+`}`)
+			},
 			wantCardURL: "https://acme.com/agents/x.json",
+			wantOrigin:  "https://acme.com",
+		},
+		{
+			name: "http card",
+			contact: func(t *testing.T) Contact {
+				return mustFromCard(t, "x", "http://127.0.0.1:8080/.well-known/agent-card.json")
+			},
+			wantCardURL: "http://127.0.0.1:8080/.well-known/agent-card.json",
+			wantOrigin:  "http://127.0.0.1:8080",
+		},
+		{
+			name:        "file card",
+			contact:     func(t *testing.T) Contact { return mustFromCard(t, "x", "file:///tmp/card.json") },
+			wantCardURL: "file:///tmp/card.json",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			c := mustFromEntry(t, "x", tt.entry)
-			if c.Entry.URL != tt.wantURL {
-				t.Fatalf("FromEntry() entry URL = %q, want %q", c.Entry.URL, tt.wantURL)
-			}
-			if got := c.CardURL(); got != tt.wantCardURL {
-				t.Fatalf("Contact.CardURL() = %q, want %q", got, tt.wantCardURL)
-			}
+			c := tt.contact(t)
 			b := mustLoad(t, filepath.Join(t.TempDir(), "catalog.json"))
 			if err := b.Add(c, false); err != nil {
 				t.Fatalf("Book.Add() error = %v", err)
@@ -270,9 +281,11 @@ func TestFromEntryURL(t *testing.T) {
 			if err := b.Save(); err != nil {
 				t.Fatalf("Book.Save() error = %v", err)
 			}
-			got, _ := mustLoad(t, b.Path()).Get("x")
-			if got.CardURL() != tt.wantCardURL || got.Origin() != "https://acme.com" {
-				t.Fatalf("loaded Contact.CardURL(), Origin() = %q, %q; want %q, %q", got.CardURL(), got.Origin(), tt.wantCardURL, "https://acme.com")
+			loaded, _ := mustLoad(t, b.Path()).Get("x")
+			for _, got := range []Contact{c, loaded} {
+				if got.Entry.URL != tt.wantCardURL || got.CardURL() != tt.wantCardURL || got.Origin() != tt.wantOrigin {
+					t.Fatalf("Contact entry URL, CardURL(), Origin() = %q, %q, %q; want %q, %q, %q", got.Entry.URL, got.CardURL(), got.Origin(), tt.wantCardURL, tt.wantCardURL, tt.wantOrigin)
+				}
 			}
 		})
 	}

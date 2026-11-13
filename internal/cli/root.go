@@ -171,7 +171,16 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	cfg.contactsFile = deps.contactsFile
 	cfg.cacheDir = deps.cacheDir
 
+	// The configuration is loaded once before flags are parsed, to register
+	// command plugins. An error there is held until a command runs, so that
+	// the hook, which must not fail, can ignore it while every other command
+	// reports it as before, even when its flags don't parse.
+	preStore, preErr := deps.cfgLoader(clicfg.LoadOpts{})
+
 	preRun := func(cmd *cobra.Command, args []string) error {
+		if preErr != nil {
+			return preErr
+		}
 		store, err := deps.cfgLoader(clicfg.LoadOpts{ConfigPath: cfg.configPath})
 		if err != nil {
 			return err
@@ -262,15 +271,16 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	}
 	cmd.AddCommand(hookCmd)
 
-	// A configuration error is reported when a command runs, by preRun, so
-	// that it doesn't break commands that tolerate it, such as the hook.
-	if preStore, err := deps.cfgLoader(clicfg.LoadOpts{}); err == nil && preStore.LookupBool(pluginsEnabledKey) {
+	if preErr == nil && preStore.LookupBool(pluginsEnabledKey) {
 		cfg.pluginsEnabled = true
 		addCommandPlugins(cmd)
 	}
 
 	cmd.SetUsageTemplate(rootUsageTemplate)
 	markUsageErrors(cmd)
+	if preErr != nil {
+		cmd.SetFlagErrorFunc(func(*cobra.Command, error) error { return preErr })
+	}
 
 	return cmd, nil
 }

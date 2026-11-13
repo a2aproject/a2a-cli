@@ -96,17 +96,13 @@ type Contact struct {
 	Entry aicatalog.Entry
 }
 
-// CardURL returns the absolute URL of the contact's agent card, or "" when the
-// entry embeds the card.
+// CardURL returns the URL of the contact's agent card, or "" when the entry
+// embeds the card.
 func (c Contact) CardURL() string {
 	if len(c.Entry.Data) > 0 {
 		return ""
 	}
-	u, err := aicatalog.CardURL(c.Entry)
-	if err != nil {
-		return ""
-	}
-	return u
+	return c.Entry.URL
 }
 
 // Origin returns scheme://host of the contact's card URL, or "" when the card
@@ -166,9 +162,9 @@ func FromCard(name, note, cardURL string, card *a2a.AgentCard, now time.Time) (C
 }
 
 // FromEntry returns a contact for an A2A agent listed by a catalog. The entry
-// is copied as listed, except that a relative URL is made absolute unless the
-// trust manifest binds it; a bound URL keeps resolving against the catalog
-// the contact was added from.
+// is copied as listed, except that a relative URL is made absolute so the
+// contact book resolves it wherever it is read. A trust manifest that signs
+// the relative URL no longer matches the copy.
 func FromEntry(name, note string, entry aicatalog.Entry, now time.Time) (Contact, error) {
 	if !aicatalog.IsAgent(&entry.CatalogEntry) {
 		return Contact{}, fmt.Errorf("%q is a %s entry, not an A2A agent", entry.Identifier, entry.Type)
@@ -182,17 +178,9 @@ func FromEntry(name, note string, entry aicatalog.Entry, now time.Time) (Contact
 		if err != nil {
 			return Contact{}, err
 		}
-		if !urlBound(entry.CatalogEntry) {
-			raw["url"] = mustMarshal(cardURL)
-		}
+		raw["url"] = mustMarshal(cardURL)
 	}
 	return newContact(raw, bookkeeping{Name: name, Note: note, AddedAt: now, Source: entry.Base})
-}
-
-// urlBound reports whether the entry's trust manifest signs its URL, which a
-// copy must then keep as listed.
-func urlBound(entry catalog.CatalogEntry) bool {
-	return entry.TrustManifest != nil && entry.TrustManifest.Subject != nil && entry.TrustManifest.Subject.URL != ""
 }
 
 func newContact(raw map[string]json.RawMessage, b bookkeeping) (Contact, error) {
@@ -244,9 +232,6 @@ func parseContact(raw json.RawMessage, base string) (Contact, bool, error) {
 		return Contact{}, false, fmt.Errorf("contact %q has type %q, want %q", b.Name, entry.Type, catalog.MediaTypeA2AAgentCard)
 	case len(entry.Data) == 0 && entry.URL == "":
 		return Contact{}, false, fmt.Errorf("contact %q has neither data nor a URL", b.Name)
-	}
-	if urlBound(entry) && b.Source != "" {
-		base = b.Source
 	}
 	return Contact{
 		Name:    b.Name,

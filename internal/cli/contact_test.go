@@ -429,6 +429,65 @@ func TestHookCmdConfigErrorIsSilent(t *testing.T) {
 	}
 }
 
+func TestHookCmdUnreadableContactBookIsSilent(t *testing.T) {
+	t.Parallel()
+	agentURL := startTestServer(t)
+	env := newContactEnv(t)
+	env.mustRun("contact", "add", "echo", agentURL)
+	if out, _, err := env.run(`{"hook_event_name":"SessionStart","session_id":"s1","source":"startup"}`, "hook"); err != nil || !strings.Contains(out, "- echo") {
+		t.Fatalf("hook(SessionStart) = %q, %v; want the contact", out, err)
+	}
+	if err := os.WriteFile(env.contactsFile, []byte("{bad"), 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	out, _, err := env.run(`{"hook_event_name":"UserPromptSubmit","session_id":"s1","prompt":"`+agentURL+`"}`, "hook")
+	if err != nil || out != "" || len(env.spawned) != 0 {
+		t.Fatalf("hook with unreadable contact book = %q, %v, spawned %v; want no output, no error and no probe", out, err, env.spawned)
+	}
+}
+
+func TestContactAddJSON(t *testing.T) {
+	t.Parallel()
+	agentURL := startTestServer(t)
+	env := newContactEnv(t)
+
+	var got contactView
+	if err := json.Unmarshal([]byte(env.mustRun("contact", "add", "echo", agentURL, "-o", "json")), &got); err != nil {
+		t.Fatalf("json.Unmarshal(contact add) error = %v", err)
+	}
+	if want := agentURL + "/.well-known/agent-card.json"; got.URL != want {
+		t.Fatalf("contact add -o json url = %q, want %q", got.URL, want)
+	}
+}
+
+func TestConfigErrorReportedByCommands(t *testing.T) {
+	t.Parallel()
+	loadErr := errors.New("unterminated quoted value")
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "command", args: []string{"contact", "list"}},
+		{name: "explicit config", args: []string{"--config", "a2a.yaml", "plugin", "list"}},
+		{name: "unknown flag", args: []string{"contact", "list", "--no-such-flag"}},
+		{name: "unknown command", args: []string{"no-such-command", "--no-such-flag"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := newContactEnv(t)
+			env.cfgLoader = func(clicfg.LoadOpts) (*clicfg.Store, error) { return nil, loadErr }
+
+			_, _, err := env.run("", tc.args...)
+			if !errors.Is(err, loadErr) {
+				t.Fatalf("run(%v) error = %v, want %v", tc.args, err, loadErr)
+			}
+		})
+	}
+}
+
 func TestHookCmdInvalidInputIsSilent(t *testing.T) {
 	t.Parallel()
 	env := newContactEnv(t)

@@ -102,21 +102,23 @@ func runHook(cmd *cobra.Command, cfg *globalConfig, f *hookFlags) error {
 		return err
 	}
 	cards := cardcache.New(dir)
+	// Without the contact book the hook would tell the session its contacts
+	// were removed, so it adds nothing until the book can be read.
+	book, err := cfg.loadContacts()
+	if err != nil {
+		return err
+	}
 	var entries []discover.ContactEntry
-	if book, err := cfg.loadContacts(); err != nil {
-		cfg.logf("hook: %v", err)
-	} else {
-		for _, c := range book.List() {
-			e := discover.ContactEntry{
-				Name:        c.Name,
-				Note:        c.Note,
-				Origin:      c.Origin(),
-				DisplayName: c.Entry.DisplayName,
-				Description: c.Entry.Description,
-			}
-			e.Card, _, _ = cfg.cachedContactCard(cards, c)
-			entries = append(entries, e)
+	for _, c := range book.List() {
+		e := discover.ContactEntry{
+			Name:        c.Name,
+			Note:        c.Note,
+			Origin:      c.Origin(),
+			DisplayName: c.Entry.DisplayName,
+			Description: c.Entry.Description,
 		}
+		e.Card, _, _ = cfg.cachedContactCard(cards, c)
+		entries = append(entries, e)
 	}
 
 	h := discover.Hook{
