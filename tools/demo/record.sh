@@ -219,7 +219,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-a2a-serve doctor --fix >/dev/null
+# doctor --fix configures a2a for a2a-serve. It exits non-zero without Docker,
+# which --fake runs don't need, so check the settings it writes instead.
+a2a-serve doctor --fix >"$DEMO_WORK/doctor.log" 2>&1 || true
+grep -q '^credential-helper:' "$HOME/.config/a2a-cli/config.yaml" 2>/dev/null ||
+  { cat "$DEMO_WORK/doctor.log" >&2; die "a2a-serve doctor --fix did not configure a2a"; }
 
 # shellcheck source=/dev/null
 source "$SCENARIO"
