@@ -38,6 +38,7 @@ for skill_md in "$root"/skills/*/SKILL.md; do
   rm -f "$out/skills/$name/README.md"
 done
 
+cp -R "$root/agent-plugin/hooks" "$out/hooks"
 cp "$root/agent-plugin/README.md" "$out/README.md"
 cp "$root/LICENSE" "$out/LICENSE"
 jq --arg v "$version" '{"$schema": ."$schema", name: .name, version: $v} + .' \

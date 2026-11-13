@@ -31,7 +31,7 @@ These apply to every client-mode command. Each command selects the agent it talk
 
 | Flag | Short | Description |
 |---|---|---|
-| `--agent-card <ref>` | `-a` | Agent Card reference: a host/origin (the well-known path is appended), a full card URL, a local file path, or the identifier of an agent in an [AI Catalog](#ai-catalogs-experimental). The card is resolved and a transport negotiated. |
+| `--agent-card <ref>` | `-a` | Agent Card reference: a host/origin (the well-known path is appended), a full card URL, a local file path, a [contact](#contacts) name, or the identifier of an agent in an [AI Catalog](#ai-catalogs-experimental). The card is resolved and a transport negotiated. |
 | `--catalog <name\|url>` | | AI Catalog to look the `--agent-card` identifier up in: a registered catalog name, or a catalog URL or path. Experimental. |
 | `--endpoint <ref>` | `-e` | Agent interface URL for a direct connection, skipping card resolution. Must be paired with exactly one `--transport`. Mutually exclusive with `--agent-card`. |
 | `--transport <name>` | | Transport preference: `rest`, `jsonrpc`, `grpc`. Repeatable and ordered (highest preference first). With `--agent-card` it overrides the card's preference order; with `--endpoint` exactly one is required. |
@@ -326,10 +326,62 @@ a2a send -a https://acme.com/finance-catalog.json "..."                         
 ```
 
 - A `urn:` value of `--agent-card` is an identifier, unless a file with that name exists. With `--catalog`, any value is an identifier.
+- An identifier of a [contact](#contacts) resolves to the contact before the registered catalogs are searched.
 - Lookups in registered catalogs read only the local store; run `a2a catalog update` to pick up changes.
 - An identifier listed by more than one catalog is an error; pick one with `--catalog`.
 - When a catalog lists several versions of an agent, the latest is used.
 - A URL passed to `--agent-card` that serves a catalog instead of a card resolves only when the catalog lists exactly one A2A agent; otherwise the error lists the agents.
+
+---
+
+## Contacts
+
+The contact book stores named agents you trust. It is an AI Catalog at `~/.config/a2a-cli/catalog.json` that only `a2a` writes, registered in the shared [AI Catalog store](#ai-catalogs-experimental) as `a2a-contacts`, so `ai-catalog search` and `a2a catalog search` see your contacts too. Other tools keep their own curated catalogs and register them the same way.
+
+```bash
+a2a contact add weather https://weather.example.com          # any --agent-card reference
+a2a contact add fin urn:air:acme.com:agent:finance --note "Expense reports"
+a2a contact add travel --catalog https://acme.com/ai-catalog.json urn:air:acme.com:agent:travel
+a2a contact list                 # no requests are made
+a2a contact get fin              # contact details and its card (--refresh to fetch it again)
+a2a send -a fin "Where is report R-2041?"
+a2a contact remove fin
+```
+
+- A contact name can be passed to `--agent-card` (`-a`) or `card get` in place of a card reference. Names use lowercase letters, digits, `-` and `_`, so they never look like a URL, path or identifier. A name can match a single-label host such as `agentbox`; the contact takes precedence, and `-a https://agentbox` reaches the host.
+- If the contact book can't be read, `-a` prints a warning and resolves the reference as if there were no contacts.
+- An agent from a catalog is copied with its identifier, publisher and trust manifest, so its signature can still be verified. A relative card URL is made absolute so the contact book resolves it in any tool; a trust manifest whose subject signs the relative URL no longer matches the copy. An agent added by its card gets the identifier `urn:ai-catalog:a2a-cli:<name>`.
+- A contact's identifier takes precedence over the same identifier in registered catalogs, so `-a <identifier>` resolves to the contact.
+- Two contacts can't share an identifier, even with different versions. Pass `--replace` to overwrite a contact of the same name.
+- `contact add` fetches the card first and fails if it can't, using the same credentials, `--svc-param` headers and `--ca-cert` as `card get`. Fetched cards are cached under the user cache directory (`~/.cache/a2a-cli` on Linux) for 24 hours. An older card is fetched again by `contact get` and `-a <contact>`; until then the hook describes the contact from its catalog entry.
+- If the AI Catalog store can't be updated, the contact is still saved and `a2a` prints a warning.
+
+### Agent harness hooks
+
+`a2a hook` is a hidden command for agent harness hooks. It reads a hook event as JSON on stdin and prints the context to add in the Claude Code hook output format. The [Agent Plugin](../agent-plugin/) registers it for `SessionStart`, `UserPromptSubmit` and `PostToolBatch`.
+
+- On `SessionStart` it lists your contacts as trusted agents. After a compaction it also lists the agents discovered earlier in the session.
+- When the contact book changes during a session, the next event lists the contacts again.
+- It probes the origins of URLs in prompts and in `WebFetch` and `WebSearch` calls (`discovery-scan-tools`) for an agent card. Agents it finds are listed as unverified, and the model is told to ask the user before delegating to them.
+- Agents in registered AI Catalogs are not listed, since a catalog can list hundreds. The model finds them with `a2a catalog search`.
+
+The hook itself makes no network requests. Origins without a cached card are probed by a detached `a2a hook probe` process, and agents it finds are reported by a later event. Each agent is reported once per session. Found cards are cached for 24 hours, and origins without a card for 6 hours. A connection failure, a timeout, a server error or a rate limit isn't cached, so the origin is probed again when it's next mentioned. A document at the well-known path without an agent name and interface doesn't count as a card, and neither does one larger than 512 KiB.
+
+The hook never fails the harness event: an unreadable configuration file, contact book or event makes it print nothing, and `-v` shows why.
+
+| Setting | Default | Description |
+|---|---|---|
+| `discovery` | `true` | Probe origins of URLs in the conversation. Set `false` (or `A2ACLI_DISCOVERY=false`) to keep only the contacts. |
+| `discovery-allow-host` | | Hosts discovery may probe whatever address they resolve to, and reach by any redirect. |
+| `discovery-scan-tools` | `WebFetch,WebSearch` | Tools whose calls are scanned for URLs. |
+
+Discovery fetches URLs that only appeared in a conversation, so it limits where a probe can connect:
+
+- It probes internal hosts (loopback, private and carrier-grade NAT addresses) as well as public ones.
+- It never connects to link-local addresses, which covers the IPv4 cloud metadata endpoint `169.254.169.254`, or to unspecified or multicast addresses. Metadata endpoints at other addresses, such as AWS's IPv6 `fd00:ec2::254`, count as internal: they are probed when a URL names them directly, but a redirect from a public site can't reach them.
+- It follows at most 3 redirects, and refuses a redirect from a public address to an internal one, so a public site can't point a probe into your network.
+
+The checks run on the addresses a probe's host resolves to when it connects, so DNS rebinding can't reach a link-local address or turn a redirect from a public host into an internal one; a host with both public and internal addresses counts as public. Probes don't reuse connections, so every redirect hop is checked. Probes use the proxy from `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`. A proxied target is checked against its address as resolved locally, and a name that doesn't resolve locally is treated as public. The proxy resolves the name again on its own, so for proxied requests the checks are best effort. A refused probe isn't cached, so a change to `discovery-allow-host` applies at once. `discovery-allow-host` is not read from a `.env` found by walking up from the working directory.
 
 ---
 

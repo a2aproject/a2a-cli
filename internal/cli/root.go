@@ -32,6 +32,7 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/commandplugin"
 	"github.com/a2aproject/a2a-cli/internal/credhelper"
+	"github.com/a2aproject/a2a-cli/internal/discover"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
 	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-cli/internal/polling"
@@ -46,8 +47,11 @@ type deps struct {
 	cfgLoader       cfgLoaderFunc
 	isTerminal      func() bool
 	notifyInterrupt func(context.Context) (context.Context, context.CancelFunc)
-	// catalogDir overrides the AI Catalog store directory.
-	catalogDir string
+	spawnDetached   func(args []string) error
+	// catalogDir, contactsFile and cacheDir override the default locations.
+	catalogDir   string
+	contactsFile string
+	cacheDir     string
 }
 
 func (d *deps) setDefaults() {
@@ -59,6 +63,9 @@ func (d *deps) setDefaults() {
 	}
 	if d.isTerminal == nil {
 		d.isTerminal = stdioIsTerminal
+	}
+	if d.spawnDetached == nil {
+		d.spawnDetached = discover.SpawnDetached
 	}
 	if d.notifyInterrupt == nil {
 		d.notifyInterrupt = func(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -72,6 +79,8 @@ type globalConfig struct {
 	agentCard    flagparse.URLOrPath
 	catalog      string
 	catalogDir   string
+	contactsFile string
+	cacheDir     string
 	url          string
 	transports   []string
 	svcParams    *flagparse.ServiceParams
@@ -159,6 +168,57 @@ func (g *globalConfig) renderError(err error) int {
 func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	deps.setDefaults()
 	cfg.catalogDir = deps.catalogDir
+	cfg.contactsFile = deps.contactsFile
+	cfg.cacheDir = deps.cacheDir
+
+	// The configuration is loaded once before flags are parsed, to register
+	// command plugins. An error there is held until a command runs, so that
+	// the hook, which must not fail, can ignore it while every other command
+	// reports it as before, even when its flags don't parse.
+	preStore, preErr := deps.cfgLoader(clicfg.LoadOpts{})
+	// configErr is the pre-load error, unless --config replaces the local file
+	// it failed on.
+	configErr := func() error {
+		if cfg.configPath != "" {
+			return nil
+		}
+		return preErr
+	}
+
+	preRun := func(cmd *cobra.Command, args []string) error {
+		if err := configErr(); err != nil {
+			return err
+		}
+		store, err := deps.cfgLoader(clicfg.LoadOpts{ConfigPath: cfg.configPath})
+		if err != nil {
+			return err
+		}
+		bindings, err := clicfg.Bind(cmd.Flags(), store)
+		if err != nil {
+			return err
+		}
+		cfg.bindings = bindings
+		cfg.store = store
+		for _, b := range bindings {
+			if b.Ignored == "" {
+				continue
+			}
+			if _, err := fmt.Fprintf(cfg.stderr(), "warning: ignoring %s from %s; pass --config %s to use it\n", b.Name, b.Ignored, b.Ignored); err != nil {
+				return err
+			}
+		}
+		cfg.initHTTPTransport()
+		cfg.initCredentials()
+
+		switch output.Mode(cfg.output) {
+		case output.ModeText, output.ModeJson, output.ModeJSONL:
+			cfg.Mode = output.Mode(cfg.output)
+		default:
+			return clierr.Usage(fmt.Sprintf("invalid --output %q (want text or json)", cfg.output))
+		}
+
+		return cfg.initEventHandlers(cmd)
+	}
 
 	cmd := &cobra.Command{
 		Use:           "a2a",
@@ -173,37 +233,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 			}
 			return clierr.Usage(fmt.Sprintf("unknown command %q for %q", args[0], cmd.CommandPath()))
 		},
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			store, err := deps.cfgLoader(clicfg.LoadOpts{ConfigPath: cfg.configPath})
-			if err != nil {
-				return err
-			}
-			bindings, err := clicfg.Bind(cmd.Flags(), store)
-			if err != nil {
-				return err
-			}
-			cfg.bindings = bindings
-			cfg.store = store
-			for _, b := range bindings {
-				if b.Ignored == "" {
-					continue
-				}
-				if _, err := fmt.Fprintf(cfg.stderr(), "warning: ignoring %s from %s; pass --config %s to use it\n", b.Name, b.Ignored, b.Ignored); err != nil {
-					return err
-				}
-			}
-			cfg.initHTTPTransport()
-			cfg.initCredentials()
-
-			switch output.Mode(cfg.output) {
-			case output.ModeText, output.ModeJson, output.ModeJSONL:
-				cfg.Mode = output.Mode(cfg.output)
-			default:
-				return clierr.Usage(fmt.Sprintf("invalid --output %q (want text or json)", cfg.output))
-			}
-
-			return cfg.initEventHandlers(cmd)
-		},
+		PersistentPreRunE: preRun,
 	}
 
 	pf := cmd.PersistentFlags()
@@ -234,6 +264,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 		newChatCmd(cfg, deps),
 		newTaskCmd(cfg),
 		newCatalogCmd(cfg),
+		newContactCmd(cfg),
 		newConfigCmd(cfg),
 		newAuthCmd(cfg),
 		newServeCmd(cfg),
@@ -242,18 +273,29 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 		newSkillCmd(cfg),
 		newVersionCmd(cfg),
 	)
-
-	preStore, err := deps.cfgLoader(clicfg.LoadOpts{})
+	hookCmd, err := newHookCmd(cfg, preRun, deps.spawnDetached)
 	if err != nil {
 		return nil, err
 	}
-	if preStore.LookupBool(pluginsEnabledKey) {
+	cmd.AddCommand(hookCmd)
+
+	if preErr == nil && preStore.LookupBool(pluginsEnabledKey) {
 		cfg.pluginsEnabled = true
 		addCommandPlugins(cmd)
 	}
 
 	cmd.SetUsageTemplate(rootUsageTemplate)
 	markUsageErrors(cmd)
+	if preErr != nil {
+		cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+			if cerr := configErr(); cerr != nil {
+				return cerr
+			}
+			return clierr.Usage(err.Error())
+		})
+		// Cobra validates arguments before preRun runs.
+		reportConfigErrBeforeArgs(cmd, hookCmd, configErr)
+	}
 
 	return cmd, nil
 }
@@ -347,6 +389,23 @@ func markUsageErrors(cmd *cobra.Command) {
 		return clierr.Usage(err.Error())
 	})
 	wrapArgsUsage(cmd)
+}
+
+func reportConfigErrBeforeArgs(cmd, skip *cobra.Command, configErr func() error) {
+	if cmd == skip {
+		return
+	}
+	if validate := cmd.Args; validate != nil {
+		cmd.Args = func(c *cobra.Command, args []string) error {
+			if err := configErr(); err != nil {
+				return err
+			}
+			return validate(c, args)
+		}
+	}
+	for _, sub := range cmd.Commands() {
+		reportConfigErrBeforeArgs(sub, skip, configErr)
+	}
 }
 
 func wrapArgsUsage(cmd *cobra.Command) {
