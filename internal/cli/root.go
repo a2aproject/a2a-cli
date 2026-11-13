@@ -46,6 +46,8 @@ type deps struct {
 	cfgLoader       cfgLoaderFunc
 	isTerminal      func() bool
 	notifyInterrupt func(context.Context) (context.Context, context.CancelFunc)
+	// catalogDir overrides the AI Catalog store directory.
+	catalogDir string
 }
 
 func (d *deps) setDefaults() {
@@ -68,6 +70,8 @@ func (d *deps) setDefaults() {
 type globalConfig struct {
 	output       string
 	agentCard    flagparse.URLOrPath
+	catalog      string
+	catalogDir   string
 	url          string
 	transports   []string
 	svcParams    *flagparse.ServiceParams
@@ -154,6 +158,7 @@ func (g *globalConfig) renderError(err error) int {
 
 func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	deps.setDefaults()
+	cfg.catalogDir = deps.catalogDir
 
 	cmd := &cobra.Command{
 		Use:           "a2a",
@@ -203,7 +208,8 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 
 	pf := cmd.PersistentFlags()
 	pf.StringVarP(&cfg.output, "output", "o", "text", "Output format: text, json (indented), or jsonl (one compact JSON object per line)")
-	pf.VarP(&cfg.agentCard, "agent-card", "a", "Agent Card reference: host/origin, full card URL, or local file path")
+	pf.VarP(&cfg.agentCard, "agent-card", "a", "Agent Card reference: host/origin, full card URL, local file path, or an AI Catalog entry identifier")
+	pf.StringVar(&cfg.catalog, "catalog", "", "AI Catalog to resolve --agent-card in: a registered catalog name, or a catalog URL (experimental)")
 	pf.StringVarP(&cfg.url, "endpoint", "e", "", "Agent interface URL for a direct connection; skips card resolution and requires a single --transport flag")
 	pf.StringArrayVar(&cfg.transports, "transport", nil, "Transport preference: rest, jsonrpc, grpc, or an installed plugin name (repeatable, highest preference first)")
 	pf.StringVar(&cfg.a2aVersion, "a2a-version", "", "Controls which a2a-protocol version client will advertise to the server.")
@@ -227,6 +233,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 		newSendCmd(cfg, deps.poller),
 		newChatCmd(cfg, deps),
 		newTaskCmd(cfg),
+		newCatalogCmd(cfg),
 		newConfigCmd(cfg),
 		newAuthCmd(cfg),
 		newServeCmd(cfg),

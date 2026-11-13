@@ -31,7 +31,8 @@ These apply to every client-mode command. Each command selects the agent it talk
 
 | Flag | Short | Description |
 |---|---|---|
-| `--agent-card <ref>` | `-a` | Agent Card reference: a host/origin (the well-known path is appended), a full card URL, or a local file path. The card is resolved and a transport negotiated. |
+| `--agent-card <ref>` | `-a` | Agent Card reference: a host/origin (the well-known path is appended), a full card URL, a local file path, or the identifier of an agent in an [AI Catalog](#ai-catalogs-experimental). The card is resolved and a transport negotiated. |
+| `--catalog <name\|url>` | | AI Catalog to look the `--agent-card` identifier up in: a registered catalog name, or a catalog URL or path. Experimental. |
 | `--endpoint <ref>` | `-e` | Agent interface URL for a direct connection, skipping card resolution. Must be paired with exactly one `--transport`. Mutually exclusive with `--agent-card`. |
 | `--transport <name>` | | Transport preference: `rest`, `jsonrpc`, `grpc`. Repeatable and ordered (highest preference first). With `--agent-card` it overrides the card's preference order; with `--endpoint` exactly one is required. |
 | `--insecure` | | Use plaintext for the built-in gRPC client. By default it uses TLS and verifies the server certificate against the system trust store, or the certificates in `--ca-cert`. |
@@ -156,7 +157,7 @@ To fetch the extended card (if supported):
 a2a card get <url> --extended --auth "Bearer <token>"
 ```
 
-The card reference may also be supplied via the global `-a, --agent-card` flag instead of the positional argument.
+The card reference may also be supplied via the global `-a, --agent-card` flag instead of the positional argument. Like `--agent-card`, it may be the identifier of an agent in an [AI Catalog](#ai-catalogs-experimental).
 
 ### `send` - Send a Message
 
@@ -294,6 +295,41 @@ Prints the updated task status.
 a2a task subscribe -a <url> <task-id>
 ```
 Streams events to stdout until the task reaches a terminal state. Output format matches `send --stream`.
+
+---
+
+## AI Catalogs (experimental)
+
+An [AI Catalog](https://ai-catalog.io/) lists AI artifacts, A2A agents among them. `a2a` can register catalogs and resolve `--agent-card` from the agents they list, so you can refer to an agent by its catalog identifier instead of a card URL.
+
+Registered catalogs live in the store shared with [ai-catalog-cli](https://github.com/Agent-Card/ai-catalog-cli): `~/.ai-catalog`, or the directory in `AI_CATALOG_CACHE_DIR`. A catalog registered with either tool is visible to both. The store layout is not part of the AI Catalog specification, so these commands are experimental, and `a2a` warns about and refuses to modify a store whose format it does not recognize.
+
+```bash
+a2a catalog add corp https://acme.com            # fetches https://acme.com/.well-known/ai-catalog.json
+a2a catalog add local ./ai-catalog.json
+a2a catalog list
+a2a catalog search finance                       # A2A agents whose identifier, name, description or tags match
+a2a catalog search --catalog https://acme.com/ai-catalog.json   # search a catalog without registering it
+a2a catalog update [name]                        # fetch one or every registered catalog again
+a2a catalog remove corp
+```
+
+`search` lists only A2A agents (entries of type `application/a2a-agent-card+json`). Catalogs nested in a catalog are followed up to four levels deep: any catalog may reference `https` URLs, and only a local catalog may reference local files.
+
+Pass an agent's identifier to `--agent-card`:
+
+```bash
+a2a send -a urn:air:acme.com:agent:finance "..."                                              # across all registered catalogs
+a2a send --catalog corp -a urn:air:acme.com:agent:finance "..."                               # in a registered catalog
+a2a send --catalog https://acme.com/ai-catalog.json -a urn:air:acme.com:agent:finance "..."   # in an unregistered catalog
+a2a send -a https://acme.com/finance-catalog.json "..."                                       # a catalog with a single A2A agent
+```
+
+- A `urn:` value of `--agent-card` is an identifier, unless a file with that name exists. With `--catalog`, any value is an identifier.
+- Lookups in registered catalogs read only the local store; run `a2a catalog update` to pick up changes.
+- An identifier listed by more than one catalog is an error; pick one with `--catalog`.
+- When a catalog lists several versions of an agent, the latest is used.
+- A URL passed to `--agent-card` that serves a catalog instead of a card resolves only when the catalog lists exactly one A2A agent; otherwise the error lists the agents.
 
 ---
 
