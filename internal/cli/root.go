@@ -176,13 +176,14 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	// the hook, which must not fail, can ignore it while every other command
 	// reports it as before, even when its flags don't parse.
 	preStore, preErr := deps.cfgLoader(clicfg.LoadOpts{})
-	// configErr is the pre-load error, unless --config replaces the local file
-	// it failed on.
+	// configErr is the pre-load error, or with --config, which replaces the
+	// local file, the error of loading with it.
 	configErr := func() error {
-		if cfg.configPath != "" {
-			return nil
+		if cfg.configPath == "" {
+			return preErr
 		}
-		return preErr
+		_, err := deps.cfgLoader(clicfg.LoadOpts{ConfigPath: cfg.configPath})
+		return err
 	}
 
 	preRun := func(cmd *cobra.Command, args []string) error {
@@ -238,7 +239,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 
 	pf := cmd.PersistentFlags()
 	pf.StringVarP(&cfg.output, "output", "o", "text", "Output format: text, json (indented), or jsonl (one compact JSON object per line)")
-	pf.VarP(&cfg.agentCard, "agent-card", "a", "Agent Card reference: host/origin, full card URL, local file path, or an AI Catalog entry identifier")
+	pf.VarP(&cfg.agentCard, "agent-card", "a", "Agent Card reference: host/origin, full card URL, local file path, an AI Catalog entry identifier, or a contact name")
 	pf.StringVar(&cfg.catalog, "catalog", "", "AI Catalog to resolve --agent-card in: a registered catalog name, or a catalog URL (experimental)")
 	pf.StringVarP(&cfg.url, "endpoint", "e", "", "Agent interface URL for a direct connection; skips card resolution and requires a single --transport flag")
 	pf.StringArrayVar(&cfg.transports, "transport", nil, "Transport preference: rest, jsonrpc, grpc, or an installed plugin name (repeatable, highest preference first)")

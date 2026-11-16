@@ -475,9 +475,11 @@ func failingLocalConfig(loadErr error) cfgLoaderFunc {
 func TestConfigErrorReportedByCommands(t *testing.T) {
 	t.Parallel()
 	loadErr := errors.New("unterminated quoted value")
+	failingUserConfig := func(clicfg.LoadOpts) (*clicfg.Store, error) { return nil, loadErr }
 
 	tests := []struct {
 		name    string
+		loader  cfgLoaderFunc
 		args    []string
 		wantErr error
 	}{
@@ -486,12 +488,16 @@ func TestConfigErrorReportedByCommands(t *testing.T) {
 		{name: "unknown command", args: []string{"no-such-command"}, wantErr: loadErr},
 		{name: "missing argument", args: []string{"task", "get"}, wantErr: loadErr},
 		{name: "explicit config replaces the local file", args: []string{"--config", "a2a.yaml", "contact", "list"}},
+		{name: "explicit config doesn't replace the user config", loader: failingUserConfig, args: []string{"--config", "a2a.yaml", "task", "get"}, wantErr: loadErr},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			env := newContactEnv(t)
 			env.cfgLoader = failingLocalConfig(loadErr)
+			if tc.loader != nil {
+				env.cfgLoader = tc.loader
+			}
 
 			_, _, err := env.run("", tc.args...)
 			if !errors.Is(err, tc.wantErr) {

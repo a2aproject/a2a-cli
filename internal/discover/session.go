@@ -37,6 +37,8 @@ const (
 type sessionState struct {
 	// ContactsDigest identifies the contacts block last injected.
 	ContactsDigest string `json:"contactsDigest,omitempty"`
+	// HadContacts is set once the session has been told about any contact.
+	HadContacts bool `json:"hadContacts,omitempty"`
 	// Injected maps origins of discovered agents already injected to when.
 	Injected map[string]time.Time `json:"injected,omitempty"`
 	// Pending maps origins awaiting a background probe to when it was started.

@@ -163,6 +163,7 @@ func contactsChange(st *sessionState, contactsBlock, digest string) string {
 	st.ContactsDigest = digest
 	switch {
 	case contactsBlock != "":
+		st.HadContacts = true
 		return contactsUpdatedPrefix + contactsBlock
 	case previous != "":
 		return contactsEmptied
@@ -182,9 +183,11 @@ func (h *Hook) sessionStart(source string, st *sessionState, contactsBlock, dige
 		}
 	}
 	blocks := []string{contactsBlock}
-	if source == "compact" && contactsBlock == "" {
+	if contactsBlock != "" {
+		st.HadContacts = true
+	} else if source == "compact" && st.HadContacts {
 		// The summary may still treat removed contacts as trusted.
-		blocks = []string{contactsChange(st, contactsBlock, digest)}
+		blocks = []string{contactsEmptied}
 	}
 	if source == "compact" && h.Discovery {
 		blocks = append(blocks, FormatDiscovered(h.injectedEntries(st)))

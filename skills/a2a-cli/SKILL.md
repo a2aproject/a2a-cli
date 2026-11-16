@@ -131,7 +131,7 @@ Run `a2a <command> --help` for the full, current set. The load-bearing ones:
 
 | Flag | Use |
 |---|---|
-| `-a, --agent-card <host\|url\|path\|urn>` | Resolve the agent's card (picks the transport). A `urn:` is an agent identifier looked up in AI Catalogs. |
+| `-a, --agent-card <host\|url\|path\|urn\|contact>` | Resolve the agent's card (picks the transport). A `urn:` is an agent identifier looked up in your contacts, then in AI Catalogs; a contact name resolves to that contact. |
 | `--catalog <name\|url>` | AI Catalog to look the `-a` identifier up in (experimental). |
 | `-e, --endpoint <url>` + `--transport <rest\|jsonrpc\|grpc>` | Connect to one interface directly, skipping card resolution. |
 | `-o, --output json` | Machine-readable output; add `--stream` for a live event stream. |
