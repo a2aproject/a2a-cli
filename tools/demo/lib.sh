@@ -287,6 +287,16 @@ ai_catalog_tool() {
   ln -sf "$bin" "$DEMO_WORK/tools/ai-catalog"
 }
 
+# skip_from and skip_to mark a wait to cut from the recording, such as a
+# program starting. The output in between still plays, shortened to a moment.
+DEMO_SKIPS=""
+skip_from() {
+  DEMO_SKIP_FROM="$(cast_time)"
+}
+skip_to() {
+  DEMO_SKIPS="$DEMO_SKIPS $DEMO_SKIP_FROM:$(cast_time)"
+}
+
 # cast_time prints the time of the last event recorded in the cast.
 cast_time() {
   [[ -f "$CAST" ]] || { echo 0; return; }

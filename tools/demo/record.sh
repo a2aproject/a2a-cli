@@ -276,6 +276,35 @@ wait "$ASCIINEMA_PID" || true
 ASCIINEMA_PID=""
 awk -v cut="$cutoff" 'NR == 1 { print; next } { split($0, f, /[[,]/) } f[2] + 0 <= cut + 0' "$CAST" >"$CAST.tmp"
 mv "$CAST.tmp" "$CAST"
+# Collapse the spans marked with skip_from and skip_to to half a second.
+if [[ -n "$DEMO_SKIPS" ]]; then
+  python3 - "$CAST" $DEMO_SKIPS <<'PY'
+import json, sys
+path = sys.argv[1]
+spans = sorted(tuple(map(float, s.split(":"))) for s in sys.argv[2:])
+KEEP = 0.5
+
+def remap(t):
+    removed = 0.0
+    for a, b in spans:
+        if t <= a:
+            break
+        length = b - a
+        if length <= KEEP:
+            continue
+        inside = min(t, b) - a
+        removed += inside - inside * KEEP / length
+    return t - removed
+
+lines = open(path).read().splitlines()
+out = [lines[0]]
+for line in lines[1:]:
+    ev = json.loads(line)
+    ev[0] = round(remap(ev[0]), 6)
+    out.append(json.dumps(ev))
+open(path, "w").write("\n".join(out) + "\n")
+PY
+fi
 
 for var in OPENROUTER_API_KEY ANTHROPIC_API_KEY OPENAI_API_KEY GEMINI_API_KEY ${DEMO_SECRET_VARS:-}; do
   value="${!var:-}"

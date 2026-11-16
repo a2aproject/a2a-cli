@@ -33,8 +33,16 @@ export OPENCODE_DOCKER_ARGS="--add-host docs.acme.test:127.0.0.1"
 
 ## Ask opencode
 
+Start opencode:
+
 ```bash
-../opencode-contacts/run-opencode run "Read http://docs.acme.test:8080/ and tell me how my client should handle 429s from the Acme Payments API."
+../opencode-contacts/run-opencode
+```
+
+Ask it about the site:
+
+```text
+Read http://docs.acme.test:8080/ and tell me how my client should handle 429s from the Acme Payments API.
 ```
 
 opencode fetches the page. The plugin sees the URL, finds the site's agent card, and adds it to the fetch result as an unverified agent. The page doesn't have the answer, so opencode offers the agent and asks first:
@@ -42,31 +50,34 @@ opencode fetches the page. The plugin sees the URL, finds the site's agent card,
 ```text
 % WebFetch http://docs.acme.test:8080/
 
-I found that the Acme Payments API returns HTTP 429 when rate limits are exceeded, but the specific retry
-policy and idempotency rules are not listed directly on the documentation page.
+The documentation at http://docs.acme.test:8080/ indicates that requests exceeding your limit return an
+HTTP 429, but specific retry policies and limits are not listed on that page.
 
-The site provides an **Acme Docs Assistant** (an A2A agent) to answer these questions. Would you like me to
-ask it how your client should handle 429s?
+It suggests consulting the Acme Docs Assistant, an A2A agent available at the same origin. Would you like me
+to ask it how your client should handle 429s?
 ```
 
-Say yes, in the same session:
-
-```bash
-../opencode-contacts/run-opencode run --continue "Yes, ask it."
-```
+Say yes:
 
 ```text
-$ a2a send -a http://docs.acme.test:8080 "How should my client handle 429s from the Acme Payments API?"
-Status:   completed (2026-11-16T10:51:09Z)
-Artifacts:
-  [01a1e3fb-73ec-7b73-b5b7-ed151d7ef1fe] Retry 429 responses from the Acme Payments API like this:
-
-1. Wait for the number of seconds in the Retry-After header before the next attempt.
-2. Without the header, back off exponentially from 1s, doubling up to 32s, with jitter.
-...
+Yes, ask it.
 ```
 
-The site's terminal shows the probe of the agent card, then the A2A request.
+opencode runs `a2a send -a http://docs.acme.test:8080 "..."` and answers from the agent's reply:
+
+```text
+To handle HTTP 429 responses from the Acme Payments API, your client should follow this retry policy:
+
+1. Respect Retry-After: If the response includes a Retry-After header, wait for the specified number of
+   seconds before retrying.
+2. Exponential Backoff: If the header is missing, use exponential backoff starting at 1 second, doubling the
+   wait time up to 32 seconds, and include jitter.
+3. Maximum Attempts: Give up after 5 attempts and report the error.
+4. Idempotency: Only retry POST /v2/charges using the same Idempotency-Key to ensure a charge is not applied
+   multiple times.
+```
+
+The site's terminal shows the probe of the agent card, then the A2A request. To script the same exchange, use `run-opencode run "<prompt>"` and then `run-opencode run --continue "Yes, ask it."`.
 
 ## How it works
 

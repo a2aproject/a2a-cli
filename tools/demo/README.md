@@ -67,6 +67,7 @@ Type the commands of the README as written, in its order, so the demo matches th
 | `expect_status <pane> <status>` | Fails the run unless the pane's last task printed that status, such as `completed`. |
 | `clear_pane`, `interrupt`, `pause <s>` | Ctrl-L, Ctrl-C, a pause scaled by `--speed`. |
 | `until_ok <timeout> <cmd...>` | Retries a command off camera. |
+| `skip_from`, `skip_to` | Mark a wait, such as a program starting, to cut to half a second in the recording. |
 | `lesson_agent` | Starts the lessons' agent in `~/a2a-lessons/agent` and writes `~/a2a-lessons/.env`, as lesson 1 leaves them. |
 | `answer_for <prompt> <text>` | In `--fake` mode, makes the agent answer the prompt with the text. |
 | `behave_as <prompt> <command>` | In `--fake` mode, makes the agent handle the prompt as one of its scripted commands. |
