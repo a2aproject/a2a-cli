@@ -243,20 +243,22 @@ func TestVersion(t *testing.T) {
 		}
 	})
 
-	t.Run("json output", func(t *testing.T) {
-		t.Parallel()
-		out := mustRunCMD(t, "version", "-o", "json")
-		var info versionInfo
-		if err := json.Unmarshal([]byte(out), &info); err != nil {
-			t.Fatalf("json.Unmarshal(version output) error = %v", err)
-		}
-		if info.Version == "" {
-			t.Fatalf("a2a version info.Version = %q, want non-empty", info.Version)
-		}
-		if info.GoVersion == "" {
-			t.Fatalf("a2a version info.GoVersion = %q, want non-empty", info.GoVersion)
-		}
-	})
+	for _, mode := range []string{"json", "jsonl"} {
+		t.Run(mode+" output", func(t *testing.T) {
+			t.Parallel()
+			out := mustRunCMD(t, "version", "-o", mode)
+			var info versionInfo
+			if err := json.Unmarshal([]byte(out), &info); err != nil {
+				t.Fatalf("json.Unmarshal(version output) error = %v", err)
+			}
+			if info.Version == "" {
+				t.Fatalf("a2a version info.Version = %q, want non-empty", info.Version)
+			}
+			if info.GoVersion == "" {
+				t.Fatalf("a2a version info.GoVersion = %q, want non-empty", info.GoVersion)
+			}
+		})
+	}
 }
 
 func TestSkill(t *testing.T) {
