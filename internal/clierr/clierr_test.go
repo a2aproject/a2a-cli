@@ -20,7 +20,9 @@ import (
 	"fmt"
 	"io/fs"
 	"net"
+	"net/url"
 	"os"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -261,5 +263,77 @@ func TestCardResolution(t *testing.T) {
 				t.Fatalf("CardResolution(%v) does not wrap the cause", tt.err)
 			}
 		})
+	}
+}
+
+func TestErrorMessageRedactsURL(t *testing.T) {
+	t.Parallel()
+
+	refused := &net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED}
+	// net/http masks the password of the URL it reports, but not the query.
+	getErr := &url.Error{Op: "Get", URL: "http://bob:***@127.0.0.1:1/.well-known/agent-card.json?token=S3CRETQ", Err: refused}
+	// url.Parse reports the URL as given.
+	parseErr := &url.Error{Op: "parse", URL: "http://bob:S3CRETPW@127.0.0.1:x/?token=S3CRETQ", Err: errors.New(`invalid port ":x" after host`)}
+
+	tests := []struct {
+		name string
+		err  *Error
+		want string
+	}{
+		{
+			name: "card request failure",
+			err:  CardResolution(fmt.Errorf("card request failed: %w", getErr)),
+			want: `failed to resolve agent card: card request failed: Get "http://bob:***@127.0.0.1:1/.well-known/agent-card.json": dial tcp: connection refused`,
+		},
+		{
+			name: "card request timeout",
+			err:  CardResolution(fmt.Errorf("card request failed: %w", &url.Error{Op: "Get", URL: getErr.URL, Err: context.DeadlineExceeded})),
+			want: `failed to resolve agent card: card request failed: Get "http://bob:***@127.0.0.1:1/.well-known/agent-card.json": context deadline exceeded`,
+		},
+		{
+			name: "request failure",
+			err:  Classify(fmt.Errorf("failed to send message: %w", getErr)),
+			want: `failed to send message: Get "http://bob:***@127.0.0.1:1/.well-known/agent-card.json": dial tcp: connection refused`,
+		},
+		{
+			name: "unparsable url",
+			err:  Classify(fmt.Errorf("failed to create HTTP request: %w", parseErr)),
+			want: `failed to create HTTP request: parse "http://bob:***@127.0.0.1:x/": invalid port ":x" after host`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if tt.err.Message != tt.want {
+				t.Errorf("Message = %q, want %q", tt.err.Message, tt.want)
+			}
+			if strings.Contains(tt.err.Message, "S3CRET") {
+				t.Errorf("Message %q contains a secret", tt.err.Message)
+			}
+		})
+	}
+}
+
+func TestRedactURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		raw  string
+		want string
+	}{
+		{raw: "https://agent.example/card.json", want: "https://agent.example/card.json"},
+		{raw: "https://agent.example?token=abc", want: "https://agent.example"},
+		{raw: "https://agent.example/?a=1&b=2", want: "https://agent.example/"},
+		{raw: "https://bob:pw@agent.example/x?token=abc", want: "https://bob:***@agent.example/x"},
+		{raw: "https://bob@agent.example/", want: "https://bob@agent.example/"},
+		{raw: "https://agent.example/a@b:c", want: "https://agent.example/a@b:c"},
+		{raw: "agent.example?token=abc", want: "agent.example"},
+	}
+
+	for _, tt := range tests {
+		if got := RedactURL(tt.raw); got != tt.want {
+			t.Errorf("RedactURL(%q) = %q, want %q", tt.raw, got, tt.want)
+		}
 	}
 }

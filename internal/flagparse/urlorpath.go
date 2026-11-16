@@ -15,12 +15,15 @@
 package flagparse
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/a2aproject/a2a-cli/internal/clierr"
 )
 
 // URLOrPath is a pflag.Value that accepts a reference in any of three forms — a
@@ -56,7 +59,12 @@ func (u *URLOrPath) Validate() error {
 	}
 	parsed, err := url.Parse(normalize(u.raw))
 	if err != nil {
-		return fmt.Errorf("invalid agent card reference %q: %w", u.raw, err)
+		// The *url.Error repeats the reference unmasked; keep only its cause.
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			err = urlErr.Err
+		}
+		return fmt.Errorf("invalid agent card reference %q: %w", clierr.RedactURL(u.raw), err)
 	}
 	if parsed.Scheme == "file" {
 		path := parsed.Path
@@ -69,7 +77,7 @@ func (u *URLOrPath) Validate() error {
 		return statCardFile(u.raw, path)
 	}
 	if parsed.Host == "" {
-		return fmt.Errorf("invalid agent card reference %q: missing host", u.raw)
+		return fmt.Errorf("invalid agent card reference %q: missing host", clierr.RedactURL(u.raw))
 	}
 	return nil
 }

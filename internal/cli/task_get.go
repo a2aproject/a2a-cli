@@ -36,7 +36,13 @@ func newTaskGetCmd(cfg *globalConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get <task-id>",
 		Short: "Get task details",
-		Args:  cobra.ExactArgs(1),
+		Long: "Print a task: its status, artifacts and, with --history, its messages.\n\n" +
+			"--wait polls until the task finishes or needs input. --timeout bounds the\n" +
+			"whole wait.",
+		Example: `  a2a task get -a https://agent.example.com <task-id>
+  a2a task get -a https://agent.example.com <task-id> --history 10 -o json
+  a2a task get -a https://agent.example.com <task-id> --wait --timeout 5m`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithTimeout(cmd.Context(), cfg.timeout)
 			defer cancel()

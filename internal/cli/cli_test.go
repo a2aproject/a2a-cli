@@ -663,6 +663,58 @@ func TestSendStreaming(t *testing.T) {
 	}
 }
 
+func TestSendStreamingKeepAliveResetsTimeout(t *testing.T) {
+	t.Parallel()
+
+	capabilities := a2a.AgentCapabilities{Streaming: true}
+	handler := a2asrv.NewHandler(&slowExecutor{delay: 600 * time.Millisecond}, a2asrv.WithCapabilityChecks(&capabilities))
+	keepAlive := a2asrv.WithTransportKeepAlive(20 * time.Millisecond)
+	mux := http.NewServeMux()
+	mux.Handle("/jsonrpc", a2asrv.NewJSONRPCHandler(handler, keepAlive))
+	mux.Handle("/rest/", http.StripPrefix("/rest", a2asrv.NewRESTHandler(handler, keepAlive)))
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	for _, transport := range []string{"jsonrpc", "rest"} {
+		t.Run(transport, func(t *testing.T) {
+			t.Parallel()
+			// The agent sends no event for longer than --timeout, only keep-alives.
+			out, err := runCMD(t, "send", "-e", server.URL+"/"+transport, "--transport", transport, "--stream", "--timeout", "200ms", "-o", "jsonl", "hi")
+			if err != nil {
+				t.Fatalf("a2a send --stream error = %v", err)
+			}
+			if !strings.Contains(out, string(a2a.TaskStateCompleted)) {
+				t.Fatalf("a2a send --stream output = %s, want a completed task", out)
+			}
+		})
+	}
+}
+
+// slowExecutor works for delay without sending an event, then completes.
+type slowExecutor struct {
+	delay time.Duration
+}
+
+func (e *slowExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
+	return func(yield func(a2a.Event, error) bool) {
+		if !yield(a2a.NewSubmittedTask(execCtx, execCtx.Message), nil) {
+			return
+		}
+		select {
+		case <-time.After(e.delay):
+		case <-ctx.Done():
+			return
+		}
+		yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateCompleted, nil), nil)
+	}
+}
+
+func (e *slowExecutor) Cancel(_ context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
+	return func(yield func(a2a.Event, error) bool) {
+		yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateCanceled, nil), nil)
+	}
+}
+
 func TestSendStreamJSONL(t *testing.T) {
 	t.Parallel()
 	url := startTestServer(t)

@@ -40,7 +40,10 @@ func newTaskListCmd(cfg *globalConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List tasks",
-		Args:  cobra.NoArgs,
+		Example: `  a2a task list -a https://agent.example.com
+  a2a task list -a https://agent.example.com --status input-required
+  a2a task list -a https://agent.example.com --context <context-id> --limit 20`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			req := &a2a.ListTasksRequest{
 				Tenant:           cfg.tenant,

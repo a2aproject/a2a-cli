@@ -23,6 +23,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"syscall"
 
@@ -95,7 +96,7 @@ func Usage(msg string) *Error {
 // outcome is binary: either the agent could not be reached (an IO failure), or
 // it was reached but did not yield a usable card.
 func CardResolution(err error) *Error {
-	msg := fmt.Sprintf("failed to resolve agent card: %v", err)
+	msg := fmt.Sprintf("failed to resolve agent card: %v", redactURLs(err))
 	if errors.Is(err, context.DeadlineExceeded) {
 		return &Error{
 			Code:    CodeTimeout,
@@ -170,7 +171,7 @@ func Classify(err error) *Error {
 		return classified
 	}
 
-	msg := err.Error()
+	msg := redactURLs(err)
 
 	if errors.Is(err, context.DeadlineExceeded) {
 		return &Error{
@@ -235,4 +236,37 @@ func isIOError(err error) bool {
 		errors.Is(err, syscall.ECONNREFUSED) ||
 		errors.Is(err, syscall.ECONNRESET) ||
 		errors.Is(err, syscall.EPIPE)
+}
+
+// redactURLs returns err's message with the URL of a *url.Error in its chain
+// passed through RedactURL. net/http masks only the password, and the query
+// string of an agent URL can carry a token.
+func redactURLs(err error) string {
+	msg := err.Error()
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) || urlErr.URL == "" {
+		return msg
+	}
+	return strings.ReplaceAll(msg, urlErr.URL, RedactURL(urlErr.URL))
+}
+
+// RedactURL masks the password of raw and drops its query string, as the a2a-go
+// transports do for their request errors. It works on the text rather than a
+// parsed URL, so a URL that does not parse is redacted too.
+func RedactURL(raw string) string {
+	raw, _, _ = strings.Cut(raw, "?")
+	scheme, rest, ok := strings.Cut(raw, "://")
+	if !ok {
+		return raw
+	}
+	authority, path, hasPath := strings.Cut(rest, "/")
+	if at := strings.LastIndex(authority, "@"); at >= 0 {
+		if user, _, hasPassword := strings.Cut(authority[:at], ":"); hasPassword {
+			authority = user + ":***" + authority[at:]
+		}
+	}
+	if hasPath {
+		return scheme + "://" + authority + "/" + path
+	}
+	return scheme + "://" + authority
 }

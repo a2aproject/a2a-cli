@@ -196,6 +196,18 @@ func TestSourceHeaders(t *testing.T) {
 	}
 }
 
+func TestSourceHeadersErrorRedactsURL(t *testing.T) {
+	t.Parallel()
+	src := &Source{Helpers: []Helper{writeHelper(t, "exit 1")}}
+	_, _, err := src.Headers(t.Context(), "https://bob:S3CRETPW@a.example.com/?token=S3CRETQ")
+	if err == nil {
+		t.Fatal("Source.Headers() error = nil, want an error")
+	}
+	if !strings.HasPrefix(err.Error(), "getting credentials for https://bob:***@a.example.com/: ") {
+		t.Fatalf("Source.Headers() error = %v, want the URL without its password and query", err)
+	}
+}
+
 func TestInterceptor(t *testing.T) {
 	t.Parallel()
 	helper := writeHelper(t, `uri=$(sed 's/.*"uri":"\([^"]*\)".*/\1/'); printf '{"headers":{"Authorization":["Bearer %s"]}}' "$uri"`)
