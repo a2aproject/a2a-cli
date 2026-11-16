@@ -286,8 +286,8 @@ func TestPrintEventResumeHintNamesTheAgent(t *testing.T) {
 			want:       "Resume:     a2a send -a https://agent.example.com --task-id t1 \"<reply>\"\n",
 		},
 		{
-			name: "placeholder",
-			want: "Resume:     a2a send -a <agent> --task-id t1 \"<reply>\"\n",
+			name: "agent from config",
+			want: "Resume:     a2a send --task-id t1 \"<reply>\"\n",
 		},
 	}
 	for _, tc := range testCases {

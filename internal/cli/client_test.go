@@ -26,6 +26,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	"github.com/a2aproject/a2a-cli/internal/clicfg"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/localsrv"
 	"github.com/a2aproject/a2a-cli/internal/testutil"
@@ -270,26 +271,37 @@ func TestAgentFlags(t *testing.T) {
 		agentCard  string
 		endpoint   string
 		transports []string
+		catalog    string
 		tenant     string
 		unixSocket string
+		fromEnv    bool
 		want       string
 	}{
 		{name: "url", agentCard: "https://agent.example.com", want: "-a https://agent.example.com"},
 		{name: "host", agentCard: "localhost:8080", want: "-a localhost:8080"},
 		{name: "card path", agentCard: cardPath, want: "-a " + shellQuote(cardPath)},
 		{name: "path with spaces", agentCard: "./my card's.json", want: `-a './my card'\''s.json'`},
-		{name: "token in query", agentCard: "https://agent.example.com/?token=secret"},
-		{name: "user info", agentCard: "https://user:secret@agent.example.com"},
+		{name: "token in query", agentCard: "https://agent.example.com/?token=secret", want: "-a <agent>"},
+		{name: "user info", agentCard: "https://user:secret@agent.example.com", want: "-a <agent>"},
+		{name: "catalog", agentCard: "acme/agent", catalog: "acme", want: "-a acme/agent --catalog acme"},
 		{name: "endpoint", endpoint: "http://127.0.0.1:9000", transports: []string{"rest"}, want: "-e http://127.0.0.1:9000 --transport rest"},
-		{name: "endpoint with token", endpoint: "http://127.0.0.1:9000/?key=secret", transports: []string{"rest"}},
+		{name: "endpoint with token", endpoint: "http://127.0.0.1:9000/?key=secret", transports: []string{"rest"}, want: "-a <agent>"},
 		{name: "no agent"},
 		{name: "tenant and unix socket", agentCard: "http://localhost", tenant: "acme", unixSocket: "/tmp/a2a.sock", want: "-a http://localhost --tenant acme --unix-socket /tmp/a2a.sock"},
 		{name: "unix socket with token", agentCard: "http://localhost/?token=secret", unixSocket: "/tmp/my sock", want: "-a <agent> --unix-socket '/tmp/my sock'"},
+		{name: "agent from environment", agentCard: "http://localhost", tenant: "acme", fromEnv: true},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			cfg := &globalConfig{url: tc.endpoint, transports: tc.transports, tenant: tc.tenant, unixSocket: tc.unixSocket}
+			cfg := &globalConfig{url: tc.endpoint, transports: tc.transports, catalog: tc.catalog, tenant: tc.tenant, unixSocket: tc.unixSocket}
+			source := "flag"
+			if tc.fromEnv {
+				source = "env"
+			}
+			for _, name := range []string{"agent-card", "endpoint", "transport", "catalog", "tenant", "unix-socket"} {
+				cfg.bindings = append(cfg.bindings, clicfg.FlagBinding{Name: name, Source: source})
+			}
 			if err := cfg.agentCard.Set(tc.agentCard); err != nil {
 				t.Fatalf("agentCard.Set() error = %v", err)
 			}

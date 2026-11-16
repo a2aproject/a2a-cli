@@ -55,8 +55,8 @@ type Printer struct {
 	Out  io.Writer
 	Mode Mode
 	// AgentFlags are the flags that select the agent, ready to paste into a
-	// shell, repeated in the resume hint of an interrupted task. When empty, the
-	// hint shows a placeholder.
+	// shell, repeated in the resume hint of an interrupted task. Empty when
+	// the agent comes from the environment or a config file.
 	AgentFlags string
 
 	// openArtifact is the artifact whose streamed text is being written inline
@@ -341,7 +341,7 @@ func formatTask(task *a2a.Task) string {
 }
 
 // formatResumeHint returns a copy-pasteable command to continue or reply to a task.
-// agentFlags select the agent; when empty, a placeholder takes their place.
+// agentFlags select the agent, if the environment or config doesn't.
 func formatResumeHint(task *a2a.Task, agentFlags string) string {
 	if task.ID == "" {
 		return ""
@@ -349,10 +349,10 @@ func formatResumeHint(task *a2a.Task, agentFlags string) string {
 	if task.Status.State != a2a.TaskStateInputRequired && task.Status.State != a2a.TaskStateAuthRequired {
 		return ""
 	}
-	if agentFlags == "" {
-		agentFlags = "-a <agent>"
+	if agentFlags != "" {
+		agentFlags += " "
 	}
-	return fmt.Sprintf("\n\nResume:     a2a send %s --task-id %s %q\n", agentFlags, task.ID, "<reply>")
+	return fmt.Sprintf("\n\nResume:     a2a send %s--task-id %s %q\n", agentFlags, task.ID, "<reply>")
 }
 
 func formatMessage(msg *a2a.Message) string {

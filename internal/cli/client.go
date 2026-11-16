@@ -74,32 +74,44 @@ func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclie
 }
 
 // agentFlags returns the flags that select the agent, quoted for a shell, so a
-// printed command can reach the same agent: the agent reference, then --tenant
-// and --unix-socket when set. A reference that may carry a credential, in its
-// query string or user info, is left out, and so is a missing one; it is
-// replaced by a placeholder, or, with no other flags, the caller shows one.
+// printed command can reach the same agent: the agent reference, then
+// --catalog, --tenant and --unix-socket. Only flags given on the command line
+// are repeated; a value from the environment or a config file applies again
+// when the printed command runs. A reference that may carry a credential, in
+// its query string or user info, is replaced by a placeholder.
 func agentFlags(cfg *globalConfig) string {
+	fromFlag := make(map[string]bool)
+	for _, b := range cfg.bindings {
+		if b.Source == "flag" {
+			fromFlag[b.Name] = true
+		}
+	}
 	var flags []string
 	switch {
-	case cfg.agentCard.IsSet():
-		if !mayCarryCredential(cfg.agentCard.URL()) {
+	case fromFlag["agent-card"] && cfg.agentCard.IsSet():
+		if mayCarryCredential(cfg.agentCard.URL()) {
+			flags = append(flags, "-a <agent>")
+		} else {
 			flags = append(flags, "-a "+shellQuote(cfg.agentCard.String()))
 		}
-	case cfg.url != "":
-		if !mayCarryCredential(cfg.url) && len(cfg.transports) == 1 {
+		if fromFlag["catalog"] && cfg.catalog != "" {
+			if mayCarryCredential(cfg.catalog) {
+				flags = append(flags, "--catalog <catalog>")
+			} else {
+				flags = append(flags, "--catalog "+shellQuote(cfg.catalog))
+			}
+		}
+	case fromFlag["endpoint"] && cfg.url != "":
+		if mayCarryCredential(cfg.url) || len(cfg.transports) != 1 {
+			flags = append(flags, "-a <agent>")
+		} else {
 			flags = append(flags, "-e "+shellQuote(cfg.url)+" --transport "+shellQuote(cfg.transports[0]))
 		}
 	}
-	if cfg.tenant == "" && cfg.unixSocket == "" {
-		return strings.Join(flags, " ")
-	}
-	if len(flags) == 0 {
-		flags = append(flags, "-a <agent>")
-	}
-	if cfg.tenant != "" {
+	if fromFlag["tenant"] && cfg.tenant != "" {
 		flags = append(flags, "--tenant "+shellQuote(cfg.tenant))
 	}
-	if cfg.unixSocket != "" {
+	if fromFlag["unix-socket"] && cfg.unixSocket != "" {
 		flags = append(flags, "--unix-socket "+shellQuote(cfg.unixSocket))
 	}
 	return strings.Join(flags, " ")
