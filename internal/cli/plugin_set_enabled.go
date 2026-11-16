@@ -28,6 +28,8 @@ func newPluginSetEnabledCmd(cfg *globalConfig) *cobra.Command {
 	return &cobra.Command{
 		Use:   "set-enabled <true|false>",
 		Short: "Enable or disable command plugins in the user config",
+		Example: `  a2a plugin set-enabled true
+  a2a plugin set-enabled false`,
 		Long: "Enable or disable discovery and loading of command plugins.\n\n" +
 			"The setting is written to the user config file (~/.config/a2a-cli/config.yaml) " +
 			"as plugins-enabled and applies to every invocation until changed.",

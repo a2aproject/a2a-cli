@@ -25,9 +25,10 @@ import (
 
 func newPushConfigDeleteCmd(cfg *globalConfig) *cobra.Command {
 	return &cobra.Command{
-		Use:   "delete <task-id> <config-id>",
-		Short: "Delete a task's push-notification configuration",
-		Args:  cobra.ExactArgs(2),
+		Use:     "delete <task-id> <config-id>",
+		Short:   "Delete a task's push-notification configuration",
+		Example: `  a2a task push-config delete -a https://agent.example.com <task-id> <config-id>`,
+		Args:    cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithTimeout(cmd.Context(), cfg.timeout)
 			defer cancel()

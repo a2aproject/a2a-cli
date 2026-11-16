@@ -43,7 +43,9 @@ func newPluginListCmd(cfg *globalConfig) *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
 		Short: "List installed command plugins discovered on PATH",
-		Args:  cobra.NoArgs,
+		Example: `  a2a plugin list
+  a2a plugin list -o json`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			entries := collectPluginEntries(cmd)
 			if cfg.IsJSON() {

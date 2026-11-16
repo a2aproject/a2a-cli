@@ -161,8 +161,13 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	cfg.catalogDir = deps.catalogDir
 
 	cmd := &cobra.Command{
-		Use:           "a2a",
-		Short:         "CLI for the Agent-to-Agent protocol",
+		Use:   "a2a",
+		Short: "CLI for the Agent-to-Agent protocol",
+		Long: "Discover, message, and manage A2A agents from your terminal.\n\n" +
+			"Pick the agent with --agent-card (a host, a card URL or a card file) or\n" +
+			"--endpoint with --transport. Every flag can also come from an A2ACLI_*\n" +
+			"environment variable or a config file; a2a config show prints where each\n" +
+			"value came from.",
 		Version:       buildVersionInfo().Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,

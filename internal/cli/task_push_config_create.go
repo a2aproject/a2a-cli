@@ -40,7 +40,10 @@ func newPushConfigCreateCmd(cfg *globalConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create <task-id>",
 		Short: "Create a push-notification configuration for a task",
-		Args:  cobra.ExactArgs(1),
+		Example: `  a2a task push-config create -a https://agent.example.com <task-id> --url https://hooks.example.com/a2a
+  a2a task push-config create -a https://agent.example.com <task-id> --url https://hooks.example.com/a2a \
+    --auth-scheme Bearer --auth-credentials "$HOOK_TOKEN"`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			f.taskID = args[0]
 			f.tenant = cfg.tenant
