@@ -14,6 +14,10 @@
 #
 # summary: examples/agent-discovery: opencode discovers a site's agent and delegates after asking (needs Docker and GEMINI_API_KEY; not in CI)
 
+# Long replies: keep the pauses after them, so they can be read.
+DEMO_GIF_SPEED=1.25
+DEMO_GIF_IDLE=7
+
 prepare() {
   [[ -n "${GEMINI_API_KEY:-}" ]] || die "set GEMINI_API_KEY, for example from gcloud services api-keys get-key-string"
   ln -sfn "$REPO_ROOT" "$HOME/a2a-cli"
@@ -48,12 +52,12 @@ scene() {
   run B '../opencode-contacts/run-opencode run "Read http://docs.acme.test:8080/ and tell me how my client should handle 429s from the Acme Payments API."' 300
   wait_text A 'agent card' 5
   wait_text B 'Acme Docs Assistant' 5
-  pause 5
+  pause 8
 
   clear_pane B
   run B '../opencode-contacts/run-opencode run --continue "Yes, ask it."' 300
   wait_text B 'a2a send -a http://docs.acme.test:8080' 5
   wait_text A 'A2A request' 5
   wait_text B 'Retry-After' 5
-  pause 5
+  pause 8
 }

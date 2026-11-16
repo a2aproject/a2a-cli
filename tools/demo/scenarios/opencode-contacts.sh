@@ -14,6 +14,10 @@
 #
 # summary: examples/opencode-contacts: opencode delegates to a contact (needs Docker and GEMINI_API_KEY; not in CI)
 
+# Long replies: keep the pauses after them, so they can be read.
+DEMO_GIF_SPEED=1.25
+DEMO_GIF_IDLE=7
+
 prepare() {
   [[ -n "${GEMINI_API_KEY:-}" ]] || die "set GEMINI_API_KEY, for example from gcloud services api-keys get-key-string"
   [[ -n "$DEMO_FAKE" ]] && log "opencode needs a real model; --fake only affects a2a-serve agents"
@@ -44,18 +48,18 @@ scene() {
   say B "Add the contact"
   run B 'a2a contact add release-notes localhost:9201 --note "Use for any release notes or changelog text"'
   wait_text B 'Added contact release-notes' 5
-  pause 2
+  pause 8
 
   clear_pane B
   say B "Ask opencode"
   run B './run-opencode run "Which A2A agents can you delegate to?"' 300
   wait_text B 'release-notes' 5
-  pause 4
+  pause 8
 
   clear_pane B
   run B "cat commits.txt"
   run B './run-opencode run "Write release notes for the commits in commits.txt."' 300
   wait_text B 'a2a send -a release-notes' 5
   wait_text B 'Save trusted agents under a short name' 5
-  pause 5
+  pause 8
 }

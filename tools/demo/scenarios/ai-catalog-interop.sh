@@ -14,6 +14,10 @@
 #
 # summary: examples/ai-catalog-interop: a contact seen by ai-catalog, an ai-catalog catalog used by a2a
 
+# Long replies: keep the pauses after them, so they can be read.
+DEMO_GIF_SPEED=1.25
+DEMO_GIF_IDLE=7
+
 prepare() {
   ai_catalog_tool
   mkdir -p "$HOME/ai-catalog-interop"
@@ -42,7 +46,7 @@ scene() {
   wait_text B 'a2a-contacts +file://' 5
   run B "ai-catalog search weather"
   wait_text B 'urn:ai-catalog:a2a-cli:weather +Weather' 5
-  pause 3
+  pause 8
 
   clear_pane B
   say B "A catalog, used by a2a"
@@ -51,17 +55,17 @@ scene() {
   run B "a2a catalog list"
   run B "a2a catalog search travel"
   wait_text B 'urn:air:acme.example:agent:travel +Travel Desk' 5
-  pause 3
+  pause 8
 
   clear_pane B
   run B 'a2a send -a urn:air:acme.example:agent:travel "Lisbon, 3 nights from Dec 2"'
   expect_status B completed
-  pause 2
+  pause 8
   clear_pane B
   run B "a2a contact add travel urn:air:acme.example:agent:travel"
   run B 'a2a send -a travel "Porto, 1 night from Dec 5"'
   expect_status B completed
   run B "a2a contact list"
   wait_text B 'travel +Travel Desk' 5
-  pause 4
+  pause 8
 }

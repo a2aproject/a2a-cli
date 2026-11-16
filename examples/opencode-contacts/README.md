@@ -40,7 +40,7 @@ opencode knows the contact from the start of the session:
 ```text
 I can delegate to the following A2A agent:
 
-- **release-notes**: Writes user-facing release notes from a list of commits in the team's house style. Use this for any release notes or changelog text.
+- **release-notes**: Writes user-facing release notes from a list of commits in the team's house style. (Use for any release notes or changelog text).
 ```
 
 Ask for release notes, and opencode sends the commits in [`commits.txt`](commits.txt) to the contact:
@@ -50,12 +50,12 @@ Ask for release notes, and opencode sends the commits in [`commits.txt`](commits
 ```
 
 ```text
-$ a2a send -a release-notes "Write release notes for these commits:
+$ a2a send -a release-notes "Write user-facing release notes for the following commits:
 a41c2e9 feat(contact): save trusted agents under a short name
 ..."
-Status:   completed (2026-11-16T10:10:58Z)
+Status:   completed (2026-11-16T10:48:29Z)
 Artifacts:
-  [01a1e3d6-aaf3-730f-8360-90f1084da0e0] ## What's new
+  [01a1e3f9-01ad-7dcc-aece-17d38d6cb8e9] ## What's new
 
 - Save trusted agents under a short name.
 - Keep the user config error when the hook can't read it.

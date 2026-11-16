@@ -42,13 +42,11 @@ opencode fetches the page. The plugin sees the URL, finds the site's agent card,
 ```text
 % WebFetch http://docs.acme.test:8080/
 
-The Acme Payments API returns HTTP 429 when rate limits are exceeded, but the specific retry policy and
-idempotency rules depend on your account and API version.
+I found that the Acme Payments API returns HTTP 429 when rate limits are exceeded, but the specific retry
+policy and idempotency rules are not listed directly on the documentation page.
 
-The documentation suggests using the **Acme Docs Assistant** (an A2A agent at `http://docs.acme.test:8080`)
-to get the specific policy and client code for your setup.
-
-Should I ask the Acme Docs Assistant for the retry policy and client code that applies to you?
+The site provides an **Acme Docs Assistant** (an A2A agent) to answer these questions. Would you like me to
+ask it how your client should handle 429s?
 ```
 
 Say yes, in the same session:
@@ -58,10 +56,10 @@ Say yes, in the same session:
 ```
 
 ```text
-$ a2a send -a http://docs.acme.test:8080 "How should my client handle 429s from the Acme Payments API? Please provide the retry policy and client code."
-Status:   completed (2026-11-16T10:14:14Z)
+$ a2a send -a http://docs.acme.test:8080 "How should my client handle 429s from the Acme Payments API?"
+Status:   completed (2026-11-16T10:51:09Z)
 Artifacts:
-  [01a1e3d9-a783-751d-9c0f-050dfa774058] Retry 429 responses from the Acme Payments API like this:
+  [01a1e3fb-73ec-7b73-b5b7-ed151d7ef1fe] Retry 429 responses from the Acme Payments API like this:
 
 1. Wait for the number of seconds in the Retry-After header before the next attempt.
 2. Without the header, back off exponentially from 1s, doubling up to 32s, with jitter.

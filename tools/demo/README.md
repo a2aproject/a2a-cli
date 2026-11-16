@@ -27,6 +27,8 @@ tools/demo/record.sh 01-first-message --fake --gif       # record and render too
 
 `ai-catalog-interop` uses `ai-catalog` from your `PATH`, or fetches a pinned release into `~/.cache/a2a-cli-demo`. `opencode-contacts` and `agent-discovery` run opencode in Docker with a real model, so they need Docker and `GEMINI_API_KEY`, and CI doesn't play them. To use the Gemini key of a Google Cloud project, run `export GEMINI_API_KEY="$(gcloud services api-keys get-key-string <key-name> --format='value(keyString)')"` with the key's resource name from `gcloud services api-keys list`.
 
+A scenario with long replies to read can set `DEMO_GIF_SPEED` and `DEMO_GIF_IDLE` (the longest pause kept, in seconds; default 2) at its top.
+
 Other flags: `--speed 2` types and pauses twice as fast, `--size 120x32` sets the terminal, `--gif-speed` the GIF's playback speed, and `--keep` keeps `/tmp/a2a-demo` for debugging. Watch a run live with `tmux -L a2a-demo attach -r`.
 
 Copy a reviewed GIF next to its README:

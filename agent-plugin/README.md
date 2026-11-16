@@ -38,7 +38,9 @@ npx skills add https://github.com/a2aproject/agent-plugins/tree/main/plugins/a2a
 a2a-cli/
 ├── plugin.json          # Agent Plugins 1.0.0 manifest
 ├── LICENSE
-├── hooks/
+├── .claude-plugin/
+│   └── plugin.json      # Claude Code manifest, pointing at its hooks
+├── com.anthropic.claude-code/
 │   └── hooks.json       # Claude Code hooks running `a2a hook`
 ├── ai.opencode/
 │   └── plugins/
@@ -56,7 +58,7 @@ Ask your agent for A2A work and it loads the skill on its own, for example:
 
 ## Contacts and agent discovery (Claude Code, opencode)
 
-In Claude Code, the hooks run `a2a hook`. opencode has no command hooks, so copy `ai.opencode/plugins/a2a-hook.js` into `~/.config/opencode/plugins/`; it runs `a2a hook` from opencode's plugin events, scans `webfetch` and `websearch` calls, and adds the same context.
+In Claude Code, the hooks in `com.anthropic.claude-code/hooks.json`, which `.claude-plugin/plugin.json` points to, run `a2a hook`. opencode has no command hooks, so copy `ai.opencode/plugins/a2a-hook.js` into `~/.config/opencode/plugins/`; it runs `a2a hook` from opencode's plugin events, scans `webfetch` and `websearch` calls, and adds the same context.
 
 The hooks run `a2a hook`, which tells your agent which A2A agents it can delegate to:
 

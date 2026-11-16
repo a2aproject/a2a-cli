@@ -30,7 +30,7 @@ usage: tools/demo/record.sh <scenario>|list [flags]
   --size COLSxROWS terminal size (default 120x32)
   --speed N       type and pause N times faster (default 1)
   --gif           also render a GIF (fetches agg and the font on first use)
-  --gif-speed N   play the GIF N times faster (default 1.5)
+  --gif-speed N   play the GIF N times faster (default 1.5, or the scenario's DEMO_GIF_SPEED)
   --keep          keep the work directory
   --no-record     play the scenario without recording it, as CI does (no asciinema needed)
 
@@ -59,7 +59,7 @@ DEMO_OUT="$DEMO_TOOLS/out"
 SIZE="120x32"
 SPEED=1
 GIF=""
-GIF_SPEED=1.5
+GIF_SPEED=""
 KEEP=""
 NO_RECORD=""
 while [[ $# -gt 0 ]]; do
@@ -286,6 +286,6 @@ for var in OPENROUTER_API_KEY ANTHROPIC_API_KEY OPENAI_API_KEY GEMINI_API_KEY ${
 done
 
 if [[ -n "$GIF" ]]; then
-  "$DEMO_TOOLS/compose.sh" "$CAST" "${CAST%.cast}.gif" --speed "$GIF_SPEED"
+  "$DEMO_TOOLS/compose.sh" "$CAST" "${CAST%.cast}.gif" --speed "${GIF_SPEED:-${DEMO_GIF_SPEED:-1.5}}" --idle "${DEMO_GIF_IDLE:-2}"
 fi
 ls -1 "$DEMO_OUT/$DEMO_NAME".* 2>/dev/null || true
