@@ -261,6 +261,32 @@ lesson_agent() {
   echo "A2ACLI_AGENT_CARD=$(a2a-serve status --dir "$HOME/a2a-lessons/agent" --url=local)" >"$HOME/a2a-lessons/.env"
 }
 
+# ai_catalog_tool puts ai-catalog on the panes' PATH: the one on your PATH, or
+# a pinned release fetched into ~/.cache/a2a-cli-demo.
+AI_CATALOG_VERSION="v0.4.0"
+ai_catalog_tool() {
+  local bin
+  bin="$(PATH="$DEMO_REAL_PATH" command -v ai-catalog || true)"
+  if [[ -z "$bin" ]]; then
+    local cache="${A2A_DEMO_CACHE:-$DEMO_REAL_HOME/.cache/a2a-cli-demo}/ai-catalog-$AI_CATALOG_VERSION" asset
+    bin="$cache/ai-catalog"
+    if [[ ! -x "$bin" ]]; then
+      case "$(uname -s)/$(uname -m)" in
+        Linux/x86_64) asset="ai-catalog-linux-amd64-musl" ;;
+        Linux/aarch64) asset="ai-catalog-linux-arm64-musl" ;;
+        Darwin/x86_64) asset="ai-catalog-darwin-amd64" ;;
+        Darwin/arm64) asset="ai-catalog-darwin-arm64" ;;
+        *) die "no prebuilt ai-catalog for $(uname -s)/$(uname -m); install ai-catalog" ;;
+      esac
+      log "fetching ai-catalog $AI_CATALOG_VERSION ($asset)"
+      mkdir -p "$cache"
+      curl -fsSL "https://github.com/Agent-Card/ai-catalog-cli/releases/download/$AI_CATALOG_VERSION/$asset.tar.gz" |
+        tar -xz -C "$cache" ai-catalog
+    fi
+  fi
+  ln -sf "$bin" "$DEMO_WORK/tools/ai-catalog"
+}
+
 # cast_time prints the time of the last event recorded in the cast.
 cast_time() {
   [[ -f "$CAST" ]] || { echo 0; return; }

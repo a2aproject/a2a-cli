@@ -25,6 +25,8 @@ tools/demo/record.sh 01-first-message --fake --gif       # record and render too
 
 `--fake` answers with a2a-serve's scripted test agent, so a run needs no Docker or model key and gives the same replies every time. The published GIFs are recorded with `--fake`. Without it, the lessons' agent runs opencode with `OPENROUTER_API_KEY`, as the lessons describe.
 
+`ai-catalog-interop` uses `ai-catalog` from your `PATH`, or fetches a pinned release into `~/.cache/a2a-cli-demo`. `opencode-contacts` and `agent-discovery` run opencode in Docker with a real model, so they need Docker and `GEMINI_API_KEY`, and CI doesn't play them. To use the Gemini key of a Google Cloud project, run `export GEMINI_API_KEY="$(gcloud services api-keys get-key-string <key-name> --format='value(keyString)')"` with the key's resource name from `gcloud services api-keys list`.
+
 Other flags: `--speed 2` types and pauses twice as fast, `--size 120x32` sets the terminal, `--gif-speed` the GIF's playback speed, and `--keep` keeps `/tmp/a2a-demo` for debugging. Watch a run live with `tmux -L a2a-demo attach -r`.
 
 Copy a reviewed GIF next to its README:
@@ -33,7 +35,7 @@ Copy a reviewed GIF next to its README:
 |---|---|
 | `home` | `docs/assets/demo.gif` |
 | `01-first-message` ... `05-credentials` | `lessons/<scenario>/demo.gif` |
-| `scripting-with-jq`, `credential-helper`, `a2a-hello`, `a2a-transport-echo` | `examples/<scenario>/demo.gif` |
+| `scripting-with-jq`, `credential-helper`, `a2a-hello`, `a2a-transport-echo`, `ai-catalog-interop`, `opencode-contacts`, `agent-discovery` | `examples/<scenario>/demo.gif` |
 
 Re-render a cast without recording it again with `tools/demo/compose.sh <name>.cast <out.gif>`.
 

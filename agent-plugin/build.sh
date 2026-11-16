@@ -39,6 +39,7 @@ for skill_md in "$root"/skills/*/SKILL.md; do
 done
 
 cp -R "$root/agent-plugin/hooks" "$out/hooks"
+cp -R "$root/agent-plugin/ai.opencode" "$out/ai.opencode"
 cp "$root/agent-plugin/README.md" "$out/README.md"
 cp "$root/LICENSE" "$out/LICENSE"
 jq --arg v "$version" '{"$schema": ."$schema", name: .name, version: $v} + .' \

@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Runs opencode with the a2a-cli plugin for opencode in a Docker container, so
+# you can try the plugin without installing opencode. The arguments go to
+# opencode, as in: run-opencode run "What can you do?"
+#
+# The container gets an a2a built from this checkout, the plugin, your contact
+# book (read-only, without your credential helpers) and the current directory as its workspace. It uses the host
+# network, so it reaches agents on localhost. Set GEMINI_API_KEY for the model,
+# OPENCODE_DOCKER_ARGS for extra docker run flags, and OPENCODE_VOLUME to name
+# the volumes that keep opencode's sessions and a2a's cache between runs.
+set -euo pipefail
+
+: "${GEMINI_API_KEY:?set GEMINI_API_KEY to a Gemini API key}"
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+repo="$(cd "$here/../.." && pwd)"
+image="${OPENCODE_IMAGE:-ghcr.io/a2aproject/harness-opencode:latest}"
+volume="${OPENCODE_VOLUME:-a2a-example-opencode}"
+
+# The image's a2a may predate `a2a hook`, so build one for the container.
+bin="${XDG_CACHE_HOME:-$HOME/.cache}/a2a-cli-examples"
+mkdir -p "$bin"
+(cd "$repo" && CGO_ENABLED=0 GOOS=linux GOARCH="$(docker version -f '{{.Server.Arch}}')" go build -o "$bin/a2a" .)
+
+mounts=()
+book="$HOME/.config/a2a-cli/catalog.json"
+[[ -f "$book" ]] && mounts+=(-v "$book:/home/agent/.config/a2a-cli/catalog.json:ro")
+
+tty=()
+[[ -t 0 && -t 1 ]] && tty=(-it)
+# shellcheck disable=SC2086
+exec docker run --rm "${tty[@]}" --network host \
+  -e GOOGLE_GENERATIVE_AI_API_KEY="$GEMINI_API_KEY" \
+  -v "$bin/a2a:/usr/local/bin/a2a:ro" \
+  -v "$repo/agent-plugin/ai.opencode/plugins/a2a-hook.js:/home/agent/.config/opencode/plugins/a2a-hook.js:ro" \
+  -v "$here/opencode.json:/home/agent/.config/opencode/opencode.json:ro" \
+  "${mounts[@]}" \
+  -v "$volume-data:/home/agent/.local/share/opencode" \
+  -v "$volume-cache:/home/agent/.cache" \
+  -v "$PWD:$PWD" -w "$PWD" \
+  ${OPENCODE_DOCKER_ARGS:-} \
+  --entrypoint opencode "$image" "$@"

@@ -107,6 +107,7 @@ if tmux -L a2a-demo has-session 2>/dev/null; then
   exit 1
 fi
 REAL_HOME="$HOME"
+export DEMO_REAL_PATH="$PATH"
 mkdir -p "$DEMO_WORK/you" "$DEMO_WORK/bin" "$DEMO_WORK/fake/bin"
 
 echo "[demo] building a2a" >&2
@@ -164,6 +165,9 @@ mkdir -p "$DEMO_WORK/tools"
 for tool in go jq curl; do
   ln -s "$(command -v "$tool")" "$DEMO_WORK/tools/$tool"
 done
+if command -v docker >/dev/null; then
+  ln -s "$(command -v docker)" "$DEMO_WORK/tools/docker"
+fi
 DEMO_PANE_PATH="$DEMO_WORK/bin:$DEMO_WORK/you/bin:$DEMO_WORK/tools:/usr/local/bin:/usr/bin:/bin"
 
 # The scenario runs with its own HOME, so it starts with no configuration and
