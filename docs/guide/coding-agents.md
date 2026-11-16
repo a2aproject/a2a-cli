@@ -60,7 +60,7 @@ and wait for its answer.
 
 ## Contacts and agent discovery
 
-In Claude Code the plugin also adds hooks that run `a2a hook` on `SessionStart`, `UserPromptSubmit` and `PostToolBatch`. For opencode, the plugin carries an opencode plugin, `ai.opencode/plugins/a2a-hook.js`, that runs `a2a hook` from opencode's events; copy it into `~/.config/opencode/plugins/`. The [opencode calls a contact](../../examples/opencode-contacts/README.md) and [agent discovery](../../examples/agent-discovery/README.md) examples show both in action. The hooks tell the agent which A2A agents it can delegate to:
+In Claude Code the plugin also adds hooks that run `a2a hook` on `SessionStart`, `UserPromptSubmit` and `PostToolBatch`. For opencode, the plugin carries an opencode plugin, `ai.opencode/plugins/a2a-hook.js`, that runs `a2a hook` from opencode's events; copy it into `~/.config/opencode/plugins/`. The [OpenCode calls a contact](../../examples/opencode-contacts/README.md) and [agent discovery](../../examples/agent-discovery/README.md) examples show both in action. The hooks tell the agent which A2A agents it can delegate to:
 
 - **Contacts.** Your [contacts](contacts.md) are listed as trusted at the start of a session, after a compaction, and again whenever the contact book changes. After a compaction the agents discovered earlier in the session are listed again too.
 - **Discovered agents.** When a URL appears in a prompt or in a `WebFetch` or `WebSearch` call, `a2a` looks for an agent card at that origin's `/.well-known/agent-card.json`. Agents it finds are listed as unverified, and the agent is told to ask you before delegating to them. Save one as a contact to trust it.

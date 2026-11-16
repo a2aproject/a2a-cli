@@ -1,4 +1,4 @@
-# opencode Calls a Contact
+# OpenCode Calls a Contact
 
 Save an agent as a contact, and your coding agent knows to delegate to it. This example runs [opencode](https://opencode.ai) with the a2a-cli plugin for opencode: the plugin tells opencode about your contacts at the start of each session, and opencode calls them with `a2a send`.
 

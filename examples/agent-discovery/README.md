@@ -6,7 +6,7 @@ Sites can publish an A2A agent at `/.well-known/agent-card.json`. With the a2a-c
 
 ## Prerequisites
 
-- `a2a`, Go and Docker, as in [opencode Calls a Contact](../opencode-contacts/README.md), whose [`run-opencode`](../opencode-contacts/run-opencode) this example uses.
+- `a2a`, Go and Docker, as in [OpenCode Calls a Contact](../opencode-contacts/README.md), whose [`run-opencode`](../opencode-contacts/run-opencode) this example uses.
 - A [Gemini API key](https://aistudio.google.com/apikey) in `GEMINI_API_KEY`.
 
 Run the commands in this directory. Serve the site in a second terminal:
