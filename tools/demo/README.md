@@ -25,6 +25,10 @@ tools/demo/record.sh 01-first-message --fake --gif       # record and render too
 
 `--fake` answers with a2a-serve's scripted test agent, so a run needs no Docker or model key and gives the same replies every time. The published GIFs are recorded with `--fake`. Without it, the lessons' agent runs opencode with `OPENROUTER_API_KEY`, as the lessons describe.
 
+`ai-catalog-interop` uses `ai-catalog` from your `PATH`, or fetches a pinned release into `~/.cache/a2a-cli-demo`. `opencode-contacts` and `agent-discovery` run opencode in Docker with a real model, so they need Docker and `GEMINI_API_KEY`, and CI doesn't play them. To use the Gemini key of a Google Cloud project, run `export GEMINI_API_KEY="$(gcloud services api-keys get-key-string <key-name> --format='value(keyString)')"` with the key's resource name from `gcloud services api-keys list`.
+
+A scenario with long replies to read can set `DEMO_GIF_SPEED` and `DEMO_GIF_IDLE` (the longest pause kept, in seconds; default 2) at its top.
+
 Other flags: `--speed 2` types and pauses twice as fast, `--size 120x32` sets the terminal, `--gif-speed` the GIF's playback speed, and `--keep` keeps `/tmp/a2a-demo` for debugging. Watch a run live with `tmux -L a2a-demo attach -r`.
 
 Copy a reviewed GIF next to its README:
@@ -33,7 +37,7 @@ Copy a reviewed GIF next to its README:
 |---|---|
 | `home` | `docs/assets/demo.gif` |
 | `01-first-message` ... `05-credentials` | `lessons/<scenario>/demo.gif` |
-| `scripting-with-jq`, `credential-helper`, `a2a-hello`, `a2a-transport-echo` | `examples/<scenario>/demo.gif` |
+| `scripting-with-jq`, `credential-helper`, `a2a-hello`, `a2a-transport-echo`, `ai-catalog-interop`, `opencode-contacts`, `agent-discovery` | `examples/<scenario>/demo.gif` |
 
 Re-render a cast without recording it again with `tools/demo/compose.sh <name>.cast <out.gif>`.
 
@@ -63,6 +67,7 @@ Type the commands of the README as written, in its order, so the demo matches th
 | `expect_status <pane> <status>` | Fails the run unless the pane's last task printed that status, such as `completed`. |
 | `clear_pane`, `interrupt`, `pause <s>` | Ctrl-L, Ctrl-C, a pause scaled by `--speed`. |
 | `until_ok <timeout> <cmd...>` | Retries a command off camera. |
+| `skip_from`, `skip_to` | Mark a wait, such as a program starting, to cut to half a second in the recording. |
 | `lesson_agent` | Starts the lessons' agent in `~/a2a-lessons/agent` and writes `~/a2a-lessons/.env`, as lesson 1 leaves them. |
 | `answer_for <prompt> <text>` | In `--fake` mode, makes the agent answer the prompt with the text. |
 | `behave_as <prompt> <command>` | In `--fake` mode, makes the agent handle the prompt as one of its scripted commands. |

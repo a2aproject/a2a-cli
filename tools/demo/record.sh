@@ -30,7 +30,7 @@ usage: tools/demo/record.sh <scenario>|list [flags]
   --size COLSxROWS terminal size (default 120x32)
   --speed N       type and pause N times faster (default 1)
   --gif           also render a GIF (fetches agg and the font on first use)
-  --gif-speed N   play the GIF N times faster (default 1.5)
+  --gif-speed N   play the GIF N times faster (default 1.5, or the scenario's DEMO_GIF_SPEED)
   --keep          keep the work directory
   --no-record     play the scenario without recording it, as CI does (no asciinema needed)
 
@@ -59,7 +59,7 @@ DEMO_OUT="$DEMO_TOOLS/out"
 SIZE="120x32"
 SPEED=1
 GIF=""
-GIF_SPEED=1.5
+GIF_SPEED=""
 KEEP=""
 NO_RECORD=""
 while [[ $# -gt 0 ]]; do
@@ -107,6 +107,7 @@ if tmux -L a2a-demo has-session 2>/dev/null; then
   exit 1
 fi
 REAL_HOME="$HOME"
+export DEMO_REAL_PATH="$PATH"
 mkdir -p "$DEMO_WORK/you" "$DEMO_WORK/bin" "$DEMO_WORK/fake/bin"
 
 echo "[demo] building a2a" >&2
@@ -164,6 +165,9 @@ mkdir -p "$DEMO_WORK/tools"
 for tool in go jq curl; do
   ln -s "$(command -v "$tool")" "$DEMO_WORK/tools/$tool"
 done
+if command -v docker >/dev/null; then
+  ln -s "$(command -v docker)" "$DEMO_WORK/tools/docker"
+fi
 DEMO_PANE_PATH="$DEMO_WORK/bin:$DEMO_WORK/you/bin:$DEMO_WORK/tools:/usr/local/bin:/usr/bin:/bin"
 
 # The scenario runs with its own HOME, so it starts with no configuration and
@@ -272,6 +276,35 @@ wait "$ASCIINEMA_PID" || true
 ASCIINEMA_PID=""
 awk -v cut="$cutoff" 'NR == 1 { print; next } { split($0, f, /[[,]/) } f[2] + 0 <= cut + 0' "$CAST" >"$CAST.tmp"
 mv "$CAST.tmp" "$CAST"
+# Collapse the spans marked with skip_from and skip_to to half a second.
+if [[ -n "$DEMO_SKIPS" ]]; then
+  python3 - "$CAST" $DEMO_SKIPS <<'PY'
+import json, sys
+path = sys.argv[1]
+spans = sorted(tuple(map(float, s.split(":"))) for s in sys.argv[2:])
+KEEP = 0.5
+
+def remap(t):
+    removed = 0.0
+    for a, b in spans:
+        if t <= a:
+            break
+        length = b - a
+        if length <= KEEP:
+            continue
+        inside = min(t, b) - a
+        removed += inside - inside * KEEP / length
+    return t - removed
+
+lines = open(path).read().splitlines()
+out = [lines[0]]
+for line in lines[1:]:
+    ev = json.loads(line)
+    ev[0] = round(remap(ev[0]), 6)
+    out.append(json.dumps(ev))
+open(path, "w").write("\n".join(out) + "\n")
+PY
+fi
 
 for var in OPENROUTER_API_KEY ANTHROPIC_API_KEY OPENAI_API_KEY GEMINI_API_KEY ${DEMO_SECRET_VARS:-}; do
   value="${!var:-}"
@@ -282,6 +315,6 @@ for var in OPENROUTER_API_KEY ANTHROPIC_API_KEY OPENAI_API_KEY GEMINI_API_KEY ${
 done
 
 if [[ -n "$GIF" ]]; then
-  "$DEMO_TOOLS/compose.sh" "$CAST" "${CAST%.cast}.gif" --speed "$GIF_SPEED"
+  "$DEMO_TOOLS/compose.sh" "$CAST" "${CAST%.cast}.gif" --speed "${GIF_SPEED:-${DEMO_GIF_SPEED:-1.5}}" --idle "${DEMO_GIF_IDLE:-2}"
 fi
 ls -1 "$DEMO_OUT/$DEMO_NAME".* 2>/dev/null || true

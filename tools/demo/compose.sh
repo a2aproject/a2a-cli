@@ -16,12 +16,12 @@
 # Renders a cast as a GIF in the documentation site's colors and font. Fetches
 # agg and Geist Mono into ~/.cache/a2a-cli-demo the first time.
 #
-#   tools/demo/compose.sh <name>.cast <out.gif> [--speed N]
+#   tools/demo/compose.sh <name>.cast <out.gif> [--speed N] [--idle S]
 
 set -euo pipefail
 
 usage() {
-  echo "usage: tools/demo/compose.sh <name>.cast <out.gif> [--speed N]" >&2
+  echo "usage: tools/demo/compose.sh <name>.cast <out.gif> [--speed N] [--idle S]" >&2
   exit 2
 }
 
@@ -30,9 +30,12 @@ CAST="$1"
 OUT="$2"
 shift 2
 SPEED=1.5
+# Pauses longer than IDLE seconds are cut to IDLE, before the speedup.
+IDLE=2
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --speed) SPEED="$2"; shift 2 ;;
+    --idle) IDLE="$2"; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -71,5 +74,5 @@ fi
 THEME="09090b,e4e4e7,18181c,f87171,6ee7b7,e5c07b,93c5fd,c4b5fd,7dd3c0,a1a1aa,63636e,fca5a5,a7f3d0,f5d896,bfdbfe,ddd6fe,a5f3fc,e4e4e7"
 
 "$AGG" --theme "$THEME" --font-dir "$CACHE/fonts" --font-family "Geist Mono" \
-  --font-size 15 --line-height 1.5 --speed "$SPEED" --idle-time-limit 2 --last-frame-duration 4 \
+  --font-size 15 --line-height 1.5 --speed "$SPEED" --idle-time-limit "$IDLE" --last-frame-duration 6 \
   "$CAST" "$OUT"

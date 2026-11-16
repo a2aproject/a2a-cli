@@ -37,4 +37,4 @@ Fetched cards are cached under the user cache directory (`~/.cache/a2a-cli` on L
 
 The contact book is an AI Catalog at `~/.config/a2a-cli/catalog.json` that only `a2a` writes. It is registered in the AI Catalog store shared with [ai-catalog-cli](https://github.com/Agent-Card/ai-catalog-cli) as `a2a-contacts`, so `ai-catalog search` and `a2a catalog search` see your contacts too. If the store can't be updated, the contact is still saved and `a2a` prints a warning.
 
-The [Agent Plugin](coding-agents.md#contacts-and-agent-discovery) tells your coding agent about your contacts at the start of a session. The [contact reference](../reference/commands/contact.md) lists every flag.
+The [Agent Plugin](coding-agents.md#contacts-and-agent-discovery) tells your coding agent about your contacts at the start of a session. The [contact reference](../reference/commands/contact.md) lists every flag. The [AI Catalog interop](../../examples/ai-catalog-interop/README.md) example shows contacts in `ai-catalog`.
