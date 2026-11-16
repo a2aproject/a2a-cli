@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# A credential helper for the a2a CLI that returns a bearer token per host from
+# a file of "host token" lines (default ~/.config/a2a-cli/tokens).
+#
+# a2a runs "token-file-helper get", writes {"uri": "<agent URL>"} to stdin and
+# reads {"headers": {...}} from stdout. An unknown host gets {}, which sends no
+# credentials.
+set -euo pipefail
+
+[[ "${1:-}" == get ]] || { echo "usage: token-file-helper get" >&2; exit 2; }
+
+tokens="${A2A_TOKENS_FILE:-$HOME/.config/a2a-cli/tokens}"
+host="$(jq -r '.uri' | sed -E 's#^[a-z]+://##; s#[/:].*$##')"
+token="$(awk -v h="$host" '$1 == h { print $2; exit }' "$tokens" 2>/dev/null || true)"
+
+if [[ -z "$token" ]]; then
+  echo '{}'
+  exit 0
+fi
+jq -n --arg t "Bearer $token" '{headers: {Authorization: [$t]}}'
