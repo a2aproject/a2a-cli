@@ -43,7 +43,7 @@ The plugin runs the `a2a` binary, so install that first. Then add the plugin to 
 /plugin install a2a-cli@a2a-plugins
 ```
 
-[Coding agents](./docs/guide/coding-agents.md) has the commands for Copilot CLI, Codex, Gemini CLI, OpenCode and others. The plugin carries the [a2a-cli skill](./skills/a2a-cli/SKILL.md), which `npx skills add https://github.com/a2aproject/a2a-cli --skill a2a-cli` also installs on its own.
+In Claude Code the plugin also tells the agent about your [contacts](./docs/guide/contacts.md), and about A2A agents found on sites that come up in the conversation; see [Contacts and agent discovery](./docs/guide/coding-agents.md#contacts-and-agent-discovery). [Coding agents](./docs/guide/coding-agents.md) has the commands for Copilot CLI, Codex, Gemini CLI, OpenCode and others. The plugin carries the [a2a-cli skill](./skills/a2a-cli/SKILL.md), which `npx skills add https://github.com/a2aproject/a2a-cli --skill a2a-cli` also installs on its own.
 
 ## Use the CLI yourself
 

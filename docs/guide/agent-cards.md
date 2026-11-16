@@ -11,7 +11,7 @@ Every A2A agent publishes an agent card: a JSON document with its name, descript
 
 ## Card references
 
-`--agent-card` (`-a`), and the argument of `card get`, take three forms:
+`--agent-card` (`-a`), and the argument of `card get`, take these forms:
 
 | You pass | `a2a` reads |
 |---|---|
@@ -19,7 +19,8 @@ Every A2A agent publishes an agent card: a JSON document with its name, descript
 | `localhost:8080` or `127.0.0.1:8080` | `http://localhost:8080/.well-known/agent-card.json` |
 | `https://agent.example.com/cards/a.json` | That URL, since it has a path |
 | `./card.json` or any existing file | The file |
-| `urn:air:acme.com:agent:finance` | The card of that agent in a registered [AI Catalog](ai-catalogs.md) |
+| `urn:air:acme.com:agent:finance` | The card of that agent in your contacts or a registered [AI Catalog](ai-catalogs.md) |
+| `fin` | The card of the [contact](contacts.md) named `fin` |
 
 ```bash
 a2a card get localhost:8080

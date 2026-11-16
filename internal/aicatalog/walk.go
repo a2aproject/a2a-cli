@@ -16,6 +16,7 @@ package aicatalog
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -125,6 +126,32 @@ type Entry struct {
 	// Base is the URL of the catalog document that lists the entry, against
 	// which a relative entry URL resolves.
 	Base string
+	// Raw is the entry as listed, with members the SDK does not model, so a
+	// copy keeps its trust manifest verifiable.
+	Raw json.RawMessage
+}
+
+// document is a parsed catalog with each entry as listed.
+type document struct {
+	*catalog.AICatalog
+	rawEntries []json.RawMessage
+}
+
+func parseDocument(data []byte) (*document, error) {
+	doc, err := catalog.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	var raw struct {
+		Entries []json.RawMessage `json:"entries"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+	if len(raw.Entries) != len(doc.Entries) {
+		return nil, fmt.Errorf("catalog has %d entries, parsed %d", len(raw.Entries), len(doc.Entries))
+	}
+	return &document{AICatalog: doc, rawEntries: raw.Entries}, nil
 }
 
 // walker collects the entries of a catalog and the catalogs nested in it. An
@@ -143,9 +170,9 @@ type walker struct {
 	warnings []string
 }
 
-func (w *walker) walk(ctx context.Context, doc *catalog.AICatalog, base string, depth int) {
-	for _, entry := range doc.Entries {
-		w.entries = append(w.entries, Entry{CatalogEntry: entry, Catalog: w.label, Base: base})
+func (w *walker) walk(ctx context.Context, doc *document, base string, depth int) {
+	for i, entry := range doc.Entries {
+		w.entries = append(w.entries, Entry{CatalogEntry: entry, Catalog: w.label, Base: base, Raw: doc.rawEntries[i]})
 		if !entry.IsNestedCatalog() {
 			continue
 		}
@@ -171,9 +198,9 @@ func (w *walker) warn(entry catalog.CatalogEntry, err error) {
 	w.warnings = append(w.warnings, fmt.Sprintf("skipping nested catalog %q in %s: %v", entry.Identifier, w.label, err))
 }
 
-func (w *walker) open(ctx context.Context, entry *catalog.CatalogEntry, base string) (*catalog.AICatalog, string, error) {
+func (w *walker) open(ctx context.Context, entry *catalog.CatalogEntry, base string) (*document, string, error) {
 	if len(entry.Data) > 0 {
-		doc, err := catalog.Parse(entry.Data)
+		doc, err := parseDocument(entry.Data)
 		return doc, base, err
 	}
 	if entry.URL == "" {
@@ -190,7 +217,7 @@ func (w *walker) open(ctx context.Context, entry *catalog.CatalogEntry, base str
 	if err != nil {
 		return nil, "", err
 	}
-	doc, err := catalog.Parse(data)
+	doc, err := parseDocument(data)
 	return doc, ref, err
 }
 

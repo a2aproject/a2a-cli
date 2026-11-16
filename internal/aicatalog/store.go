@@ -34,6 +34,8 @@ import (
 	"strings"
 
 	"github.com/Agent-Card/ai-catalog-go/catalog"
+
+	"github.com/a2aproject/a2a-cli/internal/atomicfile"
 )
 
 // EnvDir names the environment variable that overrides the store directory.
@@ -306,10 +308,7 @@ func (r *Registry) save() error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(r.store.Dir, 0o755); err != nil {
-		return fmt.Errorf("creating catalog store: %w", err)
-	}
-	return writeFileAtomic(r.store.path(registryFile), data)
+	return atomicfile.Write(r.store.path(registryFile), data, 0o644)
 }
 
 func (r *Registry) saveRefs() error {
@@ -317,10 +316,7 @@ func (r *Registry) saveRefs() error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(r.store.Dir, 0o755); err != nil {
-		return fmt.Errorf("creating catalog store: %w", err)
-	}
-	return writeFileAtomic(r.store.path(refsFile), data)
+	return atomicfile.Write(r.store.path(refsFile), data, 0o644)
 }
 
 func (e *registryEntry) set(c Catalog, objectURL string) error {
@@ -393,10 +389,7 @@ func (s *Store) writeObject(data []byte) (string, error) {
 	if _, err := os.Stat(path); err == nil {
 		return hash, nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return "", fmt.Errorf("creating catalog store: %w", err)
-	}
-	if err := writeFileAtomic(path, data); err != nil {
+	if err := atomicfile.Write(path, data, 0o644); err != nil {
 		return "", err
 	}
 	return hash, nil
@@ -419,32 +412,6 @@ func isContentHash(s string) bool {
 	}
 	_, err := hex.DecodeString(s)
 	return err == nil
-}
-
-// writeFileAtomic replaces path with data, so a reader never sees a partial file.
-func writeFileAtomic(path string, data []byte) (err error) {
-	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return fmt.Errorf("writing %s: %w", path, err)
-	}
-	defer func() {
-		if err != nil {
-			err = errors.Join(err, os.Remove(f.Name()))
-		}
-	}()
-	if _, err := f.Write(data); err != nil {
-		return errors.Join(fmt.Errorf("writing %s: %w", path, err), f.Close())
-	}
-	if err := f.Chmod(0o644); err != nil {
-		return errors.Join(fmt.Errorf("writing %s: %w", path, err), f.Close())
-	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("writing %s: %w", path, err)
-	}
-	if err := os.Rename(f.Name(), path); err != nil {
-		return fmt.Errorf("writing %s: %w", path, err)
-	}
-	return nil
 }
 
 func mustMarshal(v any) json.RawMessage {

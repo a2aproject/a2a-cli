@@ -28,6 +28,7 @@ a2a send -a https://acme.com/finance-catalog.json "..."                         
 ```
 
 - A `urn:` value of `--agent-card` is an identifier, unless a file with that name exists. With `--catalog`, any value is an identifier.
+- An identifier of a [contact](contacts.md) resolves to the contact before the registered catalogs are searched.
 - Lookups in registered catalogs read only the local store; run `a2a catalog update` to pick up changes.
 - An identifier listed by more than one catalog is an error; pick one with `--catalog`.
 - When a catalog lists several versions of an agent, the latest is used.

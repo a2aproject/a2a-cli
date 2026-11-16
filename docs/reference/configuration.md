@@ -8,7 +8,7 @@ These apply to every command. The environment variable is `A2ACLI_` followed by 
 
 | Flag | Environment variable | Type | Default | Discovered `.env` | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `-a`, `--agent-card` | `A2ACLI_AGENT_CARD` | host, URL or path | | yes | Card reference. See [reference normalization](../advanced/discovery.md#reference-normalization). Exclusive with `--endpoint`. |
+| `-a`, `--agent-card` | `A2ACLI_AGENT_CARD` | host, URL, path, identifier or contact | | yes | Card reference. See [reference normalization](../advanced/discovery.md#reference-normalization). Exclusive with `--endpoint`. |
 | `--catalog` | `A2ACLI_CATALOG` | name or URL | | yes | AI Catalog to look the `--agent-card` identifier up in: a registered name, or a catalog URL. See [AI Catalogs](../guide/ai-catalogs.md). Experimental. |
 | `-e`, `--endpoint` | `A2ACLI_ENDPOINT` | URL | | yes | Interface URL; skips the card. Needs exactly one `--transport`. |
 | `--transport` | `A2ACLI_TRANSPORT` | list | | yes | `rest`, `jsonrpc`, `grpc` or a plugin name, most preferred first. Comma separated in the environment and `.env`. |
@@ -52,6 +52,7 @@ The flags of each command bind the same way, through `A2ACLI_<NAME>` or the flag
 | `--extended` | `A2ACLI_EXTENDED` | `card get` |
 | `--reveal` | `A2ACLI_REVEAL` | `auth get` |
 | `--no-descriptions` | `A2ACLI_NO_DESCRIPTIONS` | `completion` subcommands |
+| `--discovery`, `--discovery-allow-host`, `--discovery-scan-tools` | `A2ACLI_DISCOVERY`, ... | `hook`; see [Coding Agents](../guide/coding-agents.md#contacts-and-agent-discovery). `discovery-allow-host` is not read from a discovered `.env`. |
 
 `--stream` is never read from configuration. The [command reference](commands/a2a.md) describes each flag.
 

@@ -68,6 +68,7 @@ nav:
   - User Guide:
       - Agent Cards: guide/agent-cards.md
       - AI Catalogs: guide/ai-catalogs.md
+      - Contacts: guide/contacts.md
       - Messages: guide/messages.md
       - Streaming and Async: guide/streaming-and-async.md
       - Conversations: guide/conversations.md
@@ -110,6 +111,7 @@ nav:
           - chat: reference/commands/chat.md
           - card: reference/commands/card.md
           - catalog: reference/commands/catalog.md
+          - contact: reference/commands/contact.md
           - task: reference/commands/task.md
           - config: reference/commands/config.md
           - auth: reference/commands/auth.md

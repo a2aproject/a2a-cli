@@ -51,7 +51,7 @@ func newCatalogSearchCmd(cfg *globalConfig) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithTimeout(cmd.Context(), cfg.timeout)
 			defer cancel()
-			entries, _, err := catalogEntries(ctx, cfg, cfg.catalog)
+			entries, _, err := catalogEntries(ctx, cfg, cfg.catalog, false)
 			if err != nil {
 				return err
 			}

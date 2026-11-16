@@ -39,6 +39,18 @@ The second consequence is worth stating plainly: a transport plugin receives eve
 
 The loopback connection between the CLI and a transport plugin is protected against other local processes: a per-launch token on every call, checked in constant time, and TLS with a certificate created per launch and pinned by the CLI. The devkit does both; a plugin written without it may serve plaintext.
 
+## Agent discovery
+
+The Agent Plugin's hook fetches cards from origins that only appeared in a conversation (see [Coding Agents](../guide/coding-agents.md#contacts-and-agent-discovery)), so it limits where a probe can connect:
+
+- It probes internal hosts (loopback, private and carrier-grade NAT addresses) as well as public ones.
+- It never connects to link-local addresses, which covers the IPv4 cloud metadata endpoint `169.254.169.254`, or to unspecified or multicast addresses. Metadata endpoints at other addresses, such as AWS's IPv6 `fd00:ec2::254`, count as internal: they are probed when a URL names them directly, but a redirect from a public site can't reach them.
+- It follows at most 3 redirects, and refuses a redirect from a public address to an internal one, so a public site can't point a probe into your network.
+
+The checks run on the addresses a probe's host resolves to when it connects, so DNS rebinding can't reach a link-local address or turn a redirect from a public host into an internal one; a host with both public and internal addresses counts as public. Probes don't reuse connections, so every redirect hop is checked. Probes use the proxy from `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`. A proxied target is checked against its address as resolved locally, and a name that doesn't resolve locally is treated as public. The proxy resolves the name again on its own, so for proxied requests the checks are best effort. A refused probe isn't cached, so a change to `discovery-allow-host` applies at once. `discovery-allow-host` is not read from a discovered `.env`.
+
+Discovered agents are listed as unverified, and card text is presented to the model as information, not instructions.
+
 ## Credentials on the wire
 
 - `--auth`, `--svc-param` and credential helper headers go to the card request and every A2A call of the command. The card request goes to the `--agent-card` host. A2A calls go to the interface URL in the card, which can be on another host.
