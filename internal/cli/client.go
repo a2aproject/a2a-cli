@@ -55,11 +55,6 @@ func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclie
 	if err := cfg.initTLS(); err != nil {
 		return nil, err
 	}
-	switch cfg.a2aVersion {
-	case "", "1.0", "0.3":
-	default:
-		return nil, clierr.Usage(fmt.Sprintf("invalid --a2a-version %q (want 1.0 or 0.3)", cfg.a2aVersion))
-	}
 	switch {
 	case cfg.url != "" && cfg.agentCard.IsSet():
 		return nil, clierr.Usage("--endpoint and --agent-card are mutually exclusive")
@@ -85,7 +80,11 @@ func newClientFromEndpoint(ctx context.Context, cfg *globalConfig, ref string, e
 	}
 	cfg.logf("connecting directly to %s via %s (skipping card resolution)", ref, protocol)
 
-	factoryOpts := append(clientFactoryOpts(cfg), extraOpts...)
+	factoryOpts, err := clientFactoryOpts(cfg)
+	if err != nil {
+		return nil, err
+	}
+	factoryOpts = append(factoryOpts, extraOpts...)
 	if !transportplugin.IsBuiltin(protocol) {
 		pluginOpt, err := transportplugin.Load(protocol, cfg)
 		if err != nil {
@@ -109,12 +108,18 @@ func newClientFromCard(ctx context.Context, cfg *globalConfig, extraOpts ...a2ac
 		return nil, err
 	}
 
+	// Build the transports first so an unsupported --a2a-version is reported
+	// before the card is fetched.
+	factoryOpts, err := clientFactoryOpts(cfg)
+	if err != nil {
+		return nil, err
+	}
+	factoryOpts = append(factoryOpts, extraOpts...)
+
 	card, err := resolveAgentCard(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
-
-	factoryOpts := append(clientFactoryOpts(cfg), extraOpts...)
 	pluginOpts, err := transportplugin.LoadForCard(card, cfg)
 	if err != nil {
 		return nil, err
@@ -178,7 +183,7 @@ func cardResolver(cfg *globalConfig) *agentcard.Resolver {
 	return resolver
 }
 
-func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
+func clientFactoryOpts(cfg *globalConfig) ([]a2aclient.FactoryOption, error) {
 	creds := credentials.NewTLS(&tls.Config{RootCAs: cfg.rootCAs})
 	if cfg.insecureGRPC {
 		creds = insecure.NewCredentials()
@@ -195,23 +200,37 @@ func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
 	if cfg.credentials != nil {
 		opts = append(opts, cfg.credentialInterceptor())
 	}
-	if cfg.a2aVersion == "" || cfg.a2aVersion == "1.0" {
-		opts = append(
-			opts,
+	// Each protocol version with the transports that speak it. With no
+	// --a2a-version every version is registered, in this order.
+	versions := []struct {
+		version    a2a.ProtocolVersion
+		transports []a2aclient.FactoryOption
+	}{
+		{a2a.Version, []a2aclient.FactoryOption{
 			a2aclient.WithRESTTransport(httpClient),
 			a2aclient.WithJSONRPCTransport(httpClient),
 			a2aclient.WithTransport(a2a.TransportProtocolGRPC, grpcTransportFactory(a2agrpc.NewGRPCTransport, cfg.unixSocket != "", grpcOpts...)),
-		)
-	}
-	if cfg.a2aVersion == "" || cfg.a2aVersion == "0.3" {
-		opts = append(
-			opts,
+		}},
+		{a2av0.Version, []a2aclient.FactoryOption{
 			a2av0.WithRESTTransport(a2av0.RESTTransportConfig{Client: httpClient}),
 			a2av0.WithJSONRPCTransport(a2av0.JSONRPCTransportConfig{Client: httpClient}),
 			a2aclient.WithCompatTransport(a2av0.Version, a2a.TransportProtocolGRPC, grpcTransportFactory(a2agrpcv0.NewGRPCTransport, cfg.unixSocket != "", grpcOpts...)),
-		)
+		}},
 	}
-	return opts
+	if cfg.a2aVersion == "" {
+		for _, v := range versions {
+			opts = append(opts, v.transports...)
+		}
+		return opts, nil
+	}
+	supported := make([]string, 0, len(versions))
+	for _, v := range versions {
+		if cfg.a2aVersion == string(v.version) {
+			return append(opts, v.transports...), nil
+		}
+		supported = append(supported, string(v.version))
+	}
+	return nil, clierr.Usage(fmt.Sprintf("unsupported --a2a-version %q (want one of %s)", cfg.a2aVersion, strings.Join(supported, ", ")))
 }
 
 // grpcTransportFactory dials the host and port of a gRPC interface URL, which
