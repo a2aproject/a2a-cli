@@ -1,0 +1,5 @@
+a41c2e9 feat(contact): save trusted agents under a short name
+7be03d1 fix: keep the user config error when the hook can't read it
+c90f8a4 chore: bump a2a-go to v2.3.0
+1d5e6b2 feat(catalog): search registered AI Catalogs
+e2f7a90 docs: add the contacts guide

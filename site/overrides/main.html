@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block extrahead %}
+{% if page %}
+  {% set description = page.meta.description or config.site_description %}
+  {% if page.is_homepage %}
+    {% set title = config.site_name %}
+  {% else %}
+    {% set title = (page.title | striptags) ~ " - " ~ config.site_name %}
+  {% endif %}
+  {% set image = config.site_url ~ "assets/social.png" %}
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ config.site_name }}">
+  <meta property="og:title" content="{{ title }}">
+  <meta property="og:description" content="{{ description }}">
+  <meta property="og:url" content="{{ page.canonical_url }}">
+  <meta property="og:image" content="{{ image }}">
+  <meta property="og:image:alt" content="The a2a CLI discovering an agent and sending it a message">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ title }}">
+  <meta name="twitter:description" content="{{ description }}">
+  <meta name="twitter:image" content="{{ image }}">
+  {% if page.is_homepage %}
+  <script type="application/ld+json">
+    {{ {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": config.site_name,
+      "description": description,
+      "url": config.site_url,
+      "applicationCategory": "DeveloperApplication",
+      "operatingSystem": "Linux, macOS",
+      "license": "https://www.apache.org/licenses/LICENSE-2.0",
+      "sameAs": [config.repo_url],
+      "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}
+    } | tojson }}
+  </script>
+  {% endif %}
+{% endif %}
+{% endblock %}

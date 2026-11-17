@@ -1,0 +1,24 @@
+{
+  "specVersion": "1.0",
+  "host": {
+    "displayName": "Acme Corp"
+  },
+  "entries": [
+    {
+      "identifier": "urn:air:acme.example:agent:travel",
+      "displayName": "Travel Desk",
+      "type": "application/a2a-agent-card+json",
+      "url": "http://127.0.0.1:9102/.well-known/agent-card.json",
+      "description": "Books flights and hotels within Acme's travel policy",
+      "tags": ["travel", "booking"]
+    },
+    {
+      "identifier": "urn:air:acme.example:agent:expenses",
+      "displayName": "Expenses",
+      "type": "application/a2a-agent-card+json",
+      "url": "http://127.0.0.1:9103/.well-known/agent-card.json",
+      "description": "Files expense reports and answers questions about reimbursements",
+      "tags": ["finance", "travel"]
+    }
+  ]
+}

@@ -41,6 +41,9 @@ func newChatCmd(cfg *globalConfig, deps deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "chat [message]",
 		Short: "Chat interactively with an agent",
+		Example: `  a2a chat -a https://agent.example.com
+  a2a chat -a https://agent.example.com --stream "Hi, what can you do?"
+  a2a chat -a https://agent.example.com --context-id <context-id>`,
 		Long: "Start an interactive chat session with an agent. Chat reuses the same context ID " +
 			"across turns and continues tasks that require input.\n\n" +
 			"Controls:\n" +

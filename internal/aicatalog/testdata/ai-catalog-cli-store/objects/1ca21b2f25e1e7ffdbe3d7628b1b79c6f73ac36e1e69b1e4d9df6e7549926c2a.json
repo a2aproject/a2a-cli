@@ -1,0 +1,5 @@
+{"specVersion":"1.0","host":{"displayName":"Acme"},"entries":[
+ {"identifier":"urn:air:acme.com:agent:finance","displayName":"Finance","type":"application/a2a-agent-card+json","url":"https://acme.example/finance.json","description":"Books and invoices","tags":["money"]},
+ {"identifier":"urn:air:acme.com:mcp:weather","type":"application/mcp-server-card+json","url":"https://acme.example/weather.json"},
+ {"identifier":"urn:air:acme.com:catalog:hr","type":"application/ai-catalog+json","url":"hr.json"}
+]}

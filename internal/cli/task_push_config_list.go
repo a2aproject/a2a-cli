@@ -30,9 +30,10 @@ func newPushConfigListCmd(cfg *globalConfig) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "list <task-id>",
-		Short: "List a task's push-notification configurations",
-		Args:  cobra.ExactArgs(1),
+		Use:     "list <task-id>",
+		Short:   "List a task's push-notification configurations",
+		Example: `  a2a task push-config list -a https://agent.example.com <task-id>`,
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithTimeout(cmd.Context(), cfg.timeout)
 			defer cancel()

@@ -25,9 +25,10 @@ import (
 
 func newPushConfigGetCmd(cfg *globalConfig) *cobra.Command {
 	return &cobra.Command{
-		Use:   "get <task-id> <config-id>",
-		Short: "Get a task's push-notification configuration",
-		Args:  cobra.ExactArgs(2),
+		Use:     "get <task-id> <config-id>",
+		Short:   "Get a task's push-notification configuration",
+		Example: `  a2a task push-config get -a https://agent.example.com <task-id> <config-id>`,
+		Args:    cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, cancel := context.WithTimeout(cmd.Context(), cfg.timeout)
 			defer cancel()

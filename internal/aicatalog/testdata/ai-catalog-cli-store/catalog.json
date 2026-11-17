@@ -1,0 +1,23 @@
+{
+  "specVersion": "1.0",
+  "host": {
+    "displayName": "ai-catalog local registry"
+  },
+  "entries": [
+    {
+      "identifier": "urn:ai-catalog:local:19f4c684",
+      "displayName": "corp",
+      "type": "application/ai-catalog+json",
+      "url": "file:///home/user/.ai-catalog/objects/1ca21b2f25e1e7ffdbe3d7628b1b79c6f73ac36e1e69b1e4d9df6e7549926c2a.json",
+      "updatedAt": "2026-11-12T14:40:39.268986794+00:00",
+      "extensions": {
+        "org.ai-catalog.ai-catalog-cli": {
+          "contentHash": "1ca21b2f25e1e7ffdbe3d7628b1b79c6f73ac36e1e69b1e4d9df6e7549926c2a",
+          "entryCount": 3,
+          "lastUpdated": "2026-11-12T14:40:39.268982908+00:00",
+          "sourceUrl": "file:///home/user/catalogs/corp.json"
+        }
+      }
+    }
+  ]
+}

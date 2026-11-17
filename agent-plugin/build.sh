@@ -38,7 +38,15 @@ for skill_md in "$root"/skills/*/SKILL.md; do
   rm -f "$out/skills/$name/README.md"
 done
 
+# Client-specific files live in reverse-domain directories, as the Agent Plugins
+# spec asks. Claude Code finds its hooks through its own manifest.
+cp -R "$root/agent-plugin/com.anthropic.claude-code" "$out/com.anthropic.claude-code"
+cp -R "$root/agent-plugin/ai.opencode" "$out/ai.opencode"
+mkdir -p "$out/.claude-plugin"
 cp "$root/agent-plugin/README.md" "$out/README.md"
 cp "$root/LICENSE" "$out/LICENSE"
 jq --arg v "$version" '{"$schema": ."$schema", name: .name, version: $v} + .' \
   "$root/agent-plugin/plugin.json" > "$out/plugin.json"
+# The Claude Code manifest repeats the portable metadata, without $schema.
+jq -s '(.[0] | del(."$schema")) + .[1]' "$out/plugin.json" "$root/agent-plugin/.claude-plugin/plugin.json" \
+  > "$out/.claude-plugin/plugin.json"

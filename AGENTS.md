@@ -1,9 +1,15 @@
 ### General
 
-* Specification exists in the repository for historic purposes. Do not modify it and do not treat is as the source of truth.
+* Read [internal/DESIGN.md](internal/DESIGN.md) for the principles behind the code layout.
 * Keep the CLI package clean, create a file-per-command. Try extracting logic into a different package.
 * Ask clarifying questions from the user if details important for the task are missing.
 * When working on a bug fix, follow the RED-GREEN-BLUE TDD approach.
+
+### Documentation
+
+* After changing a command or flag, regenerate the reference with `go run ./internal/tools/gendocs`.
+* When a change alters what users see, update the matching page in `docs/`, and the lesson or example that shows it together with its scenario in `tools/demo/scenarios/`.
+* Build the site with `site/build.sh`; it fails on broken links. See the Documentation section of CONTRIBUTING.md.
 
 ### Code Style
 
