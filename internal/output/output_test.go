@@ -59,6 +59,21 @@ func TestPrintEventStructuredResume(t *testing.T) {
 			want:   `"<reply>"`,
 		},
 		{
+			name:   "malformed properties retains text reply",
+			schema: `{"type":"object","properties":[],"required":["seq"]}`,
+			want:   `"<reply>"`,
+		},
+		{
+			name:   "malformed required retains text reply",
+			schema: `{"type":"object","properties":{"seq":{"const":2}},"required":"seq"}`,
+			want:   `"<reply>"`,
+		},
+		{
+			name:   "non-object property is skipped",
+			schema: `{"type":"object","properties":{"seq":{"const":2},"ignored":[],"option":{"type":"string"}},"required":["option"]}`,
+			want:   `--data-part '{"option":"<option>","seq":2}'`,
+		},
+		{
 			name:   "apostrophes and shell substitutions remain literal",
 			schema: `{"type":"object","properties":{"nonce":{"const":"it's $HOME ` + "`id`" + `"}}}`,
 			want:   `--data-part '{"nonce":"it'"'"'s $HOME ` + "`id`" + `"}'`,
@@ -80,6 +95,9 @@ func TestPrintEventStructuredResume(t *testing.T) {
 			printer := NewPrinter(&out, ModeText)
 			if err := printer.PrintEvent(task); err != nil {
 				t.Fatalf("Printer.PrintEvent() error = %v, want nil", err)
+			}
+			if !strings.HasPrefix(out.String(), "Task:     task-1\nStatus:   input-required\n") {
+				t.Fatalf("Printer.PrintEvent() = %q, want task and status before resume hint", out.String())
 			}
 			_, got, found := strings.Cut(out.String(), "Resume:     ")
 			if !found {

@@ -138,11 +138,7 @@ func (p *Printer) PrintEvent(event a2a.Event) error {
 			s = fmt.Sprintf("[status] %s\n", state)
 		}
 	case *a2a.Task:
-		hint, err := formatResumeHint(e)
-		if err != nil {
-			return err
-		}
-		s = formatTask(e) + hint
+		s = formatTask(e) + formatResumeHint(e)
 	case *a2a.Message:
 		s = formatMessage(e)
 	default:
@@ -341,25 +337,21 @@ func formatTask(task *a2a.Task) string {
 }
 
 // formatResumeHint returns a copy-pasteable command to continue or reply to a task.
-func formatResumeHint(task *a2a.Task) (string, error) {
+func formatResumeHint(task *a2a.Task) string {
 	if task.ID == "" {
-		return "", nil
+		return ""
 	}
 	if task.Status.State != a2a.TaskStateInputRequired && task.Status.State != a2a.TaskStateAuthRequired {
-		return "", nil
+		return ""
 	}
 	if task.Status.State == a2a.TaskStateInputRequired {
 		data, err := structuredResumeData(task.Status.Message)
-		if err != nil {
-			return "", err
-		}
-		if data != "" {
-			// Keep schema values literal when the hint is pasted into a POSIX shell.
+		if err == nil && data != "" {
 			quoted := "'" + strings.ReplaceAll(data, "'", "'\"'\"'") + "'"
-			return fmt.Sprintf("\n\nResume:     a2a send --task-id %s --data-part %s\n", task.ID, quoted), nil
+			return fmt.Sprintf("\n\nResume:     a2a send --task-id %s --data-part %s\n", task.ID, quoted)
 		}
 	}
-	return fmt.Sprintf("\n\nResume:     a2a send --task-id %s %q\n", task.ID, "<reply>"), nil
+	return fmt.Sprintf("\n\nResume:     a2a send --task-id %s %q\n", task.ID, "<reply>")
 }
 
 func formatMessage(msg *a2a.Message) string {

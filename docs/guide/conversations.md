@@ -4,7 +4,7 @@ A2A groups messages in two ways. A **task** is one unit of work: it runs, may st
 
 | Command | What it does |
 |---|---|
-| `a2a send --task-id <id> "..."` | Answers a task that waits for input. |
+| `a2a send --task-id <id> "..."` or `--data-part '{...}'` | Answers a task that waits for input; follow its resume hint. |
 | `a2a send --context-id <id> "..."` | Starts a new task in the same conversation. |
 | `a2a chat` | Holds an interactive conversation. |
 
@@ -33,13 +33,16 @@ Task:     01a1d530-540a-791c-a4be-890667492c6a
 Context:  01a1d530-540a-79b9-a234-eae4bf4a02f2
 Status:   input-required (2026-11-13T13:54:36Z)
   Permission required: git push (git push origin main).
+Reply with one of: once, always, reject.
 
-Resume:     a2a send --task-id 01a1d530-540a-791c-a4be-890667492c6a "<reply>"
+Resume:     a2a send --task-id 01a1d530-540a-791c-a4be-890667492c6a --data-part '{"option":"<option>","seq":1}'
 ```
 
 ```bash
-a2a send -a localhost:8080 --task-id 01a1d530-540a-791c-a4be-890667492c6a "once"
+a2a send -a localhost:8080 --task-id 01a1d530-540a-791c-a4be-890667492c6a --data-part '{"option":"once","seq":1}'
 ```
+
+Replace `<option>` with one of the values in the question. Preserve `seq` from the actual hint, including when retrying an answer, so a delayed reply cannot answer a later question. Schemas without supported constants or with malformed top-level fields retain the plain-text reply hint.
 
 A task in `auth-required` needs credentials first; see [Credentials](credentials.md).
 

@@ -70,13 +70,13 @@ Status:   input-required (2026-11-13T13:54:36Z)
   Permission required: bash (whoami).
 Reply with one of: once, always (allows bash whoami * in this conversation), reject. ...
 
-Resume:     a2a send --task-id 01a1d530-540a-791c-a4be-890667492c6a "<reply>"
+Resume:     a2a send --task-id 01a1d530-540a-791c-a4be-890667492c6a --data-part '{"option":"<option>","seq":1}'
 ```
 
 The status message is the agent's question, and `Resume` is the command to answer it. This time you continue the **task**, so the answer goes to the question:
 
 ```bash
-a2a send --task-id 01a1d530-540a-791c-a4be-890667492c6a once
+a2a send --task-id 01a1d530-540a-791c-a4be-890667492c6a --data-part '{"option":"once","seq":1}'
 ```
 
 ```text
@@ -88,6 +88,8 @@ Artifacts:
 ```
 
 `once` allows this one command. `reject` refuses it, and the agent carries on without it.
+
+Choose `<option>` from the values listed in the question and copy `seq` from its actual hint. Keep the same `seq` when retrying the answer: it identifies that question, so a delayed retry cannot approve the next one. Plain-text questions, unsupported schemas, and schemas with malformed top-level fields keep the `"<reply>"` hint instead.
 
 Agents can also stop in `auth-required`, when they need credentials you haven't given. Lesson 5 covers credentials.
 

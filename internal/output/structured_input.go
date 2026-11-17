@@ -65,12 +65,9 @@ func structuredResumeData(message *a2a.Message) (string, error) {
 	}
 	values := make(map[string]any)
 	for name, property := range schema.Properties {
-		if len(property) == 0 || property[0] != '{' {
-			continue
-		}
 		var keywords map[string]json.RawMessage
 		if err := json.Unmarshal(property, &keywords); err != nil {
-			return "", fmt.Errorf("decode Structured Input property: %w", err)
+			continue
 		}
 		if value, ok := keywords["const"]; ok {
 			values[name] = value

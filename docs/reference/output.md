@@ -77,17 +77,20 @@ Artifacts:
 | `Artifacts:` | When the task has artifacts. One line each: `[<name>]`, or `[<artifact ID>]` without a name, then the artifact's content |
 | `History:` | When the task carries history. One line per message: `[user]` or `[agent]`, then the content |
 
-A task in `input-required` or `auth-required` is followed by a command to reply with, after two blank lines:
+A task in `input-required` or `auth-required` is followed by a command to reply with, after two blank lines. For Structured Input object schemas with top-level constants, the hint preserves those constants in a `--data-part` template:
 
 ```text
 Task:     01a1d53b-390a-762e-bf38-be8aa98a2e7e
 Context:  01a1d53b-390a-76d6-879b-6505620790be
 Status:   input-required (2026-11-13T14:06:30Z)
   Permission required: git push (git push origin main).
+Reply with one of: once, always, reject.
 
 
-Resume:     a2a send --task-id 01a1d53b-390a-762e-bf38-be8aa98a2e7e "<reply>"
+Resume:     a2a send --task-id 01a1d53b-390a-762e-bf38-be8aa98a2e7e --data-part '{"option":"<option>","seq":1}'
 ```
+
+Replace `<option>` with an allowed value from the question. Keep the constants, including `seq`, unchanged when retrying the same answer. The sequence shown here is an example; use the value in the actual hint. Tasks without a supported schema, schemas with malformed top-level fields, and `auth-required` tasks retain the plain-text `"<reply>"` hint.
 
 A message is one line: `[agent] <content>` or `[user] <content>`.
 
