@@ -11,7 +11,7 @@ The CLI reads the nearest `.env` found by walking up from the working directory,
 | `credential-helper` | Run any program, the next time you call an agent |
 | `unix-socket` | Send every request, with your credentials, to a socket it chose |
 | `ca-cert` | Make the CLI trust a certificate it chose, and accept a server impersonating the agent |
-| `oauth`, `oauth-clients`, `oauth-default-client-id` | Turn on OAuth and attach your stored grants, or sign you in with a client it chose |
+| `oauth`, `oauth-clients`, `oauth-default-client-id`, `oauth-store` | Turn on OAuth and attach your stored grants, or sign you in with a client it chose |
 
 The CLI ignores them in a discovered `.env` and prints a warning. The same file passed with `--config` is trusted, because you named it.
 
