@@ -105,24 +105,22 @@ func (p *Prober) probeOne(ctx context.Context, resolver *agentcard.Resolver, fet
 
 	ctx, cancel := context.WithTimeout(ctx, p.timeout())
 	defer cancel()
-	var cardEntry, catalogEntry *cardcache.Entry
 	var wg sync.WaitGroup
 	if needCard {
-		wg.Go(func() { cardEntry = p.probeCard(ctx, resolver, origin) })
+		wg.Go(func() { p.put(p.probeCard(ctx, resolver, origin)) })
 	}
 	if needCatalog {
-		wg.Go(func() { catalogEntry = p.probeCatalog(ctx, fetcher, catalogRef) })
+		wg.Go(func() { p.put(p.probeCatalog(ctx, fetcher, catalogRef)) })
 	}
 	wg.Wait()
-	// Both results are stored together, so the hook doesn't report an origin
-	// before its other document is known.
-	for _, e := range []*cardcache.Entry{cardEntry, catalogEntry} {
-		if e == nil {
-			continue
-		}
-		if err := p.Cards.Put(*e); err != nil {
-			p.logf("caching probe result for %s: %v", e.Ref, err)
-		}
+}
+
+func (p *Prober) put(e *cardcache.Entry) {
+	if e == nil {
+		return
+	}
+	if err := p.Cards.Put(*e); err != nil {
+		p.logf("caching probe result for %s: %v", e.Ref, err)
 	}
 }
 
@@ -204,8 +202,9 @@ var errNoCatalogAgents = errors.New("AI Catalog lists no A2A agents")
 const maxIdentifierLen = 200
 
 // identifierPattern admits the characters of URNs and URLs that are safe to
-// show unquoted in a suggested command line.
-var identifierPattern = regexp.MustCompile(`^[A-Za-z0-9._~:/@+%=-]+$`)
+// show unquoted in a suggested command line, starting with a letter or digit
+// so an identifier can't pose as a flag or a home directory.
+var identifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._~:/@+%=-]*$`)
 
 func catalogAgents(ref string, data []byte) ([]cardcache.CatalogAgent, error) {
 	if !aicatalog.IsCatalogDocument(data) {

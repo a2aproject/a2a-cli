@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/a2aproject/a2a-cli/internal/aicatalog"
 	"github.com/a2aproject/a2a-cli/internal/cardcache"
@@ -63,6 +64,8 @@ same one when --discovery-wait gives the probe time to finish. Each piece of
 context is added once per session.
 
 Disable discovery with "discovery: false" in the user config or A2ACLI_DISCOVERY=false.
+The discovery settings are not read from a .env found in the working directory
+or its parents.
 Discovery refuses link-local addresses, such as the IPv4 cloud metadata endpoint,
 and redirects from a public address to an internal one, unless the host is allowed
 with --discovery-allow-host.`,
@@ -90,9 +93,16 @@ with --discovery-allow-host.`,
 	pf.BoolVar(&f.discovery, "discovery", true, "Discover agents at origins of URLs in the conversation")
 	pf.StringArrayVar(&f.allowHosts, "discovery-allow-host", nil, "Host that discovery may probe whatever address it resolves to (repeatable)")
 	cmd.Flags().StringSliceVar(&f.scanTools, "discovery-scan-tools", discover.DefaultScanTools, "Tools whose calls are scanned for URLs")
-	cmd.Flags().DurationVar(&f.wait, "discovery-wait", 0, "How long an event that starts probes waits for them, to report agents found in its own output")
-	if err := pf.SetAnnotation("discovery-allow-host", clicfg.AnnotationNotFromDiscoveredFile, []string{"true"}); err != nil {
-		return nil, err
+	cmd.Flags().DurationVar(&f.wait, "discovery-wait", 0, fmt.Sprintf("How long an event that starts probes waits for them, to report agents found in its own output (at most %s)", discover.MaxProbeWait))
+	for _, fs := range []*pflag.FlagSet{pf, cmd.Flags()} {
+		for _, name := range []string{"discovery", "discovery-allow-host", "discovery-wait"} {
+			if fs.Lookup(name) == nil {
+				continue
+			}
+			if err := fs.SetAnnotation(name, clicfg.AnnotationNotFromDiscoveredFile, []string{"true"}); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	cmd.AddCommand(newHookProbeCmd(cfg, f))

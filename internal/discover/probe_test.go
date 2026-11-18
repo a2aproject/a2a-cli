@@ -150,7 +150,7 @@ func TestProberProbeCatalog(t *testing.T) {
 		{
 			name:       "identifiers unsafe in a command line skipped",
 			status:     http.StatusOK,
-			body:       catalogJSON(agent("urn:x; rm -rf ~"), agent("urn:ok")),
+			body:       catalogJSON(agent("urn:x; rm -rf ~"), agent("-rf"), agent("~/x"), agent("urn:ok")),
 			wantCached: true,
 			wantAgents: []cardcache.CatalogAgent{{Identifier: "urn:ok", DisplayName: "Finance"}},
 		},

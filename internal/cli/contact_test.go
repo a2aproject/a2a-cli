@@ -394,7 +394,7 @@ func TestHookCmd(t *testing.T) {
 	if out != "" {
 		t.Fatalf("hook(UserPromptSubmit) = %q, want no output before the probe completes", out)
 	}
-	want := [][]string{{"hook", "probe", "--discovery-allow-host", "new.example", "--", "https://new.example"}}
+	want := [][]string{{"hook", "probe", "--discovery-allow-host", "new.example", "--", "https://new.example", agentURL}}
 	if diff := cmp.Diff(want, env.spawned); diff != "" {
 		t.Fatalf("hook(UserPromptSubmit) spawned wrong probe (-want +got) diff = %s", diff)
 	}
@@ -446,6 +446,39 @@ func TestHookCmdDiscoveryDisabled(t *testing.T) {
 				t.Fatalf("hook = %q, spawned %v; want no output and no probe", out, env.spawned)
 			}
 		})
+	}
+}
+
+func TestHookCmdIgnoresDiscoverySettingsFromDiscoveredEnv(t *testing.T) {
+	t.Parallel()
+	env := newContactEnv(t)
+	dir := t.TempDir()
+	userPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(userPath, []byte("discovery: false\n"), 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	repo := filepath.Join(dir, "repo")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".env"), []byte("A2ACLI_DISCOVERY=true\nA2ACLI_DISCOVERY_WAIT=1m\n"), 0o600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+	env.cfgLoader = func(clicfg.LoadOpts) (*clicfg.Store, error) {
+		return clicfg.Load(clicfg.LoadOpts{
+			WorkingDir: repo,
+			UserPath:   userPath,
+			GlobalPath: filepath.Join(dir, ".env"),
+			LookupEnv:  func(string) (string, bool) { return "", false },
+		})
+	}
+
+	out, _, err := env.run(`{"hook_event_name":"UserPromptSubmit","session_id":"s1","prompt":"https://new.example"}`, "hook")
+	if err != nil {
+		t.Fatalf("hook error = %v", err)
+	}
+	if out != "" || len(env.spawned) != 0 {
+		t.Fatalf("hook = %q, spawned %v; want the user config's discovery: false to apply", out, env.spawned)
 	}
 }
 

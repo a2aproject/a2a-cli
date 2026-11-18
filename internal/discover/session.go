@@ -42,12 +42,28 @@ type sessionState struct {
 	// Injected maps the origins of agent cards, and the URLs of AI Catalogs,
 	// already injected to when.
 	Injected map[string]time.Time `json:"injected,omitempty"`
-	// Pending maps origins awaiting a background probe to when it was started.
+	// Pending maps origins awaiting a background probe to when the first
+	// probe was started.
 	Pending map[string]time.Time `json:"pending,omitempty"`
+	// Probed maps pending origins to when the last probe was started.
+	Probed map[string]time.Time `json:"probed,omitempty"`
 }
 
 func newSessionState() *sessionState {
-	return &sessionState{Injected: map[string]time.Time{}, Pending: map[string]time.Time{}}
+	return &sessionState{Injected: map[string]time.Time{}, Pending: map[string]time.Time{}, Probed: map[string]time.Time{}}
+}
+
+// lastProbe returns when the last probe of a pending origin was started.
+func (s *sessionState) lastProbe(origin string) time.Time {
+	if t, ok := s.Probed[origin]; ok {
+		return t
+	}
+	return s.Pending[origin]
+}
+
+func (s *sessionState) donePending(origin string) {
+	delete(s.Pending, origin)
+	delete(s.Probed, origin)
 }
 
 // sessionStore keeps one state file per session id under dir.
@@ -81,6 +97,9 @@ func (s sessionStore) open(session string) *openSession {
 	}
 	if o.state.Pending == nil {
 		o.state.Pending = map[string]time.Time{}
+	}
+	if o.state.Probed == nil {
+		o.state.Probed = map[string]time.Time{}
 	}
 	return o
 }

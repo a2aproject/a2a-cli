@@ -86,7 +86,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle(a2asrv.WellKnownAgentCardPath, a2asrv.NewStaticAgentCardHandler(card))
 	mux.Handle("/a2a", a2asrv.NewJSONRPCHandler(a2asrv.NewHandler(assistant{})))
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/{$}", func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("%s %s", r.Method, r.URL.Path)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if _, err := fmt.Fprint(w, page); err != nil {

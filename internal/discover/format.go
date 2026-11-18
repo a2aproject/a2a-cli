@@ -29,7 +29,8 @@ const (
 	maxSkillDescLen = 100
 	maxSkills       = 6
 	// maxCatalogAgents bounds the agents listed for one AI Catalog.
-	maxCatalogAgents = 5
+	maxCatalogAgents  = 5
+	maxCatalogNameLen = 60
 	// The block lengths keep the context added by one event under the 10,000
 	// character cap Claude Code puts on additionalContext.
 	maxContactsLen   = 6000
@@ -89,23 +90,53 @@ func FormatContacts(entries []ContactEntry) string {
 	return joinBlock(contactsHeader, lines, maxContactsLen, "run `a2a contact list` to see all")
 }
 
-// FormatDiscovered renders the untrusted auto-discovered agents block, or "" for no agents.
-func FormatDiscovered(entries []DiscoveredEntry) string {
-	if len(entries) == 0 {
-		return ""
+// FormatDiscovered renders the untrusted auto-discovered agents block, or ""
+// for no agents. It also returns the parts of entries left out because the
+// block is full, for a later event to report. A part too long to fit in an
+// empty block is left out and not returned.
+func FormatDiscovered(entries []DiscoveredEntry) (string, []DiscoveredEntry) {
+	type part struct {
+		line  string
+		entry DiscoveredEntry
 	}
-	var lines []string
+	var parts []part
 	for _, e := range entries {
 		if e.Card != nil {
-			lines = append(lines, "- "+e.Origin+describeCard(e.Card)+
-				fmt.Sprintf("\n  After the user agrees: a2a send -a %s \"<task>\"", e.Origin))
+			parts = append(parts, part{
+				line: "- " + e.Origin + describeCard(e.Card) +
+					fmt.Sprintf("\n  After the user agrees: a2a send -a %s \"<task>\"", e.Origin),
+				entry: DiscoveredEntry{Origin: e.Origin, Card: e.Card},
+			})
 		}
 		if len(e.Agents) > 0 {
-			lines = append(lines, formatCatalogAgents(CatalogRef(e.Origin), e.Agents))
+			parts = append(parts, part{
+				line:  formatCatalogAgents(CatalogRef(e.Origin), e.Agents),
+				entry: DiscoveredEntry{Origin: e.Origin, Agents: e.Agents},
+			})
 		}
 	}
-	return joinBlock(discoveredHeader, lines, maxDiscoveredLen, "")
+
+	var b strings.Builder
+	var deferred []DiscoveredEntry
+	for _, p := range parts {
+		switch {
+		case len(discoveredHeader)+len(p.line)+1 > maxDiscoveredLen:
+		case b.Len()+len(p.line)+1 > maxDiscoveredLen-len(discoveredMore):
+			deferred = append(deferred, p.entry)
+		default:
+			if b.Len() == 0 {
+				b.WriteString(discoveredHeader)
+			}
+			b.WriteString("\n" + p.line)
+		}
+	}
+	if b.Len() > 0 && len(deferred) > 0 {
+		b.WriteString(discoveredMore)
+	}
+	return b.String(), deferred
 }
+
+const discoveredMore = "\n- ...more agents will be listed at a later step"
 
 func formatCatalogAgents(catalogURL string, agents []cardcache.CatalogAgent) string {
 	var b strings.Builder
@@ -115,11 +146,19 @@ func formatCatalogAgents(catalogURL string, agents []cardcache.CatalogAgent) str
 			fmt.Fprintf(&b, "\n  - ...and %d more (a2a catalog search --catalog %s)", len(agents)-i, catalogURL)
 			break
 		}
-		b.WriteString("\n  - " + a.Identifier + describe(a.DisplayName, a.Description))
+		b.WriteString("\n  - " + a.Identifier)
+		if name := sanitize(a.DisplayName, maxCatalogNameLen); name != "" {
+			b.WriteString(" — " + name)
+		}
+		if desc := sanitize(a.Description, maxSkillDescLen); desc != "" {
+			b.WriteString(": " + desc)
+		}
 	}
 	fmt.Fprintf(&b, "\n  After the user agrees: a2a send --catalog %s -a <identifier> \"<task>\"", catalogURL)
 	return b.String()
 }
+
+func (e DiscoveredEntry) found() bool { return e.Card != nil || len(e.Agents) > 0 }
 
 func describe(name, desc string) string {
 	var b strings.Builder

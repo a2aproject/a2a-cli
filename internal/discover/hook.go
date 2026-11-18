@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -33,6 +34,9 @@ const (
 	// probeRetry is how long a pending origin waits before its probe is restarted.
 	probeRetry    = time.Minute
 	pendingMaxAge = 10 * time.Minute
+	// MaxProbeWait caps ProbeWait, which must leave the hook well within the
+	// harness's timeout.
+	MaxProbeWait = 3 * time.Second
 	// maxNewOrigins bounds the probes a single event can trigger.
 	maxNewOrigins = 5
 	maxPending    = 20
@@ -55,7 +59,7 @@ func ttl(e cardcache.Entry) time.Duration {
 // Hook turns one harness hook event into the context to add to the conversation.
 type Hook struct {
 	Contacts []ContactEntry
-	// Cards holds the cards of discovered agents.
+	// Cards holds the cards and AI Catalogs of discovered agents.
 	Cards *cardcache.Cache
 	// StateDir holds per-session state.
 	StateDir string
@@ -66,10 +70,12 @@ type Hook struct {
 	// KnownCatalogs are the source URLs of registered AI Catalogs, which
 	// discovery doesn't report.
 	KnownCatalogs []string
-	// Probe starts fetching the cards of origins without waiting for the result.
+	// Probe starts fetching the cards and catalogs of origins without waiting
+	// for the result.
 	Probe func(origins []string) error
-	// ProbeWait is how long an event that started probes waits for them, so
-	// agents found are reported by the same event.
+	// ProbeWait is how long an event that started probes of origins it
+	// mentioned waits for them, so agents found are reported by the same
+	// event. It is capped at MaxProbeWait.
 	ProbeWait time.Duration
 	Now       func() time.Time
 	Logf      func(format string, args ...any)
@@ -111,13 +117,12 @@ func (h *Hook) Run(input []byte) (string, error) {
 		return "", fmt.Errorf("parsing hook event: %w", err)
 	}
 
-	blocks, probed := h.runOnce(ev)
-	// Without a session the state that keeps the second pass from probing
-	// again isn't saved.
-	if len(probed) > 0 && h.ProbeWait > 0 && ev.SessionID != "" {
-		h.waitForProbes(probed)
-		more, _ := h.runOnce(ev)
-		blocks = append(blocks, more...)
+	blocks, started, saved := h.runOnce(ev)
+	// The second pass reads the state the first one saved, so without it the
+	// session would be told the same thing twice.
+	if wait := min(h.ProbeWait, MaxProbeWait); len(started) > 0 && wait > 0 && saved {
+		h.waitForProbes(started, wait)
+		blocks = append(blocks, h.collect(ev.SessionID, started))
 	}
 
 	var nonEmpty []string
@@ -141,33 +146,58 @@ func (h *Hook) Run(input []byte) (string, error) {
 	return strings.TrimSuffix(buf.String(), "\n"), nil
 }
 
-// runOnce handles ev against the session state and returns the blocks to add
-// and the origins whose probes it started.
-func (h *Hook) runOnce(ev event) ([]string, []string) {
-	st := newSessionState()
-	var sess *openSession
-	if ev.SessionID != "" {
-		sess = sessionStore{dir: h.StateDir}.open(ev.SessionID)
-		st = &sess.state
+// runOnce handles ev against the session state and returns the blocks to add,
+// the origins it started probing, and whether it saved the session state.
+func (h *Hook) runOnce(ev event) ([]string, []string, bool) {
+	if ev.SessionID == "" {
+		blocks, started := h.handle(ev, newSessionState(), false)
+		return blocks, started, false
 	}
-	blocks, probed := h.handle(ev, st, sess != nil)
-	if sess != nil {
-		if err := sess.close(); err != nil {
-			h.logf("%v", err)
-		}
+	sess := sessionStore{dir: h.StateDir}.open(ev.SessionID)
+	blocks, started := h.handle(ev, &sess.state, true)
+	if err := sess.close(); err != nil {
+		h.logf("%v", err)
+		return blocks, started, false
 	}
-	return blocks, probed
+	return blocks, started, sess.lock != nil
 }
 
-// waitForProbes returns once the card and catalog of every origin are cached,
-// or after ProbeWait.
-func (h *Hook) waitForProbes(origins []string) {
+// collect reports the agents found at origins since their probes started. It
+// starts no probes, so waiting for probes can't trigger more of them.
+func (h *Hook) collect(sessionID string, origins []string) string {
+	sess := sessionStore{dir: h.StateDir}.open(sessionID)
+	if sess.lock == nil {
+		// Another event holds the session and reports the agents itself.
+		return ""
+	}
+	st, now := &sess.state, h.now()
+	var found []DiscoveredEntry
+	for _, o := range origins {
+		entry, _, unknown := h.lookup(o, st, now)
+		if entry.found() {
+			found = append(found, entry)
+		}
+		if !unknown {
+			st.donePending(o)
+		}
+	}
+	block := h.report(found, st, now)
+	if err := sess.close(); err != nil {
+		h.logf("%v", err)
+		return ""
+	}
+	return block
+}
+
+// waitForProbes returns once the documents of every origin are cached, or
+// after wait.
+func (h *Hook) waitForProbes(origins []string, wait time.Duration) {
 	const interval = 100 * time.Millisecond
 	sleep := h.sleep
 	if sleep == nil {
 		sleep = time.Sleep
 	}
-	for waited := time.Duration(0); waited < h.ProbeWait; waited += interval {
+	for waited := time.Duration(0); waited < wait; waited += interval {
 		sleep(interval)
 		if !slices.ContainsFunc(origins, h.probing) {
 			return
@@ -177,7 +207,7 @@ func (h *Hook) waitForProbes(origins []string) {
 
 // probing reports whether a document of origin has no usable cache entry.
 func (h *Hook) probing(origin string) bool {
-	for _, ref := range []string{origin, CatalogRef(origin)} {
+	for _, ref := range h.refs(origin) {
 		if e, ok := h.Cards.Get(ref); !ok || (!e.Found() && !e.Fresh(h.now(), negativeTTL)) {
 			return true
 		}
@@ -201,8 +231,26 @@ func (h *Hook) handle(ev event, st *sessionState, tracked bool) ([]string, []str
 	if !h.Discovery {
 		return blocks, nil
 	}
-	found, probed := h.discover(ExtractOrigins(h.scanTexts(ev)...), st, now)
-	return append(blocks, FormatDiscovered(found)), probed
+	found, started := h.discover(ExtractOrigins(h.scanTexts(ev)...), st, now)
+	return append(blocks, h.report(found, st, now)), started
+}
+
+// report renders the discovered agents. Agents that don't fit in the block are
+// marked as not yet told and pending, so a later event reports them.
+func (h *Hook) report(found []DiscoveredEntry, st *sessionState, now time.Time) string {
+	block, dropped := FormatDiscovered(found)
+	for _, d := range dropped {
+		if d.Card != nil {
+			delete(st.Injected, d.Origin)
+		}
+		if len(d.Agents) > 0 {
+			delete(st.Injected, CatalogRef(d.Origin))
+		}
+		if _, pending := st.Pending[d.Origin]; !pending {
+			st.Pending[d.Origin] = now
+		}
+	}
+	return block
 }
 
 // contactsChange returns the block that brings a conversation given the
@@ -242,7 +290,8 @@ func (h *Hook) sessionStart(source string, st *sessionState, contactsBlock, dige
 		blocks = []string{contactsEmptied}
 	}
 	if source == "compact" && h.Discovery {
-		blocks = append(blocks, FormatDiscovered(h.injectedEntries(st)))
+		block, _ := FormatDiscovered(h.injectedEntries(st))
+		blocks = append(blocks, block)
 	}
 	st.ContactsDigest = digest
 	return blocks
@@ -273,18 +322,16 @@ func (h *Hook) scanTexts(ev event) []string {
 	return texts
 }
 
-// discover returns the agents to inject now and the origins it started probes
-// for: origins seen in this event or earlier whose card or catalog is cached
-// and that the session hasn't been told about. Origins without a usable cache
-// entry are probed in the background and reported by a later event once their
-// documents are cached.
+// discover returns the agents to inject now and the origins it started
+// probing: origins seen in this event or earlier whose card or catalog is
+// cached and that the session hasn't been told about. Origins without a usable
+// cache entry are probed in the background and reported once their documents
+// are cached.
 func (h *Hook) discover(origins []string, st *sessionState, now time.Time) ([]DiscoveredEntry, []string) {
-	skip := h.contactOrigins()
-
 	var candidates []string
 	for o, started := range st.Pending {
 		if now.Sub(started) > pendingMaxAge {
-			delete(st.Pending, o)
+			st.donePending(o)
 			continue
 		}
 		candidates = append(candidates, o)
@@ -292,7 +339,7 @@ func (h *Hook) discover(origins []string, st *sessionState, now time.Time) ([]Di
 	slices.Sort(candidates)
 	added := 0
 	for _, o := range origins {
-		if skip[o] || slices.Contains(candidates, o) || h.settled(o, st, now) {
+		if slices.Contains(candidates, o) || h.settled(o, st, now) {
 			continue
 		}
 		if added == maxNewOrigins {
@@ -303,31 +350,31 @@ func (h *Hook) discover(origins []string, st *sessionState, now time.Time) ([]Di
 	}
 
 	var found []DiscoveredEntry
-	var toProbe []string
+	var toProbe, started []string
 	for _, o := range candidates {
-		if skip[o] {
-			delete(st.Pending, o)
-			continue
-		}
 		entry, refresh, unknown := h.lookup(o, st, now)
-		if entry.Card != nil || len(entry.Agents) > 0 {
+		if entry.found() {
 			found = append(found, entry)
 		}
 		if !unknown {
-			delete(st.Pending, o)
+			st.donePending(o)
 			if refresh {
 				toProbe = append(toProbe, o)
 			}
 			continue
 		}
-		started, pending := st.Pending[o]
-		if pending && now.Sub(started) < probeRetry {
+		_, pending := st.Pending[o]
+		if pending && now.Sub(st.lastProbe(o)) < probeRetry {
 			continue
 		}
-		if !pending && len(st.Pending) >= maxPending {
-			continue
+		if !pending {
+			if len(st.Pending) >= maxPending {
+				continue
+			}
+			st.Pending[o] = now
+			started = append(started, o)
 		}
-		st.Pending[o] = now
+		st.Probed[o] = now
 		toProbe = append(toProbe, o)
 	}
 	if len(toProbe) > 0 && h.Probe != nil {
@@ -336,7 +383,21 @@ func (h *Hook) discover(origins []string, st *sessionState, now time.Time) ([]Di
 			return found, nil
 		}
 	}
-	return found, toProbe
+	return found, started
+}
+
+// refs returns the cache references of the documents discovery reports for
+// origin: its agent card, unless a contact's card is there, and its AI
+// Catalog, unless the user registered it.
+func (h *Hook) refs(origin string) []string {
+	var refs []string
+	if !slices.ContainsFunc(h.Contacts, func(c ContactEntry) bool { return c.Origin == origin }) {
+		refs = append(refs, origin)
+	}
+	if ref := CatalogRef(origin); !h.knownCatalog(ref) {
+		refs = append(refs, ref)
+	}
+	return refs
 }
 
 // lookup returns what the cache holds about origin that the session hasn't
@@ -344,21 +405,17 @@ func (h *Hook) discover(origins []string, st *sessionState, now time.Time) ([]Di
 // due to be fetched again, and unknown a document that has no usable entry.
 func (h *Hook) lookup(origin string, st *sessionState, now time.Time) (entry DiscoveredEntry, refresh, unknown bool) {
 	entry.Origin = origin
-	catalogRef := CatalogRef(origin)
-	for _, ref := range []string{origin, catalogRef} {
+	for _, ref := range h.refs(origin) {
 		if _, done := st.Injected[ref]; done {
-			continue
-		}
-		if ref == catalogRef && h.knownCatalog(ref) {
 			continue
 		}
 		e, ok := h.Cards.Get(ref)
 		switch {
 		case ok && e.Found():
-			if ref == catalogRef {
-				entry.Agents = e.Agents
-			} else {
+			if ref == origin {
 				entry.Card = e.Card
+			} else {
+				entry.Agents = e.Agents
 			}
 			st.Injected[ref] = now
 			refresh = refresh || !e.Fresh(now, positiveTTL)
@@ -373,9 +430,8 @@ func (h *Hook) lookup(origin string, st *sessionState, now time.Time) (entry Dis
 // settled reports whether each document of origin was reported to the session
 // or is cached as missing, so a mention of origin has nothing to add.
 func (h *Hook) settled(origin string, st *sessionState, now time.Time) bool {
-	catalogRef := CatalogRef(origin)
-	for _, ref := range []string{origin, catalogRef} {
-		if _, done := st.Injected[ref]; done || (ref == catalogRef && h.knownCatalog(ref)) {
+	for _, ref := range h.refs(origin) {
+		if _, done := st.Injected[ref]; done {
 			continue
 		}
 		if e, ok := h.Cards.Get(ref); !ok || e.Found() || !e.Fresh(now, negativeTTL) {
@@ -386,17 +442,37 @@ func (h *Hook) settled(origin string, st *sessionState, now time.Time) bool {
 }
 
 func (h *Hook) knownCatalog(ref string) bool {
-	return slices.ContainsFunc(h.KnownCatalogs, func(c string) bool { return strings.EqualFold(c, ref) })
+	key := catalogKey(ref)
+	return slices.ContainsFunc(h.KnownCatalogs, func(c string) bool { return catalogKey(c) == key })
+}
+
+// catalogKey normalizes a catalog URL for comparison: the scheme and host are
+// lowercased, and a default port and the fragment are dropped.
+func catalogKey(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return raw
+	}
+	u.Scheme = strings.ToLower(u.Scheme)
+	u.Host = strings.ToLower(u.Host)
+	if port := u.Port(); (u.Scheme == "https" && port == "443") || (u.Scheme == "http" && port == "80") {
+		u.Host = u.Hostname()
+		if strings.Contains(u.Host, ":") {
+			u.Host = "[" + u.Host + "]"
+		}
+	}
+	u.Fragment = ""
+	u.RawFragment = ""
+	return u.String()
 }
 
 // injectedEntries returns the discovered agents injected earlier, except those
-// that have since become contacts.
+// that have since become contacts or registered catalogs.
 func (h *Hook) injectedEntries(st *sessionState) []DiscoveredEntry {
-	skip := h.contactOrigins()
 	byOrigin := map[string]*DiscoveredEntry{}
 	for ref := range st.Injected {
 		origin, isCatalog := strings.CutSuffix(ref, catalog.WellKnownPath)
-		if skip[origin] || (isCatalog && h.knownCatalog(ref)) {
+		if !slices.Contains(h.refs(origin), ref) {
 			continue
 		}
 		e, ok := h.Cards.Get(ref)
@@ -416,21 +492,11 @@ func (h *Hook) injectedEntries(st *sessionState) []DiscoveredEntry {
 	}
 	var entries []DiscoveredEntry
 	for _, o := range slices.Sorted(maps.Keys(byOrigin)) {
-		if e := byOrigin[o]; e.Card != nil || len(e.Agents) > 0 {
+		if e := byOrigin[o]; e.found() {
 			entries = append(entries, *e)
 		}
 	}
 	return entries
-}
-
-func (h *Hook) contactOrigins() map[string]bool {
-	origins := map[string]bool{}
-	for _, c := range h.Contacts {
-		if c.Origin != "" {
-			origins[c.Origin] = true
-		}
-	}
-	return origins
 }
 
 func (h *Hook) now() time.Time {
