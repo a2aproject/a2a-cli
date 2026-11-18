@@ -25,14 +25,17 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sync"
 	"time"
 
+	"github.com/Agent-Card/ai-catalog-go/catalog"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
 	"github.com/a2aproject/a2a-go/v2/a2acompat/a2av0"
 
+	"github.com/a2aproject/a2a-cli/internal/aicatalog"
 	"github.com/a2aproject/a2a-cli/internal/cardcache"
 )
 
@@ -42,8 +45,8 @@ const (
 	maxRedirects        = 3
 )
 
-// Prober fetches the well-known agent card of origins and records each outcome
-// in the card cache.
+// Prober fetches the well-known agent card and AI Catalog of origins and
+// records each outcome in the card cache.
 type Prober struct {
 	Cards *cardcache.Cache
 	// LockDir holds per-origin lock files so concurrent probers don't fetch the same card.
@@ -62,21 +65,31 @@ type Prober struct {
 	proxies sync.Map
 }
 
-// Probe fetches the cards of origins in parallel. Origins whose cache entry is
-// fresh, or that another prober is already fetching, are skipped.
+// CatalogRef returns the cache reference of the well-known AI Catalog of origin.
+func CatalogRef(origin string) string {
+	return origin + catalog.WellKnownPath
+}
+
+// Probe fetches the cards and catalogs of origins in parallel. Documents whose
+// cache entry is fresh, and origins another prober is already fetching, are
+// skipped.
 func (p *Prober) Probe(ctx context.Context, origins []string) {
-	resolver := agentcard.NewResolver(p.httpClient())
+	client := p.httpClient()
+	resolver := agentcard.NewResolver(client)
 	resolver.CardParser = a2av0.NewAgentCardParser()
+	fetcher := &aicatalog.Fetcher{Client: client}
 
 	var wg sync.WaitGroup
 	for _, origin := range origins {
-		wg.Go(func() { p.probeOne(ctx, resolver, origin) })
+		wg.Go(func() { p.probeOne(ctx, resolver, fetcher, origin) })
 	}
 	wg.Wait()
 }
 
-func (p *Prober) probeOne(ctx context.Context, resolver *agentcard.Resolver, origin string) {
-	if e, ok := p.Cards.Get(origin); ok && e.Fresh(p.now(), ttl(e)) {
+func (p *Prober) probeOne(ctx context.Context, resolver *agentcard.Resolver, fetcher *aicatalog.Fetcher, origin string) {
+	catalogRef := CatalogRef(origin)
+	needCard, needCatalog := p.stale(origin), p.stale(catalogRef)
+	if !needCard && !needCatalog {
 		return
 	}
 	lock, ok := tryLock(filepath.Join(p.LockDir, hashName(origin)+".lock"), 2*p.timeout())
@@ -90,39 +103,135 @@ func (p *Prober) probeOne(ctx context.Context, resolver *agentcard.Resolver, ori
 		}
 	}()
 
-	ctx, cancel := context.WithTimeout(withRedirectChain(ctx), p.timeout())
+	ctx, cancel := context.WithTimeout(ctx, p.timeout())
 	defer cancel()
-	entry := cardcache.Entry{Ref: origin, FetchedAt: p.now()}
-	card, err := resolver.Resolve(ctx, origin)
+	var wg sync.WaitGroup
+	if needCard {
+		wg.Go(func() { p.put(p.probeCard(ctx, resolver, origin)) })
+	}
+	if needCatalog {
+		wg.Go(func() { p.put(p.probeCatalog(ctx, fetcher, catalogRef)) })
+	}
+	wg.Wait()
+}
+
+func (p *Prober) put(e *cardcache.Entry) {
+	if e == nil {
+		return
+	}
+	if err := p.Cards.Put(*e); err != nil {
+		p.logf("caching probe result for %s: %v", e.Ref, err)
+	}
+}
+
+func (p *Prober) stale(ref string) bool {
+	e, ok := p.Cards.Get(ref)
+	return !ok || !e.Fresh(p.now(), ttl(e))
+}
+
+// probeCard fetches the agent card of origin and returns the entry to cache,
+// or nil when the outcome is not worth caching.
+func (p *Prober) probeCard(ctx context.Context, resolver *agentcard.Resolver, origin string) *cardcache.Entry {
+	card, err := resolver.Resolve(withRedirectChain(ctx), origin)
 	if err == nil {
 		err = validateCard(card)
 	}
+	entry := &cardcache.Entry{Ref: origin, FetchedAt: p.now()}
 	if err != nil {
-		if ctx.Err() != nil && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return
-		}
-		// A refusal depends on the guard configuration rather than the origin,
-		// so it isn't cached and an allow-list change applies at once.
-		if _, ok := errors.AsType[*BlockedError](err); ok {
-			p.logf("not probing %s: %v", origin, err)
-			return
-		}
-		// Only a response says there is no card; a connection failure, timeout
-		// or server error may be transient, so the origin is probed again on
-		// its next mention.
-		if isTransient(err) {
-			p.logf("probing %s failed: %v", origin, err)
-			return
+		if !p.cacheable(ctx, origin, err) {
+			return nil
 		}
 		p.logf("no agent card at %s: %v", origin, err)
 		entry.Error = err.Error()
-	} else {
-		p.logf("discovered agent %q at %s", card.Name, origin)
-		entry.Card = card
+		return entry
 	}
-	if err := p.Cards.Put(entry); err != nil {
-		p.logf("caching probe result for %s: %v", origin, err)
+	p.logf("discovered agent %q at %s", card.Name, origin)
+	entry.Card = card
+	return entry
+}
+
+// probeCatalog fetches the AI Catalog at ref and returns the entry to cache,
+// or nil when the outcome is not worth caching. Nested catalogs are not
+// followed: a probe makes one request per document.
+func (p *Prober) probeCatalog(ctx context.Context, fetcher *aicatalog.Fetcher, ref string) *cardcache.Entry {
+	data, err := fetcher.Fetch(withRedirectChain(ctx), ref)
+	var agents []cardcache.CatalogAgent
+	if err == nil {
+		agents, err = catalogAgents(ref, data)
 	}
+	entry := &cardcache.Entry{Ref: ref, FetchedAt: p.now()}
+	if err != nil {
+		if !p.cacheable(ctx, ref, err) {
+			return nil
+		}
+		p.logf("no AI Catalog agents at %s: %v", ref, err)
+		entry.Error = err.Error()
+		return entry
+	}
+	p.logf("discovered %d AI Catalog agents at %s", len(agents), ref)
+	entry.Agents = agents
+	return entry
+}
+
+// cacheable reports whether a failed fetch of ref should be cached as a
+// negative result.
+func (p *Prober) cacheable(ctx context.Context, ref string, err error) bool {
+	if ctx.Err() != nil && !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return false
+	}
+	// A refusal depends on the guard configuration rather than the origin,
+	// so it isn't cached and an allow-list change applies at once.
+	if _, ok := errors.AsType[*BlockedError](err); ok {
+		p.logf("not probing %s: %v", ref, err)
+		return false
+	}
+	// Only a response says there is no document; a connection failure,
+	// timeout or server error may be transient, so the origin is probed
+	// again on its next mention.
+	if isTransient(err) {
+		p.logf("probing %s failed: %v", ref, err)
+		return false
+	}
+	return true
+}
+
+// errNoCatalogAgents marks an AI Catalog that lists no usable A2A agent.
+var errNoCatalogAgents = errors.New("AI Catalog lists no A2A agents")
+
+// maxIdentifierLen bounds the identifiers of catalog agents put in the context.
+const maxIdentifierLen = 200
+
+// identifierPattern admits the characters of URNs and URLs that are safe to
+// show unquoted in a suggested command line, starting with a letter or digit
+// so an identifier can't pose as a flag or a home directory.
+var identifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._~:/@+%=-]*$`)
+
+func catalogAgents(ref string, data []byte) ([]cardcache.CatalogAgent, error) {
+	if !aicatalog.IsCatalogDocument(data) {
+		return nil, errors.New("not an AI Catalog")
+	}
+	entries, err := aicatalog.Parse(ref, data)
+	if err != nil {
+		return nil, err
+	}
+	var agents []cardcache.CatalogAgent
+	for _, e := range aicatalog.Agents(entries) {
+		if len(e.Identifier) > maxIdentifierLen || !identifierPattern.MatchString(e.Identifier) {
+			continue
+		}
+		if slices.ContainsFunc(agents, func(a cardcache.CatalogAgent) bool { return a.Identifier == e.Identifier }) {
+			continue
+		}
+		agents = append(agents, cardcache.CatalogAgent{
+			Identifier:  e.Identifier,
+			DisplayName: e.DisplayName,
+			Description: e.Description,
+		})
+	}
+	if len(agents) == 0 {
+		return nil, errNoCatalogAgents
+	}
+	return agents, nil
 }
 
 // errNotAgentCard marks a document at the well-known path that parses as JSON
@@ -143,8 +252,17 @@ func isTransient(err error) bool {
 	if _, ok := errors.AsType[*bodyReadError](err); ok {
 		return true
 	}
-	status, ok := errors.AsType[*agentcard.ErrStatusNotOK](err)
-	return ok && (status.StatusCode >= http.StatusInternalServerError || status.StatusCode == http.StatusTooManyRequests)
+	if status, ok := errors.AsType[*agentcard.ErrStatusNotOK](err); ok {
+		return transientStatus(status.StatusCode)
+	}
+	if status, ok := errors.AsType[*aicatalog.StatusError](err); ok {
+		return transientStatus(status.StatusCode)
+	}
+	return false
+}
+
+func transientStatus(code int) bool {
+	return code >= http.StatusInternalServerError || code == http.StatusTooManyRequests
 }
 
 func (p *Prober) httpClient() *http.Client {
@@ -227,7 +345,7 @@ func (p *Prober) logf(format string, args ...any) {
 }
 
 // limitBody caps response bodies so a hostile origin can't make the prober read
-// an unbounded card. It also marks read failures, which the card resolver
+// an unbounded document. It also marks read failures, which the card resolver
 // doesn't wrap in a *url.Error, so they count as transient.
 type limitBody struct {
 	next http.RoundTripper
@@ -243,8 +361,8 @@ func (l limitBody) RoundTrip(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-// errCardTooLarge reports a card body over maxCardBytes.
-var errCardTooLarge = fmt.Errorf("card is larger than %d bytes", maxCardBytes)
+// errCardTooLarge reports a card or catalog body over maxCardBytes.
+var errCardTooLarge = fmt.Errorf("document is larger than %d bytes", maxCardBytes)
 
 // bodyReadError is a failure to read a response body, such as a timeout or a
 // reset connection.

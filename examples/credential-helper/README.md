@@ -50,7 +50,8 @@ a2a auth get https://review.example.org --credential-helper "agent.example.com=$
 ```
 
 ```text
-Error: no credential helper for https://review.example.org
+Error: no credential helper or OAuth grant for https://review.example.org
+hint: sign in with `a2a auth login https://review.example.org`, or configure --credential-helper
 ```
 
 To use the helper for every command, list it in `~/.config/a2a-cli/config.yaml`. With several helpers, the one with the most specific matching scope runs:

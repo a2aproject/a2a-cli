@@ -126,11 +126,11 @@ func hasFilePrefix(ref string) bool {
 }
 
 func isLoopbackHost(ref string) bool {
-	host := ref
-	if h, _, err := net.SplitHostPort(ref); err == nil {
-		host = h
+	u, err := url.Parse("//" + ref)
+	if err != nil {
+		return false
 	}
-	host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+	host := u.Hostname()
 	if host == "localhost" {
 		return true
 	}

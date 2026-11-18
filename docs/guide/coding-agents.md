@@ -63,23 +63,30 @@ and wait for its answer.
 In Claude Code the plugin also adds hooks that run `a2a hook` on `SessionStart`, `UserPromptSubmit` and `PostToolBatch`. For opencode, the plugin carries an opencode plugin, `ai.opencode/plugins/a2a-hook.js`, that runs `a2a hook` from opencode's events; copy it into `~/.config/opencode/plugins/`. The [OpenCode calls a contact](../../examples/opencode-contacts/README.md) and [agent discovery](../../examples/agent-discovery/README.md) examples show both in action. The hooks tell the agent which A2A agents it can delegate to:
 
 - **Contacts.** Your [contacts](contacts.md) are listed as trusted at the start of a session, after a compaction, and again whenever the contact book changes. After a compaction the agents discovered earlier in the session are listed again too.
-- **Discovered agents.** When a URL appears in a prompt or in a `WebFetch` or `WebSearch` call, `a2a` looks for an agent card at that origin's `/.well-known/agent-card.json`. Agents it finds are listed as unverified, and the agent is told to ask you before delegating to them. Save one as a contact to trust it.
+- **Discovered agents.** When a URL appears in a prompt or in a `WebFetch` or `WebSearch` call, `a2a` looks for an agent card at that origin's `/.well-known/agent-card.json` and an [AI Catalog](ai-catalogs.md) at its `/.well-known/ai-catalog.json`. Agents it finds are listed as unverified, and the agent is told to ask you before delegating to them. Save one as a contact to trust it.
 
-Agents in registered [AI Catalogs](ai-catalogs.md) are not listed, since a catalog can list hundreds; the agent finds them with `a2a catalog search`.
+For a discovered catalog, the first 5 A2A agents it lists directly are shown, with a pointer to `a2a catalog search --catalog <url>` for the rest; nested catalogs aren't followed. The catalog of a contact's origin is listed too, but not the contact's card again. Agents in registered [AI Catalogs](ai-catalogs.md) are not listed, since a catalog can list hundreds; the agent finds them with `a2a catalog search`.
 
-The hook makes no network requests, so it doesn't slow down a turn. Origins without a cached card are probed by a detached `a2a hook probe` process, and agents it finds are reported at a later event. Each agent is reported once per session. Found cards are cached for 24 hours, and origins without a card for 6 hours. A connection failure, timeout, server error or rate limit isn't cached, so the origin is probed again when it's next mentioned. A document without an agent name and interface, or larger than 512 KiB, doesn't count as a card.
+The hook makes no network requests, so it doesn't slow down a turn. Origins without cached results are probed by a detached `a2a hook probe` process, which fetches the card and the catalog in parallel, and agents it finds are reported at a later event. With `--discovery-wait` (at most 3s), which the opencode plugin passes for web tool calls, an event that starts a probe waits up to that long for it, so the agents arrive with the tool result. Each agent is reported once per session; agents that don't fit in one event's context are reported at the next. An origin whose probe keeps failing is given up after 10 minutes. Found cards and catalogs are cached for 24 hours, and missing ones for 6 hours. A connection failure, timeout, server error or rate limit isn't cached, so the origin is probed again when it's next mentioned. A document without an agent name and interface, or larger than 512 KiB, doesn't count as a card, and a catalog counts only if it lists an A2A agent.
 
 The hook never fails the harness event: an unreadable configuration file, contact book or event makes it print nothing, and `-v` shows why.
 
 | Setting | Default | Description |
 |---|---|---|
-| `discovery` | `true` | Probe origins of URLs in the conversation. Set `false` (or `A2ACLI_DISCOVERY=false`) to keep only the contacts. |
+| `discovery` | `true` | Probe origins of URLs in the conversation for agent cards and AI Catalogs. Set `false` (or `A2ACLI_DISCOVERY=false`) to turn off both probes and keep only the contacts. Not read from a discovered `.env`. |
 | `discovery-allow-host` | | Hosts discovery may probe whatever address they resolve to, and reach by any redirect. Not read from a discovered `.env`. |
 | `discovery-scan-tools` | `WebFetch,WebSearch` | Tools whose calls are scanned for URLs. |
 
 ```yaml
 # ~/.config/a2a-cli/config.yaml
 discovery-allow-host: [agents.internal.example]
+```
+
+To opt out of auto discovery:
+
+```yaml
+# ~/.config/a2a-cli/config.yaml
+discovery: false
 ```
 
 [Security](../advanced/security.md#agent-discovery) lists where a probe may connect.

@@ -38,17 +38,26 @@ const wellKnownPath = "/.well-known/agent-card.json"
 // FoundTTL is how long a fetched card is used before it is fetched again.
 const FoundTTL = 24 * time.Hour
 
-// Entry is the outcome of fetching the card at Ref.
+// Entry is the outcome of fetching the card, or the AI Catalog, at Ref.
 type Entry struct {
 	Ref       string    `json:"ref"`
 	FetchedAt time.Time `json:"fetchedAt"`
 	// Card is nil when no agent card was found at Ref.
-	Card  *a2a.AgentCard `json:"card,omitempty"`
-	Error string         `json:"error,omitempty"`
+	Card *a2a.AgentCard `json:"card,omitempty"`
+	// Agents are the A2A agents listed by the AI Catalog at Ref.
+	Agents []CatalogAgent `json:"agents,omitempty"`
+	Error  string         `json:"error,omitempty"`
 }
 
-// Found reports whether the entry holds a card.
-func (e Entry) Found() bool { return e.Card != nil }
+// CatalogAgent is an A2A agent listed by an AI Catalog.
+type CatalogAgent struct {
+	Identifier  string `json:"identifier"`
+	DisplayName string `json:"displayName,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// Found reports whether the entry holds a card or catalog agents.
+func (e Entry) Found() bool { return e.Card != nil || len(e.Agents) > 0 }
 
 // Fresh reports whether the entry is younger than ttl at now.
 func (e Entry) Fresh(now time.Time, ttl time.Duration) bool {

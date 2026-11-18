@@ -48,6 +48,13 @@ const (
 	CodeCardInvalid = "A2ACLI_ERR_CARD_INVALID"
 	// CodeTimeout marks a --timeout that expired before a terminal state; exit 5.
 	CodeTimeout = "A2ACLI_ERR_TIMEOUT"
+	// CodeCredentialsMissing marks an agent that requires credentials the CLI
+	// does not have and could not obtain without user interaction. Exit 4. It is
+	// not named AUTH_REQUIRED because that is a task state, which exits 0.
+	CodeCredentialsMissing = "A2ACLI_ERR_CREDENTIALS_MISSING"
+	// CodeAuthFailed marks a failed authorization: discovery, sign-in, or a
+	// rejected credential. Exit 4.
+	CodeAuthFailed = "A2ACLI_ERR_AUTH_FAILED"
 	// CodeInternal marks an unexpected CLI-side failure, or any condition with
 	// no better code. Exit 1.
 	CodeInternal = "A2ACLI_ERR_INTERNAL"
@@ -87,6 +94,17 @@ const plaintextServerHint = "the agent may not use TLS; pass --insecure to allow
 // Usage builds a usage error for invalid arguments, flags, or flag combinations.
 func Usage(msg string) *Error {
 	return &Error{Code: CodeUsage, Message: msg, Hint: UsageHint, Exit: 2}
+}
+
+// CredentialsMissing builds an error for an agent that requires credentials the
+// CLI could not obtain on its own, such as when sign-in is not allowed.
+func CredentialsMissing(msg, hint string, cause error) *Error {
+	return &Error{Code: CodeCredentialsMissing, Message: msg, Hint: hint, Exit: 4, err: cause}
+}
+
+// AuthFailed builds an error for a failed authorization attempt.
+func AuthFailed(msg string, cause error) *Error {
+	return &Error{Code: CodeAuthFailed, Message: msg, Exit: 4, err: cause}
 }
 
 // CardResolution builds an error for a failure to resolve an --agent-card.
@@ -131,7 +149,7 @@ func cardInvalidHint(err error) string {
 	if errors.As(err, &status) {
 		switch {
 		case status.StatusCode == http.StatusUnauthorized || status.StatusCode == http.StatusForbidden:
-			return "pass or check credentials (--auth, --svc-param or --credential-helper)"
+			return "pass or check credentials (--auth, --svc-param or --credential-helper); if the agent uses OAuth, run `a2a auth login` and retry with --oauth auto"
 		case status.StatusCode >= http.StatusInternalServerError:
 			return "the agent failed to serve its card, check its logs or retry"
 		}
