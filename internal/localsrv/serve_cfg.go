@@ -40,10 +40,9 @@ type LoggerFunc func(format string, args ...any)
 type Config struct {
 	CardParams
 
-	Listener        net.Listener
-	ProtocolVersion a2a.ProtocolVersion
-	Logger          LoggerFunc
-	CardCompat      bool
+	Listener   net.Listener
+	Logger     LoggerFunc
+	CardCompat bool
 
 	Quiet bool
 }
@@ -151,7 +150,8 @@ func buildMux(handler a2asrv.RequestHandler, card *a2a.AgentCard, transport a2a.
 }
 
 func agentCardHandler(card *a2a.AgentCard, sc Config) http.Handler {
-	if sc.CardCompat {
+	// A v0.3 server needs a card v0.3 clients can read.
+	if sc.CardCompat || sc.ProtocolVersion == a2av0.Version {
 		return a2asrv.NewAgentCardHandler(a2av0.NewStaticAgentCardProducer(card))
 	}
 	return a2asrv.NewStaticAgentCardHandler(card)

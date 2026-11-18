@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
+	"github.com/a2aproject/a2a-go/v2/a2acompat/a2av0"
 )
 
 // CardParams holds the parameters used to build a local agent card.
@@ -31,6 +32,7 @@ type CardParams struct {
 	AgentDesc        string
 	AdvertiseAddress string
 	Transport        a2a.TransportProtocol
+	ProtocolVersion  a2a.ProtocolVersion
 }
 
 func createAgentCard(cfg CardParams) (*a2a.AgentCard, error) {
@@ -72,5 +74,9 @@ func getAgentInterface(cfg CardParams) *a2a.AgentInterface {
 	if cfg.Transport != a2a.TransportProtocolGRPC && !strings.Contains(addr, "://") {
 		addr = "http://" + addr
 	}
-	return a2a.NewAgentInterface(addr, cfg.Transport)
+	iface := a2a.NewAgentInterface(addr, cfg.Transport)
+	if cfg.ProtocolVersion == a2av0.Version {
+		iface.ProtocolVersion = a2av0.Version
+	}
+	return iface
 }

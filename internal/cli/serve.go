@@ -91,17 +91,17 @@ func newServeCmd(cfg *globalConfig) *cobra.Command {
 				return fmt.Errorf("listen: %w", err)
 			}
 			sc := localsrv.Config{
-				Listener:        listener,
-				Logger:          cfg.logf,
-				ProtocolVersion: a2a.ProtocolVersion(protocol),
-				CardCompat:      cardCompat,
-				Quiet:           quiet,
+				Listener:   listener,
+				Logger:     cfg.logf,
+				CardCompat: cardCompat,
+				Quiet:      quiet,
 				CardParams: localsrv.CardParams{
 					AgentName:        name,
 					AgentDesc:        desc,
 					CardPath:         cardFile,
 					Transport:        transport,
 					AdvertiseAddress: advertiseAddress,
+					ProtocolVersion:  a2a.ProtocolVersion(protocol),
 				},
 			}
 			if sc.AdvertiseAddress == "" {

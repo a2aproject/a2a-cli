@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1351,6 +1352,64 @@ func newAgentCard(url string, cap a2a.AgentCapabilities) *a2a.AgentCard {
 		Capabilities:        cap,
 		SupportedInterfaces: []*a2a.AgentInterface{a2a.NewAgentInterface(url, a2a.TransportProtocolHTTPJSON)},
 	}
+}
+
+func TestServe_Protocol03(t *testing.T) {
+	t.Parallel()
+	for _, transport := range []a2a.TransportProtocol{a2a.TransportProtocolHTTPJSON, a2a.TransportProtocolJSONRPC} {
+		t.Run(string(transport), func(t *testing.T) {
+			t.Parallel()
+			url := startLocalServer(t, localsrv.Config{
+				CardParams: localsrv.CardParams{Transport: transport, ProtocolVersion: a2av0.Version},
+			})
+			// v0.3 clients read the endpoint from the card's top-level url.
+			resp, err := http.Get(url + a2asrv.WellKnownAgentCardPath)
+			if err != nil {
+				t.Fatalf("GET agent card error = %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			var card struct {
+				URL string `json:"url"`
+			}
+			if err := json.NewDecoder(resp.Body).Decode(&card); err != nil {
+				t.Fatalf("decoding agent card error = %v", err)
+			}
+			if card.URL != url {
+				t.Fatalf("agent card url = %q, want %q", card.URL, url)
+			}
+			out, err := runCMD(t, "send", "-a", url, "-o", "json", "hi")
+			if err != nil {
+				t.Fatalf("send to a --protocol 0.3 server error = %v", err)
+			}
+			if got := mustDecodeTask(t, out).Status.State; got != a2a.TaskStateCompleted {
+				t.Fatalf("send to a --protocol 0.3 server state = %q, want %q", got, a2a.TaskStateCompleted)
+			}
+		})
+	}
+}
+
+// startLocalServer runs `a2a server --echo` with cfg and returns its URL.
+func startLocalServer(t *testing.T, cfg localsrv.Config) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen() error = %v", err)
+	}
+	cfg.Listener = listener
+	cfg.AdvertiseAddress = listener.Addr().String()
+	cfg.Logger = func(string, ...any) {}
+	cfg.Quiet = true
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = localsrv.ServeEcho(ctx, cfg)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+	return "http://" + cfg.AdvertiseAddress
 }
 
 func startLegacyTestServer(t *testing.T) string {
