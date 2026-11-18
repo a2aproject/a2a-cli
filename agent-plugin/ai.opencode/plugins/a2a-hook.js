@@ -22,16 +22,17 @@ import { randomBytes } from "node:crypto"
 const TIMEOUT_MS = 5000
 // How long a web tool call waits for the background probe of the origins it
 // mentioned, so the agent hears about an agent found there in the tool result.
-const PROBE_WAIT_MS = 1500
+// `a2a hook` waits only when it started a probe.
+const PROBE_WAIT = "1500ms"
 // opencode's tool IDs mapped to the names `a2a hook` scans by default.
 const TOOL_NAMES = { webfetch: "WebFetch", websearch: "WebSearch" }
 
-function runHook(event) {
+function runHook(event, args = []) {
   return new Promise((resolve) => {
     let out = ""
     let child
     try {
-      child = spawn("a2a", ["hook"], { stdio: ["pipe", "pipe", "inherit"] })
+      child = spawn("a2a", ["hook", ...args], { stdio: ["pipe", "pipe", "inherit"] })
     } catch {
       resolve("")
       return
@@ -54,8 +55,6 @@ function runHook(event) {
   })
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-
 // partID makes an ID in opencode's ascending format, which orders the part
 // after the ones already in the message.
 let lastID = 0n
@@ -73,7 +72,7 @@ export const A2AHook = async ({ client, directory }) => {
   // Context restored after a compaction, which has no message to attach it to.
   const compacted = new Map()
 
-  const hook = (sessionID, fields) => runHook({ session_id: sessionID, cwd: directory, ...fields })
+  const hook = (sessionID, fields, args) => runHook({ session_id: sessionID, cwd: directory, ...fields }, args)
 
   // A session this process hasn't seen is new when it has no messages yet, and
   // resumed otherwise, as with `opencode run --continue`.
@@ -120,11 +119,7 @@ export const A2AHook = async ({ client, directory }) => {
         tool_input: args,
         tool_response: output.output,
       }
-      let context = await hook(sessionID, event)
-      if (!context) {
-        await sleep(PROBE_WAIT_MS)
-        context = await hook(sessionID, event)
-      }
+      const context = await hook(sessionID, event, ["--discovery-wait", PROBE_WAIT])
       if (context) output.output += "\n\n<system-reminder>\n" + context + "\n</system-reminder>"
     },
 

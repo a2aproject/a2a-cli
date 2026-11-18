@@ -402,14 +402,50 @@ func TestHookCmd(t *testing.T) {
 
 func TestHookCmdDiscoveryDisabled(t *testing.T) {
 	t.Parallel()
-	env := newContactEnv(t)
 
-	out, _, err := env.run(`{"hook_event_name":"UserPromptSubmit","session_id":"s1","prompt":"https://new.example"}`, "hook", "--discovery=false")
-	if err != nil {
-		t.Fatalf("hook error = %v", err)
+	tests := []struct {
+		name       string
+		userConfig string
+		env        map[string]string
+		args       []string
+	}{
+		{name: "flag", args: []string{"--discovery=false"}},
+		{name: "user config", userConfig: "discovery: false\n"},
+		{name: "environment", env: map[string]string{"A2ACLI_DISCOVERY": "false"}},
 	}
-	if out != "" || len(env.spawned) != 0 {
-		t.Fatalf("hook --discovery=false = %q, spawned %v; want no output and no probe", out, env.spawned)
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := newContactEnv(t)
+			dir := t.TempDir()
+			userPath := filepath.Join(dir, "config.yaml")
+			if tc.userConfig != "" {
+				if err := os.WriteFile(userPath, []byte(tc.userConfig), 0o600); err != nil {
+					t.Fatalf("os.WriteFile() error = %v", err)
+				}
+			}
+			env.cfgLoader = func(clicfg.LoadOpts) (*clicfg.Store, error) {
+				return clicfg.Load(clicfg.LoadOpts{
+					WorkingDir: dir,
+					UserPath:   userPath,
+					GlobalPath: filepath.Join(dir, ".env"),
+					LookupEnv: func(k string) (string, bool) {
+						v, ok := tc.env[k]
+						return v, ok
+					},
+				})
+			}
+
+			args := append([]string{"hook"}, tc.args...)
+			out, _, err := env.run(`{"hook_event_name":"UserPromptSubmit","session_id":"s1","prompt":"https://new.example"}`, args...)
+			if err != nil {
+				t.Fatalf("hook error = %v", err)
+			}
+			if out != "" || len(env.spawned) != 0 {
+				t.Fatalf("hook = %q, spawned %v; want no output and no probe", out, env.spawned)
+			}
+		})
 	}
 }
 

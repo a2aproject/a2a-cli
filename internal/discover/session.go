@@ -39,10 +39,15 @@ type sessionState struct {
 	ContactsDigest string `json:"contactsDigest,omitempty"`
 	// HadContacts is set once the session has been told about any contact.
 	HadContacts bool `json:"hadContacts,omitempty"`
-	// Injected maps origins of discovered agents already injected to when.
+	// Injected maps the origins of agent cards, and the URLs of AI Catalogs,
+	// already injected to when.
 	Injected map[string]time.Time `json:"injected,omitempty"`
 	// Pending maps origins awaiting a background probe to when it was started.
 	Pending map[string]time.Time `json:"pending,omitempty"`
+}
+
+func newSessionState() *sessionState {
+	return &sessionState{Injected: map[string]time.Time{}, Pending: map[string]time.Time{}}
 }
 
 // sessionStore keeps one state file per session id under dir.

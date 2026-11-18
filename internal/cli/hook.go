@@ -18,9 +18,11 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/a2aproject/a2a-cli/internal/aicatalog"
 	"github.com/a2aproject/a2a-cli/internal/cardcache"
 	"github.com/a2aproject/a2a-cli/internal/clicfg"
 	"github.com/a2aproject/a2a-cli/internal/discover"
@@ -30,6 +32,7 @@ type hookFlags struct {
 	discovery  bool
 	allowHosts []string
 	scanTools  []string
+	wait       time.Duration
 	spawn      func(args []string) error
 	// skip is set when the configuration can't be loaded, so settings such as
 	// "discovery: false" are unknown and the hook does nothing.
@@ -52,9 +55,12 @@ to the conversation in the Claude Code hook output format, or nothing.
   PostToolBatch       agents discovered at origins of URLs in the calls of
   PostToolUse         --discovery-scan-tools
 
-The hook never makes network requests. Origins without a cached card are probed
-by a detached background process, and agents found are reported by a later
-event. Each piece of context is added once per session.
+Discovery looks for an agent card at /.well-known/agent-card.json and an AI
+Catalog at /.well-known/ai-catalog.json on each origin. The hook never makes
+network requests. Origins without cached results are probed by a detached
+background process, and agents found are reported by a later event, or by the
+same one when --discovery-wait gives the probe time to finish. Each piece of
+context is added once per session.
 
 Disable discovery with "discovery: false" in the user config or A2ACLI_DISCOVERY=false.
 Discovery refuses link-local addresses, such as the IPv4 cloud metadata endpoint,
@@ -84,6 +90,7 @@ with --discovery-allow-host.`,
 	pf.BoolVar(&f.discovery, "discovery", true, "Discover agents at origins of URLs in the conversation")
 	pf.StringArrayVar(&f.allowHosts, "discovery-allow-host", nil, "Host that discovery may probe whatever address it resolves to (repeatable)")
 	cmd.Flags().StringSliceVar(&f.scanTools, "discovery-scan-tools", discover.DefaultScanTools, "Tools whose calls are scanned for URLs")
+	cmd.Flags().DurationVar(&f.wait, "discovery-wait", 0, "How long an event that starts probes waits for them, to report agents found in its own output")
 	if err := pf.SetAnnotation("discovery-allow-host", clicfg.AnnotationNotFromDiscoveredFile, []string{"true"}); err != nil {
 		return nil, err
 	}
@@ -122,15 +129,17 @@ func runHook(cmd *cobra.Command, cfg *globalConfig, f *hookFlags) error {
 	}
 
 	h := discover.Hook{
-		Contacts:  entries,
-		Cards:     cards,
-		StateDir:  filepath.Join(dir, "sessions"),
-		Discovery: f.discovery,
-		ScanTools: f.scanTools,
+		Contacts:      entries,
+		Cards:         cards,
+		StateDir:      filepath.Join(dir, "sessions"),
+		Discovery:     f.discovery,
+		ScanTools:     f.scanTools,
+		KnownCatalogs: registeredCatalogs(cfg),
 		Probe: func(origins []string) error {
 			return f.spawn(probeArgs(cfg, f, origins))
 		},
-		Logf: cfg.logf,
+		ProbeWait: f.wait,
+		Logf:      cfg.logf,
 	}
 	out, err := h.Run(input)
 	if err != nil || out == "" {
@@ -138,6 +147,30 @@ func runHook(cmd *cobra.Command, cfg *globalConfig, f *hookFlags) error {
 	}
 	_, err = fmt.Fprintln(cfg.Out, out)
 	return err
+}
+
+// registeredCatalogs returns the sources of the registered AI Catalogs. The
+// catalog store is read directly so its problems are only logged: the hook's
+// output goes to the harness.
+func registeredCatalogs(cfg *globalConfig) []string {
+	dir := cfg.catalogDir
+	if dir == "" {
+		var err error
+		if dir, err = aicatalog.DefaultDir(); err != nil {
+			cfg.logf("hook: %v", err)
+			return nil
+		}
+	}
+	reg, err := (&aicatalog.Store{Dir: dir}).Open()
+	if err != nil {
+		cfg.logf("hook: reading AI Catalogs: %v", err)
+		return nil
+	}
+	var sources []string
+	for _, c := range reg.Catalogs() {
+		sources = append(sources, c.Source)
+	}
+	return sources
 }
 
 // probeArgs builds the command line of the background probe, forwarding the

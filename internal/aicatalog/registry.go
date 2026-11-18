@@ -241,6 +241,20 @@ func Load(ctx context.Context, f *Fetcher, sourceURL string, data []byte) ([]Ent
 	return w.entries, w.warnings, nil
 }
 
+// Parse returns the entries the catalog document data served from sourceURL
+// lists directly, without following nested catalogs.
+func Parse(sourceURL string, data []byte) ([]Entry, error) {
+	doc, err := parseDocument(data)
+	if err != nil {
+		return nil, fmt.Errorf("%s is not an AI Catalog: %w", sourceURL, err)
+	}
+	entries := make([]Entry, len(doc.Entries))
+	for i, e := range doc.Entries {
+		entries[i] = Entry{CatalogEntry: e, Catalog: sourceURL, Base: sourceURL, Raw: doc.rawEntries[i]}
+	}
+	return entries, nil
+}
+
 // registryIdentifier derives a registry entry identifier from the catalog name
 // the same way ai-catalog-cli does, so it stays stable across updates.
 func registryIdentifier(name string) string {

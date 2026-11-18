@@ -17,9 +17,12 @@ package discover
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/Agent-Card/ai-catalog-go/catalog"
 
 	"github.com/a2aproject/a2a-cli/internal/cardcache"
 )
@@ -60,10 +63,18 @@ type Hook struct {
 	Discovery bool
 	// ScanTools are the tool names whose input and output are scanned for URLs.
 	ScanTools []string
+	// KnownCatalogs are the source URLs of registered AI Catalogs, which
+	// discovery doesn't report.
+	KnownCatalogs []string
 	// Probe starts fetching the cards of origins without waiting for the result.
 	Probe func(origins []string) error
-	Now   func() time.Time
-	Logf  func(format string, args ...any)
+	// ProbeWait is how long an event that started probes waits for them, so
+	// agents found are reported by the same event.
+	ProbeWait time.Duration
+	Now       func() time.Time
+	Logf      func(format string, args ...any)
+	// sleep pauses between checks of the card cache while waiting for probes.
+	sleep func(time.Duration)
 }
 
 type event struct {
@@ -100,17 +111,13 @@ func (h *Hook) Run(input []byte) (string, error) {
 		return "", fmt.Errorf("parsing hook event: %w", err)
 	}
 
-	st := &sessionState{Injected: map[string]time.Time{}, Pending: map[string]time.Time{}}
-	var sess *openSession
-	if ev.SessionID != "" {
-		sess = sessionStore{dir: h.StateDir}.open(ev.SessionID)
-		st = &sess.state
-	}
-	blocks := h.handle(ev, st, sess != nil)
-	if sess != nil {
-		if err := sess.close(); err != nil {
-			h.logf("%v", err)
-		}
+	blocks, probed := h.runOnce(ev)
+	// Without a session the state that keeps the second pass from probing
+	// again isn't saved.
+	if len(probed) > 0 && h.ProbeWait > 0 && ev.SessionID != "" {
+		h.waitForProbes(probed)
+		more, _ := h.runOnce(ev)
+		blocks = append(blocks, more...)
 	}
 
 	var nonEmpty []string
@@ -134,23 +141,68 @@ func (h *Hook) Run(input []byte) (string, error) {
 	return strings.TrimSuffix(buf.String(), "\n"), nil
 }
 
-func (h *Hook) handle(ev event, st *sessionState, tracked bool) []string {
+// runOnce handles ev against the session state and returns the blocks to add
+// and the origins whose probes it started.
+func (h *Hook) runOnce(ev event) ([]string, []string) {
+	st := newSessionState()
+	var sess *openSession
+	if ev.SessionID != "" {
+		sess = sessionStore{dir: h.StateDir}.open(ev.SessionID)
+		st = &sess.state
+	}
+	blocks, probed := h.handle(ev, st, sess != nil)
+	if sess != nil {
+		if err := sess.close(); err != nil {
+			h.logf("%v", err)
+		}
+	}
+	return blocks, probed
+}
+
+// waitForProbes returns once the card and catalog of every origin are cached,
+// or after ProbeWait.
+func (h *Hook) waitForProbes(origins []string) {
+	const interval = 100 * time.Millisecond
+	sleep := h.sleep
+	if sleep == nil {
+		sleep = time.Sleep
+	}
+	for waited := time.Duration(0); waited < h.ProbeWait; waited += interval {
+		sleep(interval)
+		if !slices.ContainsFunc(origins, h.probing) {
+			return
+		}
+	}
+}
+
+// probing reports whether a document of origin has no usable cache entry.
+func (h *Hook) probing(origin string) bool {
+	for _, ref := range []string{origin, CatalogRef(origin)} {
+		if e, ok := h.Cards.Get(ref); !ok || (!e.Found() && !e.Fresh(h.now(), negativeTTL)) {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *Hook) handle(ev event, st *sessionState, tracked bool) ([]string, []string) {
 	now := h.now()
 	contactsBlock := FormatContacts(h.Contacts)
 	digest := hashName(contactsBlock)
 
 	if ev.HookEventName == "SessionStart" {
-		return h.sessionStart(ev.Source, st, contactsBlock, digest, now)
+		return h.sessionStart(ev.Source, st, contactsBlock, digest, now), nil
 	}
 
 	var blocks []string
 	if tracked {
 		blocks = append(blocks, contactsChange(st, contactsBlock, digest))
 	}
-	if h.Discovery {
-		blocks = append(blocks, FormatDiscovered(h.discover(ExtractOrigins(h.scanTexts(ev)...), st, now)))
+	if !h.Discovery {
+		return blocks, nil
 	}
-	return blocks
+	found, probed := h.discover(ExtractOrigins(h.scanTexts(ev)...), st, now)
+	return append(blocks, FormatDiscovered(found)), probed
 }
 
 // contactsChange returns the block that brings a conversation given the
@@ -177,7 +229,7 @@ func (h *Hook) sessionStart(source string, st *sessionState, contactsBlock, dige
 		// A resumed conversation still holds the contacts block it was given.
 		return []string{contactsChange(st, contactsBlock, digest)}
 	case "startup", "clear":
-		*st = sessionState{Injected: map[string]time.Time{}, Pending: map[string]time.Time{}}
+		*st = *newSessionState()
 		if err := (sessionStore{dir: h.StateDir}).prune(now); err != nil {
 			h.logf("pruning session state: %v", err)
 		}
@@ -221,11 +273,12 @@ func (h *Hook) scanTexts(ev event) []string {
 	return texts
 }
 
-// discover returns the agents to inject now: origins seen in this event or
-// earlier whose card is cached and that the session hasn't been told about.
-// Origins without a usable cache entry are probed in the background and
-// reported by a later event once their card is cached.
-func (h *Hook) discover(origins []string, st *sessionState, now time.Time) []DiscoveredEntry {
+// discover returns the agents to inject now and the origins it started probes
+// for: origins seen in this event or earlier whose card or catalog is cached
+// and that the session hasn't been told about. Origins without a usable cache
+// entry are probed in the background and reported by a later event once their
+// documents are cached.
+func (h *Hook) discover(origins []string, st *sessionState, now time.Time) ([]DiscoveredEntry, []string) {
 	skip := h.contactOrigins()
 
 	var candidates []string
@@ -239,7 +292,7 @@ func (h *Hook) discover(origins []string, st *sessionState, now time.Time) []Dis
 	slices.Sort(candidates)
 	added := 0
 	for _, o := range origins {
-		if _, injected := st.Injected[o]; injected || skip[o] || slices.Contains(candidates, o) {
+		if skip[o] || slices.Contains(candidates, o) || h.settled(o, st, now) {
 			continue
 		}
 		if added == maxNewOrigins {
@@ -256,52 +309,115 @@ func (h *Hook) discover(origins []string, st *sessionState, now time.Time) []Dis
 			delete(st.Pending, o)
 			continue
 		}
-		e, ok := h.Cards.Get(o)
-		switch {
-		case ok && e.Found():
-			found = append(found, DiscoveredEntry{Origin: o, Card: e.Card})
-			st.Injected[o] = now
+		entry, refresh, unknown := h.lookup(o, st, now)
+		if entry.Card != nil || len(entry.Agents) > 0 {
+			found = append(found, entry)
+		}
+		if !unknown {
 			delete(st.Pending, o)
-			if !e.Fresh(now, positiveTTL) {
+			if refresh {
 				toProbe = append(toProbe, o)
 			}
-		case ok && e.Fresh(now, negativeTTL):
-			delete(st.Pending, o)
-		default:
-			started, pending := st.Pending[o]
-			if pending && now.Sub(started) < probeRetry {
-				continue
-			}
-			if !pending && len(st.Pending) >= maxPending {
-				continue
-			}
-			st.Pending[o] = now
-			toProbe = append(toProbe, o)
+			continue
 		}
+		started, pending := st.Pending[o]
+		if pending && now.Sub(started) < probeRetry {
+			continue
+		}
+		if !pending && len(st.Pending) >= maxPending {
+			continue
+		}
+		st.Pending[o] = now
+		toProbe = append(toProbe, o)
 	}
 	if len(toProbe) > 0 && h.Probe != nil {
 		if err := h.Probe(toProbe); err != nil {
 			h.logf("%v", err)
+			return found, nil
 		}
 	}
-	return found
+	return found, toProbe
+}
+
+// lookup returns what the cache holds about origin that the session hasn't
+// been told yet, marking it injected. refresh reports a found document that is
+// due to be fetched again, and unknown a document that has no usable entry.
+func (h *Hook) lookup(origin string, st *sessionState, now time.Time) (entry DiscoveredEntry, refresh, unknown bool) {
+	entry.Origin = origin
+	catalogRef := CatalogRef(origin)
+	for _, ref := range []string{origin, catalogRef} {
+		if _, done := st.Injected[ref]; done {
+			continue
+		}
+		if ref == catalogRef && h.knownCatalog(ref) {
+			continue
+		}
+		e, ok := h.Cards.Get(ref)
+		switch {
+		case ok && e.Found():
+			if ref == catalogRef {
+				entry.Agents = e.Agents
+			} else {
+				entry.Card = e.Card
+			}
+			st.Injected[ref] = now
+			refresh = refresh || !e.Fresh(now, positiveTTL)
+		case ok && e.Fresh(now, negativeTTL):
+		default:
+			unknown = true
+		}
+	}
+	return entry, refresh, unknown
+}
+
+// settled reports whether each document of origin was reported to the session
+// or is cached as missing, so a mention of origin has nothing to add.
+func (h *Hook) settled(origin string, st *sessionState, now time.Time) bool {
+	catalogRef := CatalogRef(origin)
+	for _, ref := range []string{origin, catalogRef} {
+		if _, done := st.Injected[ref]; done || (ref == catalogRef && h.knownCatalog(ref)) {
+			continue
+		}
+		if e, ok := h.Cards.Get(ref); !ok || e.Found() || !e.Fresh(now, negativeTTL) {
+			return false
+		}
+	}
+	return true
+}
+
+func (h *Hook) knownCatalog(ref string) bool {
+	return slices.ContainsFunc(h.KnownCatalogs, func(c string) bool { return strings.EqualFold(c, ref) })
 }
 
 // injectedEntries returns the discovered agents injected earlier, except those
 // that have since become contacts.
 func (h *Hook) injectedEntries(st *sessionState) []DiscoveredEntry {
 	skip := h.contactOrigins()
-	origins := make([]string, 0, len(st.Injected))
-	for o := range st.Injected {
-		if !skip[o] {
-			origins = append(origins, o)
+	byOrigin := map[string]*DiscoveredEntry{}
+	for ref := range st.Injected {
+		origin, isCatalog := strings.CutSuffix(ref, catalog.WellKnownPath)
+		if skip[origin] || (isCatalog && h.knownCatalog(ref)) {
+			continue
+		}
+		e, ok := h.Cards.Get(ref)
+		if !ok || !e.Found() {
+			continue
+		}
+		entry := byOrigin[origin]
+		if entry == nil {
+			entry = &DiscoveredEntry{Origin: origin}
+			byOrigin[origin] = entry
+		}
+		if isCatalog {
+			entry.Agents = e.Agents
+		} else {
+			entry.Card = e.Card
 		}
 	}
-	slices.Sort(origins)
 	var entries []DiscoveredEntry
-	for _, o := range origins {
-		if e, ok := h.Cards.Get(o); ok && e.Found() {
-			entries = append(entries, DiscoveredEntry{Origin: o, Card: e.Card})
+	for _, o := range slices.Sorted(maps.Keys(byOrigin)) {
+		if e := byOrigin[o]; e.Card != nil || len(e.Agents) > 0 {
+			entries = append(entries, *e)
 		}
 	}
 	return entries

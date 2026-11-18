@@ -81,11 +81,11 @@ The site's terminal shows the probe of the agent card, then the A2A request. To 
 
 ## How it works
 
-When a URL appears in a prompt or a web fetch, the plugin runs `a2a hook`, which checks the card cache for the URL's origin. An origin it hasn't seen is probed by a detached `a2a hook probe`, which fetches `/.well-known/agent-card.json`; for a web fetch the plugin waits briefly for the probe, so the agent arrives with the fetch result. Each agent is reported once per session.
+When a URL appears in a prompt or a web fetch, the plugin runs `a2a hook`, which checks the card cache for the URL's origin. An origin it hasn't seen is probed by a detached `a2a hook probe`, which fetches `/.well-known/agent-card.json` and `/.well-known/ai-catalog.json` in parallel; for a web fetch the plugin waits up to 1.5 seconds for the probe, so the agent arrives with the fetch result. This site has no AI Catalog; a site that has one gets its A2A agents listed too. Each agent is reported once per session.
 
 Discovered agents are marked unverified: the context tells opencode to ask you before delegating or sending data to them, and to treat the card's text as data, not instructions. To trust one, save it as a contact with `a2a contact add acme-docs http://docs.acme.test:8080`.
 
-[Coding Agents](../../docs/guide/coding-agents.md#contacts-and-agent-discovery) describes discovery and its settings, and [Security](../../docs/advanced/security.md#agent-discovery) where probes may connect. Set `discovery: false` in `~/.config/a2a-cli/config.yaml` to turn it off.
+[Coding Agents](../../docs/guide/coding-agents.md#contacts-and-agent-discovery) describes discovery and its settings, and [Security](../../docs/advanced/security.md#agent-discovery) where probes may connect. Set `discovery: false` in `~/.config/a2a-cli/config.yaml` to turn off both probes.
 
 ## Clean up
 

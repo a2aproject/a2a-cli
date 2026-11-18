@@ -58,10 +58,11 @@ func newHookEnv(t *testing.T) *hookEnv {
 
 func (e *hookEnv) hook(list []ContactEntry, discovery bool) *Hook {
 	return &Hook{
-		Contacts:  list,
-		Cards:     e.cards,
-		StateDir:  filepath.Join(e.dir, "sessions"),
-		Discovery: discovery,
+		Contacts:      list,
+		Cards:         e.cards,
+		StateDir:      filepath.Join(e.dir, "sessions"),
+		Discovery:     discovery,
+		KnownCatalogs: []string{"https://registered.example/.well-known/ai-catalog.json"},
 		Probe: func(origins []string) error {
 			e.probed = append(e.probed, origins)
 			return nil
@@ -101,6 +102,18 @@ func found(origin, name string, at time.Time) cardcache.Entry {
 
 func notFound(origin string, at time.Time) cardcache.Entry {
 	return cardcache.Entry{Ref: origin, FetchedAt: at, Error: "404"}
+}
+
+func noCatalog(origin string, at time.Time) cardcache.Entry {
+	return notFound(CatalogRef(origin), at)
+}
+
+func catalogFound(origin string, at time.Time, ids ...string) cardcache.Entry {
+	e := cardcache.Entry{Ref: CatalogRef(origin), FetchedAt: at}
+	for _, id := range ids {
+		e.Agents = append(e.Agents, cardcache.CatalogAgent{Identifier: id, DisplayName: id + " name"})
+	}
+	return e
 }
 
 func start(source string) string {
@@ -158,7 +171,7 @@ func TestHookRun(t *testing.T) {
 			name:      "compaction skips discovered agents that became contacts",
 			discovery: true,
 			steps: []step{
-				{event: prompt("https://nimbus.example"), cache: []cardcache.Entry{found(nimbus.Origin, "Nimbus", testNow)}, want: []string{"auto-discovered"}},
+				{event: prompt("https://nimbus.example"), cache: []cardcache.Entry{found(nimbus.Origin, "Nimbus", testNow), noCatalog(nimbus.Origin, testNow)}, want: []string{"auto-discovered"}},
 				{event: start("compact"), contacts: []ContactEntry{nimbus}, want: []string{"A2A contacts"}, wantAbsent: []string{"auto-discovered"}},
 			},
 		},
@@ -209,7 +222,7 @@ func TestHookRun(t *testing.T) {
 			name:      "fresh negative entry not probed",
 			discovery: true,
 			steps: []step{
-				{event: prompt("https://site.example"), cache: []cardcache.Entry{notFound("https://site.example", testNow)}},
+				{event: prompt("https://site.example"), cache: []cardcache.Entry{notFound("https://site.example", testNow), noCatalog("https://site.example", testNow)}},
 			},
 		},
 		{
@@ -243,7 +256,7 @@ func TestHookRun(t *testing.T) {
 			name:      "compaction reinjects discovered agents",
 			discovery: true,
 			steps: []step{
-				{event: prompt("https://agent.example"), cache: []cardcache.Entry{found("https://agent.example", "Agent", testNow)}, want: []string{"- https://agent.example"}},
+				{event: prompt("https://agent.example"), cache: []cardcache.Entry{found("https://agent.example", "Agent", testNow), noCatalog("https://agent.example", testNow)}, want: []string{"- https://agent.example"}},
 				{event: start("compact"), want: []string{"- https://agent.example"}},
 				{event: prompt("https://agent.example")},
 			},
@@ -252,7 +265,7 @@ func TestHookRun(t *testing.T) {
 			name:      "clear forgets discovered agents",
 			discovery: true,
 			steps: []step{
-				{event: prompt("https://agent.example"), cache: []cardcache.Entry{found("https://agent.example", "Agent", testNow)}, want: []string{"- https://agent.example"}},
+				{event: prompt("https://agent.example"), cache: []cardcache.Entry{found("https://agent.example", "Agent", testNow), noCatalog("https://agent.example", testNow)}, want: []string{"- https://agent.example"}},
 				{event: start("clear")},
 				{event: prompt("https://agent.example"), want: []string{"- https://agent.example"}},
 			},
@@ -272,6 +285,52 @@ func TestHookRun(t *testing.T) {
 			discovery: true,
 			steps: []step{
 				{event: `{"hook_event_name":"PostToolUse","session_id":"s1","tool_name":"Bash","tool_input":{"command":"curl https://bash.example"}}`},
+			},
+		},
+		{
+			name:      "catalog agents injected with the card",
+			discovery: true,
+			steps: []step{
+				{
+					event: prompt("https://acme.example"),
+					cache: []cardcache.Entry{found("https://acme.example", "Acme", testNow), catalogFound("https://acme.example", testNow, "urn:air:acme:agent:fin")},
+					want: []string{
+						"- https://acme.example — Acme",
+						"- AI Catalog https://acme.example/.well-known/ai-catalog.json lists:\n  - urn:air:acme:agent:fin — urn:air:acme:agent:fin name",
+						"a2a send --catalog https://acme.example/.well-known/ai-catalog.json -a <identifier>",
+					},
+				},
+				{event: prompt("https://acme.example")},
+			},
+		},
+		{
+			name:      "catalog found after card injected",
+			discovery: true,
+			steps: []step{
+				{event: prompt("https://acme.example"), cache: []cardcache.Entry{found("https://acme.example", "Acme", testNow)}, want: []string{"- https://acme.example — Acme"}, wantAbsent: []string{"lists:"}, wantProbe: []string{"https://acme.example"}},
+				{event: prompt("thanks"), cache: []cardcache.Entry{catalogFound("https://acme.example", testNow, "urn:a")}, want: []string{"AI Catalog", "urn:a"}, wantAbsent: []string{"- https://acme.example — Acme"}},
+			},
+		},
+		{
+			name:      "catalog without card injected",
+			discovery: true,
+			steps: []step{
+				{event: prompt("https://acme.example"), cache: []cardcache.Entry{notFound("https://acme.example", testNow), catalogFound("https://acme.example", testNow, "urn:a")}, want: []string{"AI Catalog", "urn:a"}, wantAbsent: []string{"After the user agrees: a2a send -a https://acme.example"}},
+			},
+		},
+		{
+			name:      "registered catalog not injected",
+			discovery: true,
+			steps: []step{
+				{event: prompt("https://registered.example"), cache: []cardcache.Entry{notFound("https://registered.example", testNow), catalogFound("https://registered.example", testNow, "urn:a")}},
+			},
+		},
+		{
+			name:      "compaction reinjects catalog agents",
+			discovery: true,
+			steps: []step{
+				{event: prompt("https://acme.example"), cache: []cardcache.Entry{notFound("https://acme.example", testNow), catalogFound("https://acme.example", testNow, "urn:a")}, want: []string{"urn:a"}},
+				{event: start("compact"), want: []string{"AI Catalog https://acme.example/.well-known/ai-catalog.json", "urn:a"}},
 			},
 		},
 		{
@@ -354,8 +413,10 @@ func TestHookRunWithLockedSession(t *testing.T) {
 			t.Errorf("lockFile.unlock() error = %v", err)
 		}
 	})
-	if err := env.cards.Put(found("https://agent.example", "Agent", testNow)); err != nil {
-		t.Fatalf("Cache.Put() error = %v", err)
+	for _, e := range []cardcache.Entry{found("https://agent.example", "Agent", testNow), noCatalog("https://agent.example", testNow)} {
+		if err := env.cards.Put(e); err != nil {
+			t.Fatalf("Cache.Put() error = %v", err)
+		}
 	}
 
 	if got := env.run(h, prompt("https://agent.example")); !strings.Contains(got, "- https://agent.example") {
@@ -367,6 +428,63 @@ func TestHookRunWithLockedSession(t *testing.T) {
 	}
 	if diff := cmp.Diff(string(before), string(after)); diff != "" {
 		t.Fatalf("session state written without the lock (-want +got) diff = %s", diff)
+	}
+}
+
+func TestHookRunWaitsForProbes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		probeCache []cardcache.Entry
+		want       string
+		wantSleeps int
+	}{
+		{
+			name:       "agent found during the wait",
+			probeCache: []cardcache.Entry{found("https://agent.example", "Agent", testNow), noCatalog("https://agent.example", testNow)},
+			want:       "- https://agent.example — Agent",
+			wantSleeps: 1,
+		},
+		{
+			name:       "probe not finished within the wait",
+			wantSleeps: 5,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := newHookEnv(t)
+			h := env.hook(nil, true)
+			h.ProbeWait = 500 * time.Millisecond
+			sleeps := 0
+			h.sleep = func(time.Duration) { sleeps++ }
+			h.Probe = func(origins []string) error {
+				env.probed = append(env.probed, origins)
+				for _, e := range tc.probeCache {
+					if err := env.cards.Put(e); err != nil {
+						t.Fatalf("Cache.Put() error = %v", err)
+					}
+				}
+				return nil
+			}
+
+			got := env.run(h, prompt("https://agent.example"))
+
+			if tc.want == "" && got != "" {
+				t.Fatalf("Hook.Run() = %q, want no output", got)
+			}
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("Hook.Run() = %q, want it to contain %q", got, tc.want)
+			}
+			if sleeps != tc.wantSleeps {
+				t.Fatalf("Hook.Run() slept %d times, want %d", sleeps, tc.wantSleeps)
+			}
+			if diff := cmp.Diff([][]string{{"https://agent.example"}}, env.probed); diff != "" {
+				t.Fatalf("Hook.Run() probed wrong origins (-want +got) diff = %s", diff)
+			}
+		})
 	}
 }
 
