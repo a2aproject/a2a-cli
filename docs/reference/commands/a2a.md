@@ -42,6 +42,9 @@ Every command takes these.
 | `--credential-helper helper` |  | Credential helper returning the headers for an agent: [scope=]path (repeatable; see a2a auth get --help) |
 | `-e, --endpoint string` |  | Agent interface URL for a direct connection; skips card resolution and requires a single --transport flag |
 | `--insecure` |  | Use insecure (plaintext) gRPC transport credentials |
+| `--oauth string` | `off` | OAuth for agent calls: off (default), auto (sign in when an agent requires it), or cached (use stored grants only); see a2a auth login --help |
+| `--oauth-clients json` |  | OAuth client registration as JSON: {"authority":"&lt;issuer&gt;","client_id":"&lt;id or CIMD URL&gt;","scopes":[...],"omit_resource":false} (repeatable; a JSON array is also accepted) |
+| `--oauth-default-client-id string` | `https://a2a-protocol.org/oauth/a2a-cli.json` | OAuth client ID used with authorization servers that support Client ID Metadata Documents when no oauth-clients entry matches; empty disables it |
 | `-o, --output string` | `text` | Output format: text, json (indented), or jsonl (one compact JSON object per line) |
 | `--svc-param key=value` |  | Service parameter key=value (repeatable) |
 | `--tenant string` |  | Tenant identifier |

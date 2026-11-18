@@ -42,7 +42,7 @@ scene() {
   clear_pane B
   say B "Scope it"
   run B 'a2a auth get https://review.example.org --credential-helper "agent.example.com=$PWD/token-file-helper"'
-  wait_text B 'no credential helper for' 5
+  wait_text B 'no credential helper or OAuth grant for' 5
   pause 2
 
   clear_pane B

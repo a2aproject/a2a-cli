@@ -60,6 +60,7 @@ func (g *globalConfig) initEventHandlers(cmd *cobra.Command) error {
 }
 
 func (g *globalConfig) handleEvent(e a2a.Event) error {
+	g.eventsHandled++
 	for _, handler := range g.handlers {
 		if err := handler(e); err != nil {
 			return err

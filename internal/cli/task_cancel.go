@@ -62,5 +62,5 @@ func newTaskCancelCmd(cfg *globalConfig) *cobra.Command {
 	}
 
 	meta.Attach(cmd.Flags(), "metadata", "Attach request metadata as a JSON object (repeatable)")
-	return cmd
+	return agentCall(cmd)
 }

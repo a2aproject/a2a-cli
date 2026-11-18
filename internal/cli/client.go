@@ -46,8 +46,13 @@ const insecureCredentialWarning = "warning: --insecure disables TLS for gRPC; a 
 // warnInsecureCredential warns once when a credential is sent with --insecure.
 func warnInsecureCredential(cfg *globalConfig) {
 	if cfg.insecureGRPC && cfg.svcParams.HasCredential() {
-		_, _ = fmt.Fprintln(cfg.stderr(), insecureCredentialWarning)
+		cfg.warnInsecure()
 	}
+}
+
+// warnInsecure prints insecureCredentialWarning, once per command.
+func (g *globalConfig) warnInsecure() {
+	g.insecureWarning.Do(func() { _, _ = fmt.Fprintln(g.stderr(), insecureCredentialWarning) })
 }
 
 func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
@@ -120,6 +125,7 @@ func newClientFromCard(ctx context.Context, cfg *globalConfig, extraOpts ...a2ac
 			a2aclient.Config{PreferredTransports: transportPrefs},
 		))
 	}
+	cfg.resolvedCard = card
 	cfg.logf("creating client for %s", card.Name)
 	return a2aclient.NewFromCard(ctx, card, factoryOpts...)
 }
@@ -146,6 +152,10 @@ func fetchCardDocument(ctx context.Context, cfg *globalConfig, ref string, allow
 	for k, vals := range headers {
 		opts = append(opts, agentcard.WithRequestHeader(k, strings.Join(vals, ", ")))
 	}
+	cfg.cardURL = cardRequestURL(ref)
+	if token := cfg.cardToken(ctx, cfg.cardURL); token != "" {
+		opts = append(opts, agentcard.WithRequestHeader("Authorization", "Bearer "+token))
+	}
 	var raw []byte
 	resolver := cardResolver(cfg)
 	parse := resolver.CardParser
@@ -168,7 +178,7 @@ func fetchCardDocument(ctx context.Context, cfg *globalConfig, ref string, allow
 }
 
 func cardResolver(cfg *globalConfig) *agentcard.Resolver {
-	resolver := agentcard.NewResolver(&http.Client{Transport: cfg.httpTransport})
+	resolver := agentcard.NewResolver(&http.Client{Transport: cfg.agentTransport()})
 	resolver.CardParser = a2av0.NewAgentCardParser()
 	return resolver
 }
@@ -185,10 +195,23 @@ func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
 	// The a2a-go default HTTP client caps every request at 3 minutes. Use one without a
 	// total timeout so the --timeout context deadline is what bounds a request.
 	// ActivityTransport lets SSE keep-alives reset the --stream inactivity timeout.
-	httpClient := &http.Client{Transport: utils.ActivityTransport(cfg.httpTransport)}
+	httpClient := &http.Client{Transport: utils.ActivityTransport(cfg.agentTransport())}
 	opts := []a2aclient.FactoryOption{a2aclient.WithDefaultsDisabled()}
-	if cfg.credentials != nil {
-		opts = append(opts, cfg.credentialInterceptor())
+	switch {
+	case cfg.oauthEnabled():
+		// Plugins run before interceptors: the credential helper's headers
+		// have to be set before the OAuth plugin looks at a call.
+		var plugins []a2aclient.Plugin
+		if cfg.credentials != nil {
+			plugins = append(plugins, beforePlugin{name: "a2a-cli-credential-helper", ic: cfg.credentialHelperInterceptor()})
+		}
+		plugins = append(plugins, oauthPlugin{inner: cfg.oauth.Plugin(), cfg: cfg})
+		opts = append(opts, a2aclient.WithPlugins(plugins...))
+		if cfg.insecureGRPC {
+			opts = append(opts, a2aclient.WithCallInterceptors(insecureTokenWarning{cfg: cfg}))
+		}
+	case cfg.credentials != nil:
+		opts = append(opts, a2aclient.WithCallInterceptors(cfg.credentialHelperInterceptor()))
 	}
 	if cfg.a2aVersion == "" || cfg.a2aVersion == "1.0" {
 		opts = append(
