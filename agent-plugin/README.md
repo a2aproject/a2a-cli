@@ -63,11 +63,11 @@ In Claude Code, the hooks in `com.anthropic.claude-code/hooks.json`, which `.cla
 The hooks run `a2a hook`, which tells your agent which A2A agents it can delegate to:
 
 - **Contacts.** Agents you saved with `a2a contact add <name> <ref>` are listed as trusted at the start of a session, after a compaction, and again whenever the contact book changes. The agent can delegate to them with `a2a send -a <name>`.
-- **Discovered agents.** When a URL appears in a prompt or in a `WebFetch` or `WebSearch` call, `a2a` looks for an agent card at that site's `/.well-known/agent-card.json`. Agents it finds are listed as unverified, and the agent is told to ask you before delegating to them.
+- **Discovered agents.** When a URL appears in a prompt or in a `WebFetch` or `WebSearch` call, `a2a` looks for an agent card at that site's `/.well-known/agent-card.json` and an AI Catalog at its `/.well-known/ai-catalog.json`. Agents it finds are listed as unverified, and the agent is told to ask you before delegating to them.
 
 Agents in AI Catalogs you registered with `a2a catalog add` are not listed, since a catalog can list hundreds; the agent finds them with `a2a catalog search`.
 
-The hooks don't make network requests, so they don't slow down a turn. A detached background process fetches cards for sites it hasn't seen, and the agent hears about them at its next step. Cards are cached under the user cache directory (`~/.cache/a2a-cli` on Linux), and each agent is listed once per session.
+The hooks don't make network requests, so they don't slow down a turn. A detached background process fetches cards and catalogs for sites it hasn't seen, and the agent hears about them at its next step. Cards are cached under the user cache directory (`~/.cache/a2a-cli` on Linux), and each agent is listed once per session.
 
 Discovery probes public and internal hosts. It never connects to link-local addresses, which covers the IPv4 cloud metadata endpoint `169.254.169.254`, and it doesn't follow a redirect from a public site to an internal address. To make an exception for a host, list it in `~/.config/a2a-cli/config.yaml`:
 

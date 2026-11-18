@@ -118,13 +118,95 @@ func TestProberProbe(t *testing.T) {
 	}
 }
 
+func TestProberProbeCatalog(t *testing.T) {
+	t.Parallel()
+
+	cardJSON, err := json.Marshal(card("Remote"))
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	catalogJSON := func(entries ...string) string {
+		return `{"specVersion":"1.0","entries":[` + strings.Join(entries, ",") + `]}`
+	}
+	agent := func(id string) string {
+		return `{"identifier":"` + id + `","displayName":"Finance","type":"application/a2a-agent-card+json","url":"https://acme.example/fin.json"}`
+	}
+
+	tests := []struct {
+		name          string
+		status        int
+		body          string
+		wantCached    bool
+		wantAgents    []cardcache.CatalogAgent
+		wantErrSubstr string
+	}{
+		{
+			name:       "catalog agents",
+			status:     http.StatusOK,
+			body:       catalogJSON(agent("urn:air:acme:fin"), agent("urn:air:acme:fin"), `{"identifier":"urn:mcp","type":"application/mcp-server-card+json","url":"https://acme.example/mcp.json"}`),
+			wantCached: true,
+			wantAgents: []cardcache.CatalogAgent{{Identifier: "urn:air:acme:fin", DisplayName: "Finance"}},
+		},
+		{
+			name:       "identifiers unsafe in a command line skipped",
+			status:     http.StatusOK,
+			body:       catalogJSON(agent("urn:x; rm -rf ~"), agent("-rf"), agent("~/x"), agent("urn:ok")),
+			wantCached: true,
+			wantAgents: []cardcache.CatalogAgent{{Identifier: "urn:ok", DisplayName: "Finance"}},
+		},
+		{name: "catalog without agents", status: http.StatusOK, body: catalogJSON(), wantCached: true, wantErrSubstr: "no A2A agents"},
+		{name: "agent card at the catalog path", status: http.StatusOK, body: string(cardJSON), wantCached: true, wantErrSubstr: "not an AI Catalog"},
+		{name: "no catalog", status: http.StatusNotFound, body: "{}", wantCached: true, wantErrSubstr: "404"},
+		{name: "server error not cached", status: http.StatusServiceUnavailable, body: catalogJSON(agent("urn:ok"))},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/.well-known/ai-catalog.json" {
+					http.NotFound(w, r)
+					return
+				}
+				w.WriteHeader(tc.status)
+				if _, err := w.Write([]byte(tc.body)); err != nil {
+					t.Errorf("ResponseWriter.Write() error = %v", err)
+				}
+			}))
+			t.Cleanup(srv.Close)
+			dir := t.TempDir()
+			cards := cardcache.New(dir)
+			p := &Prober{Cards: cards, LockDir: filepath.Join(dir, "probes"), Timeout: 2 * time.Second}
+
+			p.Probe(t.Context(), []string{srv.URL})
+
+			ref := CatalogRef(srv.URL)
+			e, ok := cards.Get(ref)
+			if ok != tc.wantCached {
+				t.Fatalf("Cache.Get(%s) = %+v, %v; want cached %v", ref, e, ok, tc.wantCached)
+			}
+			if diff := cmp.Diff(tc.wantAgents, e.Agents); diff != "" {
+				t.Fatalf("Cache.Get(%s).Agents wrong result (-want +got) diff = %s", ref, diff)
+			}
+			if !strings.Contains(e.Error, tc.wantErrSubstr) {
+				t.Fatalf("Cache.Get(%s).Error = %q, want containing %q", ref, e.Error, tc.wantErrSubstr)
+			}
+			if card, ok := cards.Get(srv.URL); !ok || card.Found() {
+				t.Fatalf("Cache.Get(%s) = %+v, %v; want a cached missing card", srv.URL, card, ok)
+			}
+		})
+	}
+}
+
 func TestProberSkipsFreshEntries(t *testing.T) {
 	t.Parallel()
 	origin, hits := startCardServer(t, "")
 	dir := t.TempDir()
 	cards := cardcache.New(dir)
-	if err := cards.Put(cardcache.Entry{Ref: origin, FetchedAt: time.Now(), Error: "404"}); err != nil {
-		t.Fatalf("Cache.Put() error = %v", err)
+	for _, ref := range []string{origin, CatalogRef(origin)} {
+		if err := cards.Put(cardcache.Entry{Ref: ref, FetchedAt: time.Now(), Error: "404"}); err != nil {
+			t.Fatalf("Cache.Put() error = %v", err)
+		}
 	}
 	p := &Prober{Cards: cards, LockDir: filepath.Join(dir, "probes")}
 
@@ -192,7 +274,7 @@ func startProxy(t *testing.T, cardBody string) (*url.URL, *[]string) {
 	var targets []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
-		targets = append(targets, r.URL.Host)
+		targets = append(targets, r.URL.Host+r.URL.Path)
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		if _, err := w.Write([]byte(cardBody)); err != nil {
@@ -221,8 +303,8 @@ func TestProberProxy(t *testing.T) {
 		wantFound   bool
 		wantTargets []string
 	}{
-		{name: "public target", origin: "http://public.example", wantFound: true, wantTargets: []string{"public.example"}},
-		{name: "unresolvable target assumed public", origin: "http://proxy-only.example", wantFound: true, wantTargets: []string{"proxy-only.example"}},
+		{name: "public target", origin: "http://public.example", wantFound: true, wantTargets: []string{"public.example/.well-known/agent-card.json", "public.example/.well-known/ai-catalog.json"}},
+		{name: "unresolvable target assumed public", origin: "http://proxy-only.example", wantFound: true, wantTargets: []string{"proxy-only.example/.well-known/agent-card.json", "proxy-only.example/.well-known/ai-catalog.json"}},
 		{name: "link-local target refused", origin: "http://metadata.example"},
 	}
 
@@ -247,7 +329,7 @@ func TestProberProxy(t *testing.T) {
 			if ok != tc.wantFound || (ok && !e.Found()) {
 				t.Fatalf("Cache.Get(%s) = %+v, %v; want found %v", tc.origin, e, ok, tc.wantFound)
 			}
-			if diff := cmp.Diff(tc.wantTargets, *targets); diff != "" {
+			if diff := cmp.Diff(tc.wantTargets, *targets, sortStrings); diff != "" {
 				t.Fatalf("proxy got wrong targets (-want +got) diff = %s", diff)
 			}
 			if len(*dialed) != 0 {

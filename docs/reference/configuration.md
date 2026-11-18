@@ -58,7 +58,7 @@ The flags of each command bind the same way, through `A2ACLI_<NAME>` or the flag
 | `--device`, `--scope` | `A2ACLI_DEVICE`, `A2ACLI_SCOPE` | `auth login` |
 | `--all` | `A2ACLI_ALL` | `auth logout` |
 | `--no-descriptions` | `A2ACLI_NO_DESCRIPTIONS` | `completion` subcommands |
-| `--discovery`, `--discovery-allow-host`, `--discovery-scan-tools` | `A2ACLI_DISCOVERY`, ... | `hook`; see [Coding Agents](../guide/coding-agents.md#contacts-and-agent-discovery). `discovery-allow-host` is not read from a discovered `.env`. |
+| `--discovery`, `--discovery-allow-host`, `--discovery-scan-tools`, `--discovery-wait` | `A2ACLI_DISCOVERY`, ... | `hook`; see [Coding Agents](../guide/coding-agents.md#contacts-and-agent-discovery). `discovery`, `discovery-allow-host` and `discovery-wait` are not read from a discovered `.env`. |
 
 `--stream` is never read from configuration. The [command reference](commands/a2a.md) describes each flag.
 
