@@ -56,6 +56,9 @@ func newChatCmd(cfg *globalConfig, deps deps) *cobra.Command {
 			if !deps.isTerminal() {
 				return clierr.Usage("chat needs a terminal; use send to send a single message")
 			}
+			if err := rejectEmptyIDs(cmd); err != nil {
+				return err
+			}
 
 			baseCtx := withServiceParams(cmd.Context(), cfg)
 			var client *a2aclient.Client
