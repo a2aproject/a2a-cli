@@ -42,7 +42,7 @@ Resume:     a2a send --task-id 01a1d530-540a-791c-a4be-890667492c6a --data-part 
 a2a send -a localhost:8080 --task-id 01a1d530-540a-791c-a4be-890667492c6a --data-part '{"option":"once","seq":1}'
 ```
 
-Replace `<option>` with one of the values in the question. Preserve `seq` from the actual hint, including when retrying an answer, so a delayed reply cannot answer a later question. Schemas without supported constants or with malformed top-level fields retain the plain-text reply hint.
+Replace `<option>` with one of the values in the question. Preserve `seq` from the actual hint, including when retrying an answer, so a delayed reply cannot answer a later question.
 
 A task in `auth-required` needs credentials first; see [Credentials](credentials.md).
 

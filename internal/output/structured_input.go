@@ -17,7 +17,6 @@ package output
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
@@ -25,9 +24,12 @@ import (
 
 const structuredInputURI = "https://github.com/a2aproject/experimental-ext-structured-input/tree/main/v1"
 
-func structuredResumeData(message *a2a.Message) (string, error) {
+// structuredResumeData returns a --data-part reply template that keeps the
+// constants of the message's Structured Input schema, or "" when the schema
+// has none or can't be read.
+func structuredResumeData(message *a2a.Message) string {
 	if message == nil {
-		return "", nil
+		return ""
 	}
 	var schemaPart *a2a.Part
 	for _, part := range message.Parts {
@@ -39,16 +41,16 @@ func structuredResumeData(message *a2a.Message) (string, error) {
 			continue
 		}
 		if schemaPart != nil {
-			return "", fmt.Errorf("cannot build resume hint from multiple Structured Input schemas")
+			return ""
 		}
 		schemaPart = part
 	}
 	if schemaPart == nil {
-		return "", nil
+		return ""
 	}
 	encoded, err := json.Marshal(schemaPart.Data())
 	if err != nil {
-		return "", fmt.Errorf("encode Structured Input schema: %w", err)
+		return ""
 	}
 	var schema struct {
 		Type       any                        `json:"type"`
@@ -56,11 +58,11 @@ func structuredResumeData(message *a2a.Message) (string, error) {
 		Required   []string                   `json:"required"`
 	}
 	if err := json.Unmarshal(encoded, &schema); err != nil {
-		return "", fmt.Errorf("decode Structured Input schema: %w", err)
+		return ""
 	}
 	if schema.Type != nil {
 		if kind, ok := schema.Type.(string); !ok || kind != "object" {
-			return "", nil
+			return ""
 		}
 	}
 	values := make(map[string]any)
@@ -74,7 +76,7 @@ func structuredResumeData(message *a2a.Message) (string, error) {
 		}
 	}
 	if len(values) == 0 {
-		return "", nil
+		return ""
 	}
 	for _, name := range schema.Required {
 		if _, constant := values[name]; constant {
@@ -86,7 +88,7 @@ func structuredResumeData(message *a2a.Message) (string, error) {
 	encoder := json.NewEncoder(&out)
 	encoder.SetEscapeHTML(false)
 	if err := encoder.Encode(values); err != nil {
-		return "", fmt.Errorf("encode Structured Input reply: %w", err)
+		return ""
 	}
-	return strings.TrimSuffix(out.String(), "\n"), nil
+	return strings.TrimSuffix(out.String(), "\n")
 }

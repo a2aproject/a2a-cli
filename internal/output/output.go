@@ -345,8 +345,7 @@ func formatResumeHint(task *a2a.Task) string {
 		return ""
 	}
 	if task.Status.State == a2a.TaskStateInputRequired {
-		data, err := structuredResumeData(task.Status.Message)
-		if err == nil && data != "" {
+		if data := structuredResumeData(task.Status.Message); data != "" {
 			quoted := "'" + strings.ReplaceAll(data, "'", "'\"'\"'") + "'"
 			return fmt.Sprintf("\n\nResume:     a2a send --task-id %s --data-part %s\n", task.ID, quoted)
 		}

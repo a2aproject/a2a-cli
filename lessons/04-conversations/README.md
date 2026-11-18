@@ -89,7 +89,7 @@ Artifacts:
 
 `once` allows this one command. `reject` refuses it, and the agent carries on without it.
 
-Choose `<option>` from the values listed in the question and copy `seq` from its actual hint. Keep the same `seq` when retrying the answer: it identifies that question, so a delayed retry cannot approve the next one. Plain-text questions, unsupported schemas, and schemas with malformed top-level fields keep the `"<reply>"` hint instead.
+Choose `<option>` from the values listed in the question and copy `seq` from its actual hint. Keep the same `seq` when retrying the answer: it identifies that question, so a delayed retry cannot approve the next one.
 
 Agents can also stop in `auth-required`, when they need credentials you haven't given. Lesson 5 covers credentials.
 
