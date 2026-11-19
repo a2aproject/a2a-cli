@@ -42,7 +42,7 @@ a2a send -a https://acme.com/finance-catalog.json "..."                         
 a2a catalog search --catalog https://acme.com/ai-catalog.json
 ```
 
-Catalogs nested in a catalog are followed up to four levels deep. Any catalog may reference `https` URLs, and only a local catalog may reference local files.
+Catalogs nested in a catalog are followed up to four levels deep, and at most 100 nested catalogs are loaded for one catalog; one listed by several others is loaded once. Any catalog may reference `https` URLs, and only a local catalog may reference local files.
 
 ## Where catalogs are kept
 
