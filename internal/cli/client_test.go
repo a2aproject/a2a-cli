@@ -27,7 +27,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/a2aproject/a2a-cli/internal/clierr"
-	"github.com/a2aproject/a2a-cli/internal/localsrv"
 	"github.com/a2aproject/a2a-cli/internal/testutil"
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	a2agrpcv0 "github.com/a2aproject/a2a-go/v2/a2agrpc/v0"
@@ -37,7 +36,7 @@ import (
 
 func TestGRPCTransportSecurity(t *testing.T) {
 	t.Parallel()
-	handler := a2asrv.NewHandler(localsrv.NewEchoExecutor())
+	handler := a2asrv.NewHandler(testutil.NewEchoExecutor())
 	srv := grpc.NewServer()
 	t.Cleanup(srv.Stop)
 	a2agrpc.NewHandler(handler).RegisterWith(srv)
@@ -111,7 +110,7 @@ func TestGRPCTransportSecurity(t *testing.T) {
 
 func TestGRPCOverUnixSocket(t *testing.T) {
 	t.Parallel()
-	handler := a2asrv.NewHandler(localsrv.NewEchoExecutor())
+	handler := a2asrv.NewHandler(testutil.NewEchoExecutor())
 	srv := grpc.NewServer()
 	t.Cleanup(srv.Stop)
 	a2agrpc.NewHandler(handler).RegisterWith(srv)
@@ -177,7 +176,7 @@ func TestGRPCOverUnixSocket(t *testing.T) {
 func TestCACert(t *testing.T) {
 	t.Parallel()
 	mux := http.NewServeMux()
-	mux.Handle("/", a2asrv.NewRESTHandler(a2asrv.NewHandler(localsrv.NewEchoExecutor())))
+	mux.Handle("/", a2asrv.NewRESTHandler(a2asrv.NewHandler(testutil.NewEchoExecutor())))
 	server := httptest.NewTLSServer(mux)
 	t.Cleanup(server.Close)
 	mux.Handle(a2asrv.WellKnownAgentCardPath, a2asrv.NewStaticAgentCardHandler(newAgentCard(server.URL, a2a.AgentCapabilities{})))

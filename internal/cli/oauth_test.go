@@ -43,7 +43,6 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/clicfg"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
-	"github.com/a2aproject/a2a-cli/internal/localsrv"
 	"github.com/a2aproject/a2a-cli/internal/oauthstore"
 	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-cli/internal/polling"
@@ -1087,32 +1086,6 @@ func TestFileIsTerminal(t *testing.T) {
 	}
 }
 
-func TestServeProxyWithoutOAuth(t *testing.T) {
-	t.Parallel()
-	e := newOAuthEnv(t, oauthtest.ServerOptions{}, oauthtest.AgentOptions{ProtectCard: true})
-	e.mustRun(t, "auth", "login", e.agent.URL, e.clients())
-	sent := len(e.agent.AuthorizationHeaders())
-
-	done := make(chan error, 1)
-	go func() {
-		_, _, err := e.run(t, "server", "--proxy", "-a", e.agent.URL, e.clients(), "--port", "0", "--quiet")
-		done <- err
-	}()
-	select {
-	case err := <-done:
-		if err == nil || !strings.Contains(err.Error(), "401") {
-			t.Fatalf("a2a server --proxy error = %v, want the upstream card's 401", err)
-		}
-	case <-time.After(20 * time.Second):
-		t.Fatal("a2a server --proxy started with a stored OAuth grant; want it to call the upstream agent without OAuth")
-	}
-	for _, h := range e.agent.AuthorizationHeaders()[sent:] {
-		if h != "" {
-			t.Fatalf("the upstream agent received Authorization %q from the proxy, want none", h)
-		}
-	}
-}
-
 func TestAuthLoginProtectedCard(t *testing.T) {
 	t.Parallel()
 	e := newOAuthEnv(t, oauthtest.ServerOptions{}, oauthtest.AgentOptions{ProtectCard: true})
@@ -1594,7 +1567,7 @@ func TestOAuthNotOverInsecureGRPCFromEnv(t *testing.T) {
 		}),
 	)
 	t.Cleanup(srv.Stop)
-	a2agrpcv1.NewHandler(a2asrv.NewHandler(localsrv.NewEchoExecutor())).RegisterWith(srv)
+	a2agrpcv1.NewHandler(a2asrv.NewHandler(testutil.NewEchoExecutor())).RegisterWith(srv)
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -1649,7 +1622,7 @@ func TestOAuthCredentialHelperOnlyAuthorization(t *testing.T) {
 	var auth [][]string
 	capabilities := a2a.AgentCapabilities{}
 	mux := http.NewServeMux()
-	mux.Handle("/", a2asrv.NewRESTHandler(a2asrv.NewHandler(localsrv.NewEchoExecutor(), a2asrv.WithCapabilityChecks(&capabilities))))
+	mux.Handle("/", a2asrv.NewRESTHandler(a2asrv.NewHandler(testutil.NewEchoExecutor(), a2asrv.WithCapabilityChecks(&capabilities))))
 	agent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != a2asrv.WellKnownAgentCardPath {
 			mu.Lock()
@@ -1725,7 +1698,7 @@ func TestOAuthRefreshRetry(t *testing.T) {
 			}),
 		)
 		t.Cleanup(srv.Stop)
-		a2agrpcv1.NewHandler(a2asrv.NewHandler(localsrv.NewEchoExecutor())).RegisterWith(srv)
+		a2agrpcv1.NewHandler(a2asrv.NewHandler(testutil.NewEchoExecutor())).RegisterWith(srv)
 		lis, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatal(err)

@@ -6,7 +6,7 @@ Save an agent as a contact, and your coding agent knows to delegate to it. This 
 
 ## Prerequisites
 
-- `a2a`, Go and Docker. [`run-opencode`](run-opencode) runs opencode in a container from the `ghcr.io/a2aproject/harness-opencode` image, with an `a2a` built from this checkout and the plugin mounted in.
+- `a2a`, [a2a-serve](https://github.com/a2aproject/a2a-serve), Go and Docker. [`run-opencode`](run-opencode) runs opencode in a container from the `ghcr.io/a2aproject/harness-opencode` image, with an `a2a` built from this checkout and the plugin mounted in.
 - A [Gemini API key](https://aistudio.google.com/apikey) in `GEMINI_API_KEY`. [`opencode.json`](opencode.json) picks `google/gemini-3-flash-preview` and lets opencode run `a2a` without asking.
 
 Run the commands in this directory. Start the agent in a second terminal:

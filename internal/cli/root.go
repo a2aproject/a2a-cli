@@ -314,7 +314,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 	pf.StringVar(&cfg.oauthDefaultClientID, "oauth-default-client-id", oauthstore.DefaultClientID, "OAuth client ID used with authorization servers that support Client ID Metadata Documents when no oauth-clients entry matches; empty disables it")
 	pf.StringVar(&cfg.oauthStore, "oauth-store", "file", "Where OAuth grants are stored: file (~/.config/a2a-cli/oauth/grants.json) or keychain (tokens in the OS keychain)")
 	pf.StringVar(&cfg.configPath, "config", "", "Load configuration from an explicit file (.yaml, .json, or .env) in place of the local .env")
-	for _, name := range []string{"unix-socket", "credential-helper", "ca-cert", "oauth", "oauth-clients", "oauth-default-client-id", "oauth-store"} {
+	for _, name := range []string{"unix-socket", "credential-helper", "ca-cert", "catalog", "oauth", "oauth-clients", "oauth-default-client-id", "oauth-store"} {
 		if err := pf.SetAnnotation(name, clicfg.AnnotationNotFromDiscoveredFile, []string{"true"}); err != nil {
 			return nil, err
 		}
@@ -329,7 +329,6 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 		newContactCmd(cfg),
 		newConfigCmd(cfg),
 		newAuthCmd(cfg, deps),
-		newServeCmd(cfg),
 		newTransportCmd(cfg),
 		newPluginCmd(cfg),
 		newSkillCmd(cfg),

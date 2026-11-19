@@ -69,7 +69,10 @@ or its parents.
 Discovery refuses link-local addresses, such as the IPv4 cloud metadata endpoint,
 and redirects from a public address to an internal one, unless the host is allowed
 with --discovery-allow-host.`,
-		Args: cobra.NoArgs,
+		// Claude Code blocks the prompt when a hook exits 2, the code of a usage
+		// error, so flags and arguments added by a newer plugin are ignored.
+		Args:               cobra.ArbitraryArgs,
+		FParseErrWhitelist: cobra.FParseErrWhitelist{UnknownFlags: true},
 		// A failing hook must not disrupt the harness: report only in verbose mode.
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			if err := preRun(cmd, args); err != nil {
@@ -105,6 +108,10 @@ with --discovery-allow-host.`,
 		}
 	}
 
+	cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		cfg.logf("hook: %v", err)
+		return nil
+	})
 	cmd.AddCommand(newHookProbeCmd(cfg, f))
 	return cmd, nil
 }

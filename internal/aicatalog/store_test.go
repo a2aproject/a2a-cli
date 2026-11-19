@@ -15,8 +15,10 @@
 package aicatalog
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -37,16 +39,18 @@ const fixtureStore = "testdata/ai-catalog-cli-store"
 // catalogServer serves catalog documents by path and lets tests change them.
 type catalogServer struct {
 	*httptest.Server
-	mu   sync.Mutex
-	docs map[string]string
+	mu       sync.Mutex
+	docs     map[string]string
+	requests map[string]int
 }
 
 func newCatalogServer(t *testing.T, docs map[string]string) *catalogServer {
 	t.Helper()
-	s := &catalogServer{docs: docs}
+	s := &catalogServer{docs: docs, requests: map[string]int{}}
 	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		doc, ok := s.docs[r.URL.Path]
+		s.requests[r.URL.Path]++
 		s.mu.Unlock()
 		if !ok {
 			http.NotFound(w, r)
@@ -68,6 +72,33 @@ func (s *catalogServer) set(path, doc string) {
 }
 
 func (s *catalogServer) fetcher() *Fetcher { return &Fetcher{Client: s.Client()} }
+
+func (s *catalogServer) requestCount(path string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.requests[path]
+}
+
+func (s *catalogServer) totalRequests() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for _, c := range s.requests {
+		n += c
+	}
+	return n
+}
+
+func nestedCatalog(agent string, children ...string) string {
+	entries := []string{}
+	if agent != "" {
+		entries = append(entries, `{"identifier":"`+agent+`","type":"application/a2a-agent-card+json","url":"card.json"}`)
+	}
+	for _, c := range children {
+		entries = append(entries, `{"identifier":"urn:to:`+c+`","type":"application/ai-catalog+json","url":"`+c+`"}`)
+	}
+	return `{"specVersion":"1.0","entries":[` + strings.Join(entries, ",") + `]}`
+}
 
 func copyStore(t *testing.T, src string) string {
 	t.Helper()
@@ -515,6 +546,77 @@ func TestLoadStopsAtMaxDepth(t *testing.T) {
 	}
 	if len(warnings) != 1 || !strings.Contains(warnings[0], "nesting deeper") {
 		t.Fatalf("Load() warnings = %q, want one about nesting depth", warnings)
+	}
+}
+
+func TestLoadFollowsSharedCatalogOnce(t *testing.T) {
+	t.Parallel()
+	docs := map[string]string{
+		"/a.json":      nestedCatalog("", "b.json", "c.json"),
+		"/b.json":      nestedCatalog("", "shared.json"),
+		"/c.json":      nestedCatalog("", "shared.json"),
+		"/shared.json": nestedCatalog("urn:shared"),
+	}
+	srv := newCatalogServer(t, docs)
+
+	entries, warnings, err := Load(t.Context(), srv.fetcher(), srv.URL+"/a.json", []byte(docs["/a.json"]))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if diff := cmp.Diff([]string{srv.URL + "/a.json urn:shared"}, identifiers(Agents(entries))); diff != "" {
+		t.Fatalf("Load() agents wrong result (-want +got) diff = %s", diff)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("Load() warnings = %q, want none", warnings)
+	}
+	if got := srv.requestCount("/shared.json"); got != 1 {
+		t.Fatalf("Load() fetched shared.json %d times, want 1", got)
+	}
+}
+
+func TestLoadStopsAtMaxDocuments(t *testing.T) {
+	t.Parallel()
+	var children []string
+	docs := map[string]string{}
+	for i := range maxDocuments + 10 {
+		name := fmt.Sprintf("c%d.json", i)
+		children = append(children, name)
+		docs["/"+name] = nestedCatalog(fmt.Sprintf("urn:agent:%d", i))
+	}
+	docs["/root.json"] = nestedCatalog("", children...)
+	srv := newCatalogServer(t, docs)
+
+	entries, warnings, err := Load(t.Context(), srv.fetcher(), srv.URL+"/root.json", []byte(docs["/root.json"]))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got := len(Agents(entries)); got != maxDocuments {
+		t.Fatalf("Load() found %d agents, want %d", got, maxDocuments)
+	}
+	if got := srv.totalRequests(); got != maxDocuments {
+		t.Fatalf("Load() made %d requests, want %d", got, maxDocuments)
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "more than") {
+		t.Fatalf("Load() warnings = %q, want one about the document limit", warnings)
+	}
+}
+
+func TestLoadStopsWhenContextIsDone(t *testing.T) {
+	t.Parallel()
+	docs := map[string]string{
+		"/a.json": nestedCatalog("urn:a", "b.json"),
+		"/b.json": nestedCatalog("urn:b"),
+	}
+	srv := newCatalogServer(t, docs)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	_, _, err := Load(ctx, srv.fetcher(), srv.URL+"/a.json", []byte(docs["/a.json"]))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Load() error = %v, want %v", err, context.Canceled)
+	}
+	if got := srv.totalRequests(); got != 0 {
+		t.Fatalf("Load() made %d requests, want 0", got)
 	}
 }
 

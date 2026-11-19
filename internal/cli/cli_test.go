@@ -37,7 +37,6 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/clicfg"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
-	"github.com/a2aproject/a2a-cli/internal/localsrv"
 	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-cli/internal/polling"
 	"github.com/a2aproject/a2a-cli/internal/testutil"
@@ -605,7 +604,7 @@ func partsFromArgs(t *testing.T, args ...string) *sendFlags {
 func TestSendStreaming(t *testing.T) {
 	t.Parallel()
 	url := startTestServer(t)
-	nonStreamingServerURL := startTestServerWith(t, a2a.AgentCapabilities{Streaming: false}, localsrv.NewEchoExecutor())
+	nonStreamingServerURL := startTestServerWith(t, a2a.AgentCapabilities{Streaming: false}, testutil.NewEchoExecutor())
 
 	testCases := []struct {
 		name               string
@@ -786,7 +785,7 @@ func TestSendOutputInvalidFormat(t *testing.T) {
 
 func TestSendStreamingFallbackUsesDefaultPoller(t *testing.T) {
 	t.Parallel()
-	nonStreamingURL := startTestServerWith(t, a2a.AgentCapabilities{Streaming: false}, localsrv.NewEchoExecutor())
+	nonStreamingURL := startTestServerWith(t, a2a.AgentCapabilities{Streaming: false}, testutil.NewEchoExecutor())
 
 	out, err := runCMDWithConfig(t, deps{cfgLoader: clicfg.LoadEmpty},
 		"send", "-a", nonStreamingURL, "-o", "json", "--stream", "stream me", "--poll-interval", "5ms")
@@ -1151,55 +1150,6 @@ func TestGetTaskWait_Timeout(t *testing.T) {
 	}
 }
 
-func TestServe_ModeValidation(t *testing.T) {
-	t.Parallel()
-	for _, tt := range []struct {
-		name           string
-		args           []string
-		wantErrContain string
-	}{
-		{"no mode", []string{"server"}, "specify --echo, --proxy <url>, or --exec"},
-		{"multiple modes", []string{"server", "--echo", "--exec", "cat"}, "mutually exclusive"},
-	} {
-		t.Run(tt.name+" fails", func(t *testing.T) {
-			t.Parallel()
-			_, err := runCMD(t, tt.args...)
-			if err == nil {
-				t.Fatalf("runCMD(%v) error = nil, want error containing %q", tt.args, tt.wantErrContain)
-			}
-			if !strings.Contains(err.Error(), tt.wantErrContain) {
-				t.Fatalf("runCMD(%v) error = %v, want error containing %q", tt.args, err, tt.wantErrContain)
-			}
-		})
-	}
-}
-
-func TestServeProxy_Timeout(t *testing.T) {
-	t.Parallel()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(100 * time.Millisecond)
-	}))
-	t.Cleanup(server.Close)
-
-	_, err := runCMD(t, "server", "--proxy", "-a", server.URL, "--port", "0", "--timeout", "10ms")
-	if err == nil {
-		t.Fatal("a2a server --proxy should time out resolving upstream card")
-	}
-	var classified *clierr.Error
-	if !errors.As(err, &classified) {
-		t.Fatalf("runCMD(server --proxy) error = %v, want *clierr.Error", err)
-	}
-	if classified.Code != clierr.CodeTimeout {
-		t.Fatalf("runCMD(server --proxy) Code = %q, want %q", classified.Code, clierr.CodeTimeout)
-	}
-	if classified.Exit != 5 {
-		t.Fatalf("runCMD(server --proxy) Exit = %d, want 5", classified.Exit)
-	}
-	if classified.Hint != "increase --timeout" {
-		t.Fatalf("runCMD(server --proxy) Hint = %q, want %q", classified.Hint, "increase --timeout")
-	}
-}
-
 func TestConfigApplied(t *testing.T) {
 	t.Parallel()
 	url := startTestServer(t)
@@ -1326,7 +1276,7 @@ func TestInsecureCredentialWarning(t *testing.T) {
 
 func startTestServer(t *testing.T) string {
 	t.Helper()
-	return startTestServerWith(t, a2a.AgentCapabilities{Streaming: true}, localsrv.NewEchoExecutor())
+	return startTestServerWith(t, a2a.AgentCapabilities{Streaming: true}, testutil.NewEchoExecutor())
 }
 
 func startTestServerWith(t *testing.T, capabilities a2a.AgentCapabilities, executor a2asrv.AgentExecutor) string {
@@ -1580,7 +1530,7 @@ func startTestServerRecordingCardHeaders(t *testing.T) (string, *http.Header) {
 	t.Helper()
 
 	capabilities := a2a.AgentCapabilities{Streaming: true}
-	handler := a2asrv.NewHandler(localsrv.NewEchoExecutor(), a2asrv.WithCapabilityChecks(&capabilities))
+	handler := a2asrv.NewHandler(testutil.NewEchoExecutor(), a2asrv.WithCapabilityChecks(&capabilities))
 
 	mux := http.NewServeMux()
 	mux.Handle("/", a2asrv.NewRESTHandler(handler))

@@ -35,8 +35,8 @@ import (
 
 	"github.com/a2aproject/a2a-cli/internal/clicfg"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
-	"github.com/a2aproject/a2a-cli/internal/localsrv"
 	"github.com/a2aproject/a2a-cli/internal/polling"
+	"github.com/a2aproject/a2a-cli/internal/testutil"
 )
 
 type recordedRequest struct {
@@ -75,7 +75,7 @@ func startAuthRecordingServer(t *testing.T) (string, *authRecorder) {
 func startAuthRecordingServerWithInterface(t *testing.T, iface func(serverURL string) string) (string, *authRecorder) {
 	t.Helper()
 	capabilities := a2a.AgentCapabilities{Streaming: true}
-	handler := a2asrv.NewHandler(localsrv.NewEchoExecutor(), a2asrv.WithCapabilityChecks(&capabilities))
+	handler := a2asrv.NewHandler(testutil.NewEchoExecutor(), a2asrv.WithCapabilityChecks(&capabilities))
 	mux := http.NewServeMux()
 	mux.Handle("/", a2asrv.NewRESTHandler(handler))
 	rec := &authRecorder{}
@@ -277,7 +277,7 @@ func TestCredentialHelperInvalidSpec(t *testing.T) {
 	}
 }
 
-func TestCredentialFlagsIgnoredFromDiscoveredEnv(t *testing.T) {
+func TestFlagsIgnoredFromDiscoveredEnv(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name string
@@ -287,6 +287,7 @@ func TestCredentialFlagsIgnoredFromDiscoveredEnv(t *testing.T) {
 		{name: "credential helper", env: "A2ACLI_CREDENTIAL_HELPER=false", flag: "credential-helper"},
 		{name: "unix socket", env: "A2ACLI_UNIX_SOCKET=/nonexistent/a2a.sock", flag: "unix-socket"},
 		{name: "CA certificate", env: "A2ACLI_CA_CERT=/nonexistent/ca.pem", flag: "ca-cert"},
+		{name: "AI Catalog", env: "A2ACLI_CATALOG=/nonexistent/ai-catalog.json", flag: "catalog"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
