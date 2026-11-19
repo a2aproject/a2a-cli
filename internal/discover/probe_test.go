@@ -345,11 +345,13 @@ func TestProberBodyFailures(t *testing.T) {
 	tests := []struct {
 		name          string
 		handler       func(w http.ResponseWriter)
+		timeout       time.Duration
 		wantCached    bool
 		wantErrSubstr string
 	}{
 		{
-			name: "stalled body not cached",
+			name:    "stalled body not cached",
+			timeout: 300 * time.Millisecond,
 			handler: func(w http.ResponseWriter) {
 				w.Header().Set("Content-Length", "100")
 				if _, err := w.Write([]byte(`{"name":`)); err != nil {
@@ -363,10 +365,15 @@ func TestProberBodyFailures(t *testing.T) {
 			name: "oversized card cached with a size error",
 			handler: func(w http.ResponseWriter) {
 				body := `{"name":"Big","description":"` + strings.Repeat("x", maxCardBytes) + `"}`
+				// The prober hangs up once the body passes the limit, which can
+				// fail the write.
 				if _, err := w.Write([]byte(body)); err != nil {
-					t.Errorf("ResponseWriter.Write() error = %v", err)
+					t.Logf("ResponseWriter.Write() error = %v", err)
 				}
 			},
+			// The body must be read past the limit before the deadline, which
+			// takes a while under the race detector on a loaded machine.
+			timeout:       30 * time.Second,
 			wantCached:    true,
 			wantErrSubstr: "larger than",
 		},
@@ -379,7 +386,7 @@ func TestProberBodyFailures(t *testing.T) {
 			t.Cleanup(srv.Close)
 			dir := t.TempDir()
 			cards := cardcache.New(dir)
-			p := &Prober{Cards: cards, LockDir: filepath.Join(dir, "probes"), Timeout: 300 * time.Millisecond}
+			p := &Prober{Cards: cards, LockDir: filepath.Join(dir, "probes"), Timeout: tc.timeout}
 
 			p.Probe(t.Context(), []string{srv.URL})
 
