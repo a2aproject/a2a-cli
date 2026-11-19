@@ -1036,6 +1036,11 @@ func TestUsageErrors(t *testing.T) {
 		{"--endpoint with two --transport", []string{"send", "-e", "http://x", "--transport", "rest", "--transport", "grpc", "hi"}},
 		{"empty --transport", []string{"send", "-a", "http://x", "--transport", "", "hi"}},
 		{"unknown --a2a-version", []string{"send", "-a", "http://x", "--a2a-version", "1", "hi"}},
+		{"empty send --task-id", []string{"send", "-a", "http://x", "--task-id", "", "hi"}},
+		{"empty send --context-id", []string{"send", "-a", "http://x", "--context-id", "", "hi"}},
+		{"unknown server --protocol", []string{"server", "--echo", "--port", "0", "--protocol", "bogus"}},
+		{"unknown server --serve-transport", []string{"server", "--echo", "--port", "0", "--serve-transport", "bogus"}},
+		{"missing server --card file", []string{"server", "--echo", "--port", "0", "--card", "/no/such/card.json"}},
 	}
 
 	for _, tt := range tests {
