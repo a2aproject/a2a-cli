@@ -589,6 +589,37 @@ func TestHookCmdExplicitConfigWithBrokenLocalConfig(t *testing.T) {
 	}
 }
 
+func TestHookCmdToleratesArgsOfNewerPlugins(t *testing.T) {
+	t.Parallel()
+	agentURL := startTestServer(t)
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "unknown flag", args: []string{"--no-such-flag"}},
+		{name: "unknown flag with value", args: []string{"--no-such-flag", "value"}},
+		{name: "argument", args: []string{"extra"}},
+		{name: "invalid flag value", args: []string{"--discovery-wait", "soon"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := newContactEnv(t)
+			env.mustRun("contact", "add", "echo", agentURL)
+
+			args := append([]string{"hook"}, tc.args...)
+			out, _, err := env.run(`{"hook_event_name":"SessionStart","session_id":"s1","source":"startup"}`, args...)
+			if err != nil {
+				t.Fatalf("run(%v) error = %v, want nil", args, err)
+			}
+			if tc.name != "invalid flag value" && !strings.Contains(out, "- echo") {
+				t.Fatalf("run(%v) = %q, want the contacts", args, out)
+			}
+		})
+	}
+}
+
 func TestHookCmdInvalidInputIsSilent(t *testing.T) {
 	t.Parallel()
 	env := newContactEnv(t)

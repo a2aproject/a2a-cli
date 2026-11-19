@@ -13,7 +13,7 @@ The plugin carries the agent-facing skill and hooks only. Install `a2a` separate
 - **WinGet (Windows):** `winget install a2aproject.a2acli`
 - **Prebuilt binary:** download from the [latest release](https://github.com/a2aproject/a2a-cli/releases/latest) and put `a2a` on your `PATH`.
 
-Check it with `a2a version`. The skill runs the same preflight check.
+Check it with `a2a version`. The skill runs the same preflight check. The contacts and discovery hooks need `a2a` 0.5.0 or later; with an older or missing `a2a` they add nothing and never block a prompt.
 
 ## Install
 
