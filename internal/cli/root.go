@@ -267,7 +267,7 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 		case output.ModeText, output.ModeJson, output.ModeJSONL:
 			cfg.Mode = output.Mode(cfg.output)
 		default:
-			return clierr.Usage(fmt.Sprintf("invalid --output %q (want text or json)", cfg.output))
+			return clierr.Usage(fmt.Sprintf("invalid --output %q (want text, json or jsonl)", cfg.output))
 		}
 
 		return cfg.initEventHandlers(cmd)

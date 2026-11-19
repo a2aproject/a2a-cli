@@ -778,8 +778,12 @@ func TestSendStreamJSONL(t *testing.T) {
 func TestSendOutputInvalidFormat(t *testing.T) {
 	t.Parallel()
 	url := startTestServer(t)
-	if _, err := runCMD(t, "send", "-a", url, "-o", "yaml", "format me"); err == nil {
+	_, err := runCMD(t, "send", "-a", url, "-o", "yaml", "format me")
+	if err == nil {
 		t.Fatal("send -o yaml error = nil, want error")
+	}
+	if want := "want text, json or jsonl"; !strings.Contains(err.Error(), want) {
+		t.Fatalf("send -o yaml error = %q, want it to contain %q", err, want)
 	}
 }
 
