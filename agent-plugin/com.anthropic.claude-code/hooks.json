@@ -4,21 +4,21 @@
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "a2a", "args": ["hook"], "timeout": 5 }
+          { "type": "command", "command": "a2a hook; exit 0", "timeout": 5 }
         ]
       }
     ],
     "UserPromptSubmit": [
       {
         "hooks": [
-          { "type": "command", "command": "a2a", "args": ["hook"], "timeout": 5 }
+          { "type": "command", "command": "a2a hook; exit 0", "timeout": 5 }
         ]
       }
     ],
     "PostToolBatch": [
       {
         "hooks": [
-          { "type": "command", "command": "a2a", "args": ["hook"], "timeout": 5 }
+          { "type": "command", "command": "a2a hook; exit 0", "timeout": 5 }
         ]
       }
     ]

@@ -42,6 +42,9 @@ function runHook(event, args = []) {
       clearTimeout(timer)
       resolve("")
     })
+    // An a2a that exits without reading the event, such as one that predates
+    // `a2a hook`, closes the pipe; the write error must not crash opencode.
+    child.stdin.on("error", () => {})
     child.stdout.on("data", (chunk) => (out += chunk))
     child.on("close", () => {
       clearTimeout(timer)

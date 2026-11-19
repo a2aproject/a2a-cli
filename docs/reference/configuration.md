@@ -9,7 +9,7 @@ These apply to every command. The environment variable is `A2ACLI_` followed by 
 | Flag | Environment variable | Type | Default | Discovered `.env` | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `-a`, `--agent-card` | `A2ACLI_AGENT_CARD` | host, URL, path, identifier or contact | | yes | Card reference. See [reference normalization](../advanced/discovery.md#reference-normalization). Exclusive with `--endpoint`. |
-| `--catalog` | `A2ACLI_CATALOG` | name or URL | | yes | AI Catalog to look the `--agent-card` identifier up in: a registered name, or a catalog URL. See [AI Catalogs](../guide/ai-catalogs.md). Experimental. |
+| `--catalog` | `A2ACLI_CATALOG` | name or URL | | no | AI Catalog to look the `--agent-card` identifier up in: a registered name, or a catalog URL. See [AI Catalogs](../guide/ai-catalogs.md). Experimental. |
 | `-e`, `--endpoint` | `A2ACLI_ENDPOINT` | URL | | yes | Interface URL; skips the card. Needs exactly one `--transport`. |
 | `--transport` | `A2ACLI_TRANSPORT` | list | | yes | `rest`, `jsonrpc`, `grpc` or a plugin name, most preferred first. Comma separated in the environment and `.env`. |
 | `--a2a-version` | `A2ACLI_A2A_VERSION` | string | | yes | `1.0` or `0.3` registers only that version's transports. Unset registers both. |

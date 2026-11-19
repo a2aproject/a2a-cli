@@ -12,6 +12,7 @@ The CLI reads the nearest `.env` found by walking up from the working directory,
 | `unix-socket` | Send every request, with your credentials, to a socket it chose |
 | `ca-cert` | Make the CLI trust a certificate it chose, and accept a server impersonating the agent |
 | `oauth`, `oauth-clients`, `oauth-default-client-id`, `oauth-store` | Turn on OAuth and attach your stored grants, or sign you in with a client it chose |
+| `catalog` | Resolve every `--agent-card`, even a URL you typed, through a catalog it chose, and send your card request headers to the card that catalog names |
 
 The Agent Plugin's hook also doesn't read its `discovery`, `discovery-allow-host` and `discovery-wait` settings from that file (see [Agent discovery](#agent-discovery)).
 
