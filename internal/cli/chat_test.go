@@ -298,6 +298,19 @@ func TestChatWithAnEmptyIDIsAUsageError(t *testing.T) {
 	}
 }
 
+func TestChatWithANonPositivePollIntervalIsAUsageError(t *testing.T) {
+	t.Parallel()
+	agent, url := startChatAgent(t)
+
+	_, _, err := runChat(t, url, true, "", "--poll-interval", "0", "one")
+	if ce := clierr.Classify(err); ce == nil || ce.Code != clierr.CodeUsage {
+		t.Fatalf("a2a chat --poll-interval 0 error = %v, want a usage error", err)
+	}
+	if got := len(agent.requests); got != 0 {
+		t.Fatalf("a2a chat --poll-interval 0 sent %d messages, want 0", got)
+	}
+}
+
 func TestChatResumesATask(t *testing.T) {
 	t.Parallel()
 	agent, url := startChatAgent(t, a2a.TaskStateInputRequired, a2a.TaskStateCompleted)
