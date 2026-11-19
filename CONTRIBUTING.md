@@ -48,7 +48,7 @@ Be patient — reviewing and merging a pull request can take time.
 A few checks run on every pull request. Follow these tips to pass them:
 
 - Add tests for every new feature.
-- Open an issue first, then link it in the PR. For example: `Fixes #123` or `Closes #123`.
+- If the PR resolves an issue, link it in the description. For example: `Fixes #123` or `Closes #123`.
 - Use Conventional Commits for commit messages and PR titles.
 - For code changes, run these before you push:
 

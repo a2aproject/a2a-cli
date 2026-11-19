@@ -8,7 +8,7 @@
 
 - `a2a`.
 - `ai-catalog`, from its [releases](https://github.com/Agent-Card/ai-catalog-cli/releases) or `brew install ai-catalog` after `brew tap Agent-Card/ai-catalog-cli https://github.com/Agent-Card/ai-catalog-cli`.
-- No model or API key. [`start-agents.sh`](start-agents.sh) runs three small local agents with `a2a server --exec`, on ports 9101 to 9103.
+- [a2a-serve](https://github.com/a2aproject/a2a-serve). No model or API key: [`start-agents.sh`](start-agents.sh) runs three small local agents with `a2a-serve start exec`, on ports 9101 to 9103.
 
 Run the commands in this directory. Start the agents in a second terminal:
 

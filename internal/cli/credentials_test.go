@@ -35,8 +35,8 @@ import (
 
 	"github.com/a2aproject/a2a-cli/internal/clicfg"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
-	"github.com/a2aproject/a2a-cli/internal/localsrv"
 	"github.com/a2aproject/a2a-cli/internal/polling"
+	"github.com/a2aproject/a2a-cli/internal/testutil"
 )
 
 type recordedRequest struct {
@@ -75,7 +75,7 @@ func startAuthRecordingServer(t *testing.T) (string, *authRecorder) {
 func startAuthRecordingServerWithInterface(t *testing.T, iface func(serverURL string) string) (string, *authRecorder) {
 	t.Helper()
 	capabilities := a2a.AgentCapabilities{Streaming: true}
-	handler := a2asrv.NewHandler(localsrv.NewEchoExecutor(), a2asrv.WithCapabilityChecks(&capabilities))
+	handler := a2asrv.NewHandler(testutil.NewEchoExecutor(), a2asrv.WithCapabilityChecks(&capabilities))
 	mux := http.NewServeMux()
 	mux.Handle("/", a2asrv.NewRESTHandler(handler))
 	rec := &authRecorder{}
