@@ -329,7 +329,6 @@ func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
 		newContactCmd(cfg),
 		newConfigCmd(cfg),
 		newAuthCmd(cfg, deps),
-		newServeCmd(cfg),
 		newTransportCmd(cfg),
 		newPluginCmd(cfg),
 		newSkillCmd(cfg),

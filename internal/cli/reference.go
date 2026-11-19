@@ -31,7 +31,7 @@ func WriteReference(dir string) error {
 	if err != nil {
 		return err
 	}
-	return clidoc.Write(dir, root, referenceOptions)
+	return clidoc.Write(dir, root, clidoc.Options{})
 }
 
 // ReferencePages renders the markdown command reference, keyed by file name.
@@ -40,7 +40,7 @@ func ReferencePages() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return clidoc.Pages(root, referenceOptions), nil
+	return clidoc.Pages(root, clidoc.Options{}), nil
 }
 
 // referenceRoot builds the command tree without reading configuration, so
@@ -56,9 +56,4 @@ func referenceRoot() (*cobra.Command, error) {
 	}
 	root.InitDefaultCompletionCmd()
 	return root, nil
-}
-
-// referenceOptions leaves out server, which is due to be removed.
-var referenceOptions = clidoc.Options{
-	Skip: func(c *cobra.Command) bool { return c.Name() == "server" },
 }

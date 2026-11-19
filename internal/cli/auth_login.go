@@ -53,8 +53,7 @@ and sign in the same way when an agent requires it and a terminal is attached.
 after an a2a auth login. No OAuth runs when --auth, --svc-param or a credential
 helper supplies the Authorization header. Other credentials you pass (any
 --svc-param, a credential helper for the agent's host, --unix-socket) are sent
-first: OAuth then signs in only when the agent answers 401. a2a server --proxy
-never uses OAuth for the upstream agent.
+first: OAuth then signs in only when the agent answers 401.
 
 --oauth-clients configures one client per authorization server: on the command
 line or in A2ACLI_OAUTH_CLIENTS as JSON, {"authority":"<issuer>","client_id":"<id
