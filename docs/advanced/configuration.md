@@ -74,6 +74,7 @@ Flags annotated with `clicfg.AnnotationNotFromDiscoveredFile` are not read from 
 | `--credential-helper` | It runs a command. |
 | `--unix-socket` | It redirects every request. |
 | `--ca-cert` | It chooses which certificates to trust. |
+| `--catalog` | It turns every `--agent-card` into a catalog lookup. |
 
 When the discovered `.env` sets one, `Bind` skips it, uses the next source, and the CLI warns on stderr:
 

@@ -277,7 +277,7 @@ func TestCredentialHelperInvalidSpec(t *testing.T) {
 	}
 }
 
-func TestCredentialFlagsIgnoredFromDiscoveredEnv(t *testing.T) {
+func TestFlagsIgnoredFromDiscoveredEnv(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name string
@@ -287,6 +287,7 @@ func TestCredentialFlagsIgnoredFromDiscoveredEnv(t *testing.T) {
 		{name: "credential helper", env: "A2ACLI_CREDENTIAL_HELPER=false", flag: "credential-helper"},
 		{name: "unix socket", env: "A2ACLI_UNIX_SOCKET=/nonexistent/a2a.sock", flag: "unix-socket"},
 		{name: "CA certificate", env: "A2ACLI_CA_CERT=/nonexistent/ca.pem", flag: "ca-cert"},
+		{name: "AI Catalog", env: "A2ACLI_CATALOG=/nonexistent/ai-catalog.json", flag: "catalog"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
