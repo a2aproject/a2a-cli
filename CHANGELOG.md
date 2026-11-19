@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.5.0](https://github.com/a2aproject/a2a-cli/compare/v0.4.0...v0.5.0) (2026-11-19)
+
+
+### Features
+
+* add contact book and agent discovery hooks ([#153](https://github.com/a2aproject/a2a-cli/issues/153)) ([555d465](https://github.com/a2aproject/a2a-cli/commit/555d465398d67821ee3f133566abe72107eaaa06)), closes [#138](https://github.com/a2aproject/a2a-cli/issues/138)
+* add OAuth sign-in and a2a auth commands ([#146](https://github.com/a2aproject/a2a-cli/issues/146)) ([541aa68](https://github.com/a2aproject/a2a-cli/commit/541aa68486545a4ee35aaf6731cb19dbad44e884)), closes [#98](https://github.com/a2aproject/a2a-cli/issues/98)
+* discover AI Catalog agents alongside agent cards ([#165](https://github.com/a2aproject/a2a-cli/issues/165)) ([0c27581](https://github.com/a2aproject/a2a-cli/commit/0c27581ebb2fc705ea6718a53e33d8cb507c963d)), closes [#19](https://github.com/a2aproject/a2a-cli/issues/19)
+* keep OAuth tokens in the OS keychain ([#147](https://github.com/a2aproject/a2a-cli/issues/147)) ([4fbf326](https://github.com/a2aproject/a2a-cli/commit/4fbf32639b34adb2ab96f96f5876f3e2b709c46b)), closes [#98](https://github.com/a2aproject/a2a-cli/issues/98)
+* opencode plugin for a2a hook, and contacts and discovery examples ([#164](https://github.com/a2aproject/a2a-cli/issues/164)) ([513b828](https://github.com/a2aproject/a2a-cli/commit/513b82832385f478a160ed616914e3ea7b8d37c6))
+* resolve --agent-card from AI Catalogs ([#152](https://github.com/a2aproject/a2a-cli/issues/152)) ([53f9904](https://github.com/a2aproject/a2a-cli/commit/53f9904564164e1d2a3c49a71dd39f59143876ff)), closes [#19](https://github.com/a2aproject/a2a-cli/issues/19)
+
+
+### Bug Fixes
+
+* bind the gRPC server's agent card listener to --host ([#133](https://github.com/a2aproject/a2a-cli/issues/133)) ([0d4d99e](https://github.com/a2aproject/a2a-cli/commit/0d4d99e1881401722b72a7dafa5049375fe5c23c))
+* drop the agent URL's query string from error messages ([#142](https://github.com/a2aproject/a2a-cli/issues/142)) ([5c95123](https://github.com/a2aproject/a2a-cli/commit/5c95123d1c8d50a1cd6dfc2f28a14f5533a383ae)), closes [#140](https://github.com/a2aproject/a2a-cli/issues/140)
+* escape local agent card paths when building the file URL ([#135](https://github.com/a2aproject/a2a-cli/issues/135)) ([40b9b79](https://github.com/a2aproject/a2a-cli/commit/40b9b795445fecc7df52391884519ced924d1b13)), closes [#134](https://github.com/a2aproject/a2a-cli/issues/134)
+* **flagparse:** preserve HTTP for loopback references with paths ([#163](https://github.com/a2aproject/a2a-cli/issues/163)) ([7a01cbf](https://github.com/a2aproject/a2a-cli/commit/7a01cbf2df9b121a6535ca953440f2bcc059b26b)), closes [#162](https://github.com/a2aproject/a2a-cli/issues/162)
+* let SSE keep-alives reset the --stream inactivity timeout ([#143](https://github.com/a2aproject/a2a-cli/issues/143)) ([4deb709](https://github.com/a2aproject/a2a-cli/commit/4deb709ddc03e238dfe4fcf4e13f5744bfe7e65a)), closes [#137](https://github.com/a2aproject/a2a-cli/issues/137)
+* **output:** preserve schema constants in approval resume hints ([#151](https://github.com/a2aproject/a2a-cli/issues/151)) ([13cd6b1](https://github.com/a2aproject/a2a-cli/commit/13cd6b1f03973ed5b46ad347848cc7d171e6e62f))
+* print a2a version as JSON under -o jsonl ([#156](https://github.com/a2aproject/a2a-cli/issues/156)) ([de1d911](https://github.com/a2aproject/a2a-cli/commit/de1d9119ac51914dc1f8c66e5540a9cdbacc5775)), closes [#154](https://github.com/a2aproject/a2a-cli/issues/154)
+* reject an empty --task-id or --context-id ([#171](https://github.com/a2aproject/a2a-cli/issues/171)) ([a56e6c5](https://github.com/a2aproject/a2a-cli/commit/a56e6c578bc8b2a966c720a7af0b98b012673d95))
+* report an unknown --a2a-version as a usage error ([#157](https://github.com/a2aproject/a2a-cli/issues/157)) ([a6ad070](https://github.com/a2aproject/a2a-cli/commit/a6ad070b3d4017fce9ec70984adbbe6e57fbf7a2))
+* review fixes for plugin hooks and AI Catalogs ([#172](https://github.com/a2aproject/a2a-cli/issues/172)) ([39c0187](https://github.com/a2aproject/a2a-cli/commit/39c01870f157e7942ef92f78f035dbf034da18fe))
+
 ## [0.4.0](https://github.com/a2aproject/a2a-cli/compare/v0.3.1...v0.4.0) (2026-11-04)
 
 
