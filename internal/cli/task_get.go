@@ -44,6 +44,11 @@ func newTaskGetCmd(cfg *globalConfig) *cobra.Command {
   a2a task get -a https://agent.example.com <task-id> --wait --timeout 5m`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if wait {
+				if err := checkPollInterval(pollInterval); err != nil {
+					return err
+				}
+			}
 			ctx, cancel := context.WithTimeout(cmd.Context(), cfg.timeout)
 			defer cancel()
 			ctx = withServiceParams(ctx, cfg)

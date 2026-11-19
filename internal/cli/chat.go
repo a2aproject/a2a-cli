@@ -59,6 +59,9 @@ func newChatCmd(cfg *globalConfig, deps deps) *cobra.Command {
 			if err := rejectEmptyIDs(cmd); err != nil {
 				return err
 			}
+			if err := checkPollInterval(flags.pollInterval); err != nil {
+				return err
+			}
 
 			baseCtx := withServiceParams(cmd.Context(), cfg)
 			var client *a2aclient.Client

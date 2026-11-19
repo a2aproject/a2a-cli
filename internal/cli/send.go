@@ -69,6 +69,9 @@ func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 			if err := rejectEmptyIDs(cmd); err != nil {
 				return err
 			}
+			if err := checkPollInterval(flags.pollInterval); err != nil {
+				return err
+			}
 			if flags.stream && flags.async {
 				return clierr.Usage("--stream is incompatible with --async")
 			}
@@ -236,6 +239,15 @@ func parseRequestPayload(ref string) (*a2a.SendMessageRequest, error) {
 		req.Message.ID = a2a.NewMessageID()
 	}
 	return req, nil
+}
+
+// checkPollInterval fails on a --poll-interval of zero or less, which would
+// make the polling fallback send GetTask requests in a tight loop.
+func checkPollInterval(d time.Duration) error {
+	if d <= 0 {
+		return clierr.Usage(fmt.Sprintf("--poll-interval must be positive, got %v", d))
+	}
+	return nil
 }
 
 // rejectEmptyIDs fails on an empty --task-id or --context-id, which usually
