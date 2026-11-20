@@ -22,13 +22,13 @@ Status:   submitted
 History:
   [user] List the files in your workspace
 [status] working
-[status] working: Running list files {"toolCall":{"id":"t1","kind":"read","status":"in_progress",...}}
-[status] working: Finished list files {"toolCall":{"id":"t1","kind":"read","status":"completed",...}}
+[status] working: Running list files
+[status] working: Finished list files
 [artifact] Listed the files.
 [status] completed
 ```
 
-The first event is the task, then status updates and artifacts as they happen. A status message prints its text parts, then its data parts as JSON; here the agent attaches the tool call it runs. Chunks the agent appends to an artifact continue the same `[artifact]` line.
+The first event is the task, then status updates and artifacts as they happen. A status message prints its text parts. Its data parts, like the tool call the agent runs, are in `-o json`; a message with only data parts prints them as JSON. Chunks the agent appends to an artifact continue the same `[artifact]` line.
 
 If the agent doesn't stream, `--stream` sends the message, polls the task every `--poll-interval` (default `2s`) and prints the same kinds of events.
 

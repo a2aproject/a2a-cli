@@ -105,8 +105,8 @@ Status:   submitted
 History:
   [user] List the files in your workspace.
 [status] working
-[status] working: Running list files {"toolCall":{...}}
-[status] working: Finished list files {"toolCall":{...}}
+[status] working: Running list files
+[status] working: Finished list files
 [artifact] The workspace is empty.
 [status] completed
 ```
