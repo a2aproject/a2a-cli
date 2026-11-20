@@ -46,8 +46,13 @@ const insecureCredentialWarning = "warning: --insecure disables TLS for gRPC; a 
 // warnInsecureCredential warns once when a credential is sent with --insecure.
 func warnInsecureCredential(cfg *globalConfig) {
 	if cfg.insecureGRPC && cfg.svcParams.HasCredential() {
-		_, _ = fmt.Fprintln(cfg.stderr(), insecureCredentialWarning)
+		cfg.warnInsecure()
 	}
+}
+
+// warnInsecure prints insecureCredentialWarning, once per command.
+func (g *globalConfig) warnInsecure() {
+	g.insecureWarning.Do(func() { _, _ = fmt.Fprintln(g.stderr(), insecureCredentialWarning) })
 }
 
 func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclient.FactoryOption) (*a2aclient.Client, error) {
@@ -142,7 +147,11 @@ func newClientFromEndpoint(ctx context.Context, cfg *globalConfig, ref string, e
 	}
 	cfg.logf("connecting directly to %s via %s (skipping card resolution)", ref, protocol)
 
-	factoryOpts := append(clientFactoryOpts(cfg), extraOpts...)
+	factoryOpts, err := clientFactoryOpts(cfg)
+	if err != nil {
+		return nil, err
+	}
+	factoryOpts = append(factoryOpts, extraOpts...)
 	if !transportplugin.IsBuiltin(protocol) {
 		pluginOpt, err := transportplugin.Load(protocol, cfg)
 		if err != nil {
@@ -166,12 +175,18 @@ func newClientFromCard(ctx context.Context, cfg *globalConfig, extraOpts ...a2ac
 		return nil, err
 	}
 
+	// Build the transports first so an unsupported --a2a-version is reported
+	// before the card is fetched.
+	factoryOpts, err := clientFactoryOpts(cfg)
+	if err != nil {
+		return nil, err
+	}
+	factoryOpts = append(factoryOpts, extraOpts...)
+
 	card, err := resolveAgentCard(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
-
-	factoryOpts := append(clientFactoryOpts(cfg), extraOpts...)
 	pluginOpts, err := transportplugin.LoadForCard(card, cfg)
 	if err != nil {
 		return nil, err
@@ -182,6 +197,7 @@ func newClientFromCard(ctx context.Context, cfg *globalConfig, extraOpts ...a2ac
 			a2aclient.Config{PreferredTransports: transportPrefs},
 		))
 	}
+	cfg.resolvedCard = card
 	cfg.logf("creating client for %s", card.Name)
 	return a2aclient.NewFromCard(ctx, card, factoryOpts...)
 }
@@ -208,6 +224,10 @@ func fetchCardDocument(ctx context.Context, cfg *globalConfig, ref string, allow
 	for k, vals := range headers {
 		opts = append(opts, agentcard.WithRequestHeader(k, strings.Join(vals, ", ")))
 	}
+	cfg.cardURL = cardRequestURL(ref)
+	if token := cfg.cardToken(ctx, cfg.cardURL); token != "" {
+		opts = append(opts, agentcard.WithRequestHeader("Authorization", "Bearer "+token))
+	}
 	var raw []byte
 	resolver := cardResolver(cfg)
 	parse := resolver.CardParser
@@ -230,12 +250,12 @@ func fetchCardDocument(ctx context.Context, cfg *globalConfig, ref string, allow
 }
 
 func cardResolver(cfg *globalConfig) *agentcard.Resolver {
-	resolver := agentcard.NewResolver(&http.Client{Transport: cfg.httpTransport})
+	resolver := agentcard.NewResolver(&http.Client{Transport: cfg.agentTransport()})
 	resolver.CardParser = a2av0.NewAgentCardParser()
 	return resolver
 }
 
-func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
+func clientFactoryOpts(cfg *globalConfig) ([]a2aclient.FactoryOption, error) {
 	creds := credentials.NewTLS(&tls.Config{RootCAs: cfg.rootCAs})
 	if cfg.insecureGRPC {
 		creds = insecure.NewCredentials()
@@ -247,28 +267,55 @@ func clientFactoryOpts(cfg *globalConfig) []a2aclient.FactoryOption {
 	// The a2a-go default HTTP client caps every request at 3 minutes. Use one without a
 	// total timeout so the --timeout context deadline is what bounds a request.
 	// ActivityTransport lets SSE keep-alives reset the --stream inactivity timeout.
-	httpClient := &http.Client{Transport: utils.ActivityTransport(cfg.httpTransport)}
+	httpClient := &http.Client{Transport: utils.ActivityTransport(cfg.agentTransport())}
 	opts := []a2aclient.FactoryOption{a2aclient.WithDefaultsDisabled()}
-	if cfg.credentials != nil {
-		opts = append(opts, cfg.credentialInterceptor())
+	switch {
+	case cfg.oauthEnabled():
+		// Plugins run before interceptors: the credential helper's headers
+		// have to be set before the OAuth plugin looks at a call.
+		var plugins []a2aclient.Plugin
+		if cfg.credentials != nil {
+			plugins = append(plugins, beforePlugin{name: "a2a-cli-credential-helper", ic: cfg.credentialHelperInterceptor()})
+		}
+		plugins = append(plugins, oauthPlugin{inner: cfg.oauth.Plugin(), cfg: cfg})
+		opts = append(opts, a2aclient.WithPlugins(plugins...))
+		if cfg.insecureGRPC {
+			opts = append(opts, a2aclient.WithCallInterceptors(insecureTokenWarning{cfg: cfg}))
+		}
+	case cfg.credentials != nil:
+		opts = append(opts, a2aclient.WithCallInterceptors(cfg.credentialHelperInterceptor()))
 	}
-	if cfg.a2aVersion == "" || cfg.a2aVersion == "1.0" {
-		opts = append(
-			opts,
+	// Each protocol version with the transports that speak it. With no
+	// --a2a-version every version is registered, in this order.
+	versions := []struct {
+		version    a2a.ProtocolVersion
+		transports []a2aclient.FactoryOption
+	}{
+		{a2a.Version, []a2aclient.FactoryOption{
 			a2aclient.WithRESTTransport(httpClient),
 			a2aclient.WithJSONRPCTransport(httpClient),
 			a2aclient.WithTransport(a2a.TransportProtocolGRPC, grpcTransportFactory(a2agrpc.NewGRPCTransport, cfg.unixSocket != "", grpcOpts...)),
-		)
-	}
-	if cfg.a2aVersion == "" || cfg.a2aVersion == "0.3" {
-		opts = append(
-			opts,
+		}},
+		{a2av0.Version, []a2aclient.FactoryOption{
 			a2av0.WithRESTTransport(a2av0.RESTTransportConfig{Client: httpClient}),
 			a2av0.WithJSONRPCTransport(a2av0.JSONRPCTransportConfig{Client: httpClient}),
 			a2aclient.WithCompatTransport(a2av0.Version, a2a.TransportProtocolGRPC, grpcTransportFactory(a2agrpcv0.NewGRPCTransport, cfg.unixSocket != "", grpcOpts...)),
-		)
+		}},
 	}
-	return opts
+	if cfg.a2aVersion == "" {
+		for _, v := range versions {
+			opts = append(opts, v.transports...)
+		}
+		return opts, nil
+	}
+	supported := make([]string, 0, len(versions))
+	for _, v := range versions {
+		if cfg.a2aVersion == string(v.version) {
+			return append(opts, v.transports...), nil
+		}
+		supported = append(supported, string(v.version))
+	}
+	return nil, clierr.Usage(fmt.Sprintf("unsupported --a2a-version %q (want one of %s)", cfg.a2aVersion, strings.Join(supported, ", ")))
 }
 
 // grpcTransportFactory dials the host and port of a gRPC interface URL, which

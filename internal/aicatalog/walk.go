@@ -17,6 +17,7 @@ package aicatalog
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,6 +34,9 @@ const (
 	maxDocumentBytes = 10 << 20
 	// maxDepth is how many levels of nested catalogs are followed.
 	maxDepth = 4
+	// maxDocuments is how many nested catalog documents one walk loads, which
+	// bounds a catalog that lists many nested catalogs at each level.
+	maxDocuments = 100
 )
 
 // Fetcher retrieves catalog documents over HTTP or from local files.
@@ -168,10 +172,18 @@ type walker struct {
 	path     []string
 	entries  []Entry
 	warnings []string
+	// visited holds the nested catalog documents already loaded, so a catalog
+	// that several others list is walked once.
+	visited map[string]bool
+	// truncated is set once maxDocuments nested catalogs were loaded.
+	truncated bool
 }
 
 func (w *walker) walk(ctx context.Context, doc *document, base string, depth int) {
 	for i, entry := range doc.Entries {
+		if ctx.Err() != nil {
+			return
+		}
 		w.entries = append(w.entries, Entry{CatalogEntry: entry, Catalog: w.label, Base: base, Raw: doc.rawEntries[i]})
 		if !entry.IsNestedCatalog() {
 			continue
@@ -181,6 +193,13 @@ func (w *walker) walk(ctx context.Context, doc *document, base string, depth int
 			continue
 		}
 		child, childBase, err := w.open(ctx, &entry, base)
+		if errors.Is(err, errTooManyDocuments) {
+			if !w.truncated {
+				w.truncated = true
+				w.warnings = append(w.warnings, fmt.Sprintf("%s nests more than %d catalogs; skipping the rest", w.label, maxDocuments))
+			}
+			continue
+		}
 		if err != nil {
 			w.warn(entry, err)
 			continue
@@ -193,6 +212,8 @@ func (w *walker) walk(ctx context.Context, doc *document, base string, depth int
 		w.path = w.path[:len(w.path)-1]
 	}
 }
+
+var errTooManyDocuments = errors.New("too many nested catalogs")
 
 func (w *walker) warn(entry catalog.CatalogEntry, err error) {
 	w.warnings = append(w.warnings, fmt.Sprintf("skipping nested catalog %q in %s: %v", entry.Identifier, w.label, err))
@@ -213,6 +234,16 @@ func (w *walker) open(ctx context.Context, entry *catalog.CatalogEntry, base str
 	if slices.Contains(w.path, ref) {
 		return nil, "", fmt.Errorf("circular reference to %s", ref)
 	}
+	if w.visited[ref] {
+		return nil, "", nil
+	}
+	if len(w.visited) == maxDocuments {
+		return nil, "", errTooManyDocuments
+	}
+	if w.visited == nil {
+		w.visited = map[string]bool{}
+	}
+	w.visited[ref] = true
 	data, err := w.load(ctx, ref)
 	if err != nil {
 		return nil, "", err

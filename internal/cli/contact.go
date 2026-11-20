@@ -134,7 +134,7 @@ func (g *globalConfig) cachedContactCard(cache *cardcache.Cache, c contacts.Cont
 		return card, time.Time{}, true
 	}
 	e, ok := cache.Get(c.CardURL())
-	if !ok || !e.Found() || !e.Fresh(time.Now(), cardcache.FoundTTL) {
+	if !ok || e.Card == nil || !e.Fresh(time.Now(), cardcache.FoundTTL) {
 		return nil, time.Time{}, false
 	}
 	return e.Card, e.FetchedAt, true

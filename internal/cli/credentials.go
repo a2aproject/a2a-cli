@@ -18,10 +18,11 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"iter"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
-	"sync"
 
 	"github.com/a2aproject/a2a-go/v2/a2aclient"
 
@@ -88,11 +89,10 @@ func (g *globalConfig) cardHeaders(ctx context.Context, ref string) (map[string]
 	return headers, nil
 }
 
-// credentialInterceptor adds the helper headers to every A2A call, chosen
-// by the host of the interface the client is connected to.
-func (g *globalConfig) credentialInterceptor() a2aclient.FactoryOption {
-	var warn sync.Once
-	return a2aclient.WithCallInterceptors(&credhelper.Interceptor{
+// credentialHelperInterceptor adds the helper headers to every A2A call,
+// chosen by the host of the interface the client is connected to.
+func (g *globalConfig) credentialHelperInterceptor() *credhelper.Interceptor {
+	return &credhelper.Interceptor{
 		Source: g.credentials,
 		OnApply: func(headers map[string][]string) {
 			if !g.insecureGRPC {
@@ -100,11 +100,38 @@ func (g *globalConfig) credentialInterceptor() a2aclient.FactoryOption {
 			}
 			for name := range headers {
 				if strings.EqualFold(name, "Authorization") {
-					warn.Do(func() { _, _ = fmt.Fprintln(g.stderr(), insecureCredentialWarning) })
+					g.warnInsecure()
 				}
 			}
 		},
-	})
+	}
+}
+
+// beforePlugin runs the Before of a call interceptor as a plugin, so the
+// service parameters it adds are set before later plugins see a call.
+type beforePlugin struct {
+	a2aclient.PassthroughPlugin
+	name string
+	ic   a2aclient.CallInterceptor
+}
+
+// Name implements [a2aclient.Plugin].
+func (p beforePlugin) Name() string { return p.name }
+
+// WrapCall implements [a2aclient.Plugin].
+func (p beforePlugin) WrapCall(next a2aclient.CallHandler) a2aclient.CallHandler {
+	return func(ctx context.Context, req a2aclient.Request) iter.Seq2[any, error] {
+		params := make(a2aclient.ServiceParams, len(req.ServiceParams))
+		for k, v := range req.ServiceParams {
+			params[k] = slices.Clone(v)
+		}
+		req.ServiceParams = params
+		ctx, result, err := p.ic.Before(ctx, &req)
+		if err != nil || result != nil {
+			return func(yield func(any, error) bool) { yield(result, err) }
+		}
+		return next(ctx, req)
+	}
 }
 
 func isHTTPURL(raw string) bool {

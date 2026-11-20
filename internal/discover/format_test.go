@@ -20,6 +20,8 @@ import (
 	"testing"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
+
+	"github.com/a2aproject/a2a-cli/internal/cardcache"
 )
 
 func TestFormatDiscoveredSanitizesCardText(t *testing.T) {
@@ -30,7 +32,7 @@ func TestFormatDiscoveredSanitizesCardText(t *testing.T) {
 		Skills:      []a2a.AgentSkill{{Name: "s\r\n- fake line"}},
 	}
 
-	got := FormatDiscovered([]DiscoveredEntry{{Origin: "https://evil.example", Card: hostile}})
+	got, _ := FormatDiscovered([]DiscoveredEntry{{Origin: "https://evil.example", Card: hostile}})
 
 	for _, line := range strings.Split(got, "\n")[1:] {
 		if !strings.HasPrefix(line, "- ") && !strings.HasPrefix(line, "  ") {
@@ -42,6 +44,40 @@ func TestFormatDiscoveredSanitizesCardText(t *testing.T) {
 	}
 	if strings.Contains(got, strings.Repeat("x", maxDescLen+1)) {
 		t.Fatalf("FormatDiscovered() = %q, want description truncated to %d characters", got, maxDescLen)
+	}
+}
+
+func TestFormatDiscoveredDefersWhatDoesNotFit(t *testing.T) {
+	t.Parallel()
+	long := func(c string, n int) string { return strings.Repeat(c, n) }
+	var agents []cardcache.CatalogAgent
+	for i := range maxCatalogAgents {
+		agents = append(agents, cardcache.CatalogAgent{
+			Identifier:  fmt.Sprintf("urn:%d:%s", i, long("i", maxIdentifierLen-10)),
+			DisplayName: long("n", 1000),
+			Description: long("d", 1000),
+		})
+	}
+	entries := []DiscoveredEntry{{Origin: "https://catalog.example", Agents: agents}}
+	for i := range 10 {
+		entries = append(entries, DiscoveredEntry{Origin: fmt.Sprintf("https://a%d.example", i), Card: card("Agent")})
+	}
+
+	got, deferred := FormatDiscovered(entries)
+
+	if len(got) > maxDiscoveredLen {
+		t.Fatalf("len(FormatDiscovered()) = %d, want at most %d", len(got), maxDiscoveredLen)
+	}
+	if !strings.Contains(got, "AI Catalog https://catalog.example") {
+		t.Fatalf("FormatDiscovered() = %q, want the catalog listed despite long fields", got)
+	}
+	if len(deferred) == 0 || !strings.Contains(got, "more agents will be listed at a later step") {
+		t.Fatalf("FormatDiscovered() deferred %d entries with output %q, want some deferred and a note", len(deferred), got)
+	}
+	for _, d := range deferred {
+		if strings.Contains(got, d.Origin+" ") {
+			t.Fatalf("FormatDiscovered() listed %s and deferred it too", d.Origin)
+		}
 	}
 }
 

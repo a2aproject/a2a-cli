@@ -18,11 +18,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newAuthCmd(cfg *globalConfig) *cobra.Command {
+func newAuthCmd(cfg *globalConfig, d deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth",
 		Short: "Manage the credentials sent to agents",
 	}
-	cmd.AddCommand(newAuthGetCmd(cfg))
+	cmd.AddCommand(
+		newAuthLoginCmd(cfg, d),
+		newAuthLogoutCmd(cfg),
+		newAuthGetCmd(cfg),
+		newAuthListCmd(cfg),
+	)
 	return cmd
 }

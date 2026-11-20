@@ -95,6 +95,9 @@ nav:
       - A Credential Helper: examples/credential-helper/index.md
       - A Command Plugin: examples/a2a-hello/index.md
       - A Transport Plugin: examples/a2a-transport-echo/index.md
+      - AI Catalog Interop: examples/ai-catalog-interop/index.md
+      - OpenCode Calls a Contact: examples/opencode-contacts/index.md
+      - Agent Discovery: examples/agent-discovery/index.md
   - Advanced:
       - Architecture: advanced/architecture.md
       - Discovery and Transports: advanced/discovery.md

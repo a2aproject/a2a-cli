@@ -4,13 +4,17 @@ The `a2a` CLI runs on your machine with your permissions, sends your credentials
 
 ## Cloned repositories
 
-The CLI reads the nearest `.env` found by walking up from the working directory, so running `a2a` inside a repository you cloned applies the repository's `.env`. Three settings are not read from that file:
+The CLI reads the nearest `.env` found by walking up from the working directory, so running `a2a` inside a repository you cloned applies the repository's `.env`. These settings are not read from that file:
 
 | Setting | What a hostile `.env` could do with it |
 | --- | --- |
 | `credential-helper` | Run any program, the next time you call an agent |
 | `unix-socket` | Send every request, with your credentials, to a socket it chose |
 | `ca-cert` | Make the CLI trust a certificate it chose, and accept a server impersonating the agent |
+| `oauth`, `oauth-clients`, `oauth-default-client-id`, `oauth-store` | Turn on OAuth and attach your stored grants, or sign you in with a client it chose |
+| `catalog` | Resolve every `--agent-card`, even a URL you typed, through a catalog it chose, and send your card request headers to the card that catalog names |
+
+The Agent Plugin's hook also doesn't read its `discovery`, `discovery-allow-host` and `discovery-wait` settings from that file (see [Agent discovery](#agent-discovery)).
 
 The CLI ignores them in a discovered `.env` and prints a warning. The same file passed with `--config` is trusted, because you named it.
 
@@ -19,7 +23,7 @@ All other settings are read from a discovered `.env`. In particular it can:
 - Set `agent-card` or `endpoint`, so an `a2a send` without `-a` goes to an agent the file chose, with the headers of any unscoped credential helper you configured.
 - Set `svc-param` or `auth`, which adds headers to your requests.
 - Set `file-part`, which attaches a local file of its choice to every `send`.
-- Set `insecure`, which turns off TLS for gRPC.
+- Set `insecure`, which turns off TLS for gRPC. OAuth tokens are not sent over plaintext gRPC when `insecure` comes from a discovered `.env`.
 - Set `transport`, which can select a transport plugin you installed.
 - Set `plugins-enabled`, which turns on command plugins you installed.
 
@@ -41,15 +45,15 @@ The loopback connection between the CLI and a transport plugin is protected agai
 
 ## Agent discovery
 
-The Agent Plugin's hook fetches cards from origins that only appeared in a conversation (see [Coding Agents](../guide/coding-agents.md#contacts-and-agent-discovery)), so it limits where a probe can connect:
+The Agent Plugin's hook fetches agent cards and AI Catalogs from origins that only appeared in a conversation (see [Coding Agents](../guide/coding-agents.md#contacts-and-agent-discovery)), so it limits where a probe can connect:
 
 - It probes internal hosts (loopback, private and carrier-grade NAT addresses) as well as public ones.
 - It never connects to link-local addresses, which covers the IPv4 cloud metadata endpoint `169.254.169.254`, or to unspecified or multicast addresses. Metadata endpoints at other addresses, such as AWS's IPv6 `fd00:ec2::254`, count as internal: they are probed when a URL names them directly, but a redirect from a public site can't reach them.
 - It follows at most 3 redirects, and refuses a redirect from a public address to an internal one, so a public site can't point a probe into your network.
 
-The checks run on the addresses a probe's host resolves to when it connects, so DNS rebinding can't reach a link-local address or turn a redirect from a public host into an internal one; a host with both public and internal addresses counts as public. Probes don't reuse connections, so every redirect hop is checked. Probes use the proxy from `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`. A proxied target is checked against its address as resolved locally, and a name that doesn't resolve locally is treated as public. The proxy resolves the name again on its own, so for proxied requests the checks are best effort. A refused probe isn't cached, so a change to `discovery-allow-host` applies at once. `discovery-allow-host` is not read from a discovered `.env`.
+The checks run on the addresses a probe's host resolves to when it connects, so DNS rebinding can't reach a link-local address or turn a redirect from a public host into an internal one; a host with both public and internal addresses counts as public. Probes don't reuse connections, so every redirect hop is checked. Probes use the proxy from `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`. A proxied target is checked against its address as resolved locally, and a name that doesn't resolve locally is treated as public. The proxy resolves the name again on its own, so for proxied requests the checks are best effort. A refused probe isn't cached, so a change to `discovery-allow-host` applies at once. `discovery`, `discovery-allow-host` and `discovery-wait` are not read from a discovered `.env`, so a cloned repository can't turn discovery on, widen it or slow the hook down.
 
-Discovered agents are listed as unverified, and card text is presented to the model as information, not instructions.
+Discovered agents are listed as unverified, and card and catalog text is presented to the model as information, not instructions. A discovered catalog's nested catalogs and agent cards aren't fetched, and an agent whose identifier doesn't start with a letter or digit or has characters unsafe in a command line is left out. Set `discovery: false` to stop all probes.
 
 ## Credentials on the wire
 

@@ -280,6 +280,24 @@ func TestChatWithoutATerminalIsAUsageError(t *testing.T) {
 	}
 }
 
+func TestChatWithAnEmptyIDIsAUsageError(t *testing.T) {
+	t.Parallel()
+	for _, flag := range []string{"--task-id", "--context-id"} {
+		t.Run(flag, func(t *testing.T) {
+			t.Parallel()
+			agent, url := startChatAgent(t)
+
+			_, _, err := runChat(t, url, true, "", flag, "", "one")
+			if ce := clierr.Classify(err); ce == nil || ce.Code != clierr.CodeUsage {
+				t.Fatalf("a2a chat %s \"\" error = %v, want a usage error", flag, err)
+			}
+			if got := len(agent.requests); got != 0 {
+				t.Fatalf("a2a chat %s \"\" sent %d messages, want 0", flag, got)
+			}
+		})
+	}
+}
+
 func TestChatResumesATask(t *testing.T) {
 	t.Parallel()
 	agent, url := startChatAgent(t, a2a.TaskStateInputRequired, a2a.TaskStateCompleted)

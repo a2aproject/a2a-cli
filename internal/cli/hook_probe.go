@@ -32,7 +32,7 @@ func newHookProbeCmd(cfg *globalConfig, f *hookFlags) *cobra.Command {
 	return &cobra.Command{
 		Use:    "probe <origin>...",
 		Hidden: true,
-		Short:  "Fetch the agent cards of origins into the card cache (started by a2a hook)",
+		Short:  "Fetch the agent cards and AI Catalogs of origins into the card cache (started by a2a hook)",
 		Args:   cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if f.skip {

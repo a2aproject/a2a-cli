@@ -37,7 +37,6 @@ import (
 	"github.com/a2aproject/a2a-cli/internal/clicfg"
 	"github.com/a2aproject/a2a-cli/internal/clierr"
 	"github.com/a2aproject/a2a-cli/internal/flagparse"
-	"github.com/a2aproject/a2a-cli/internal/localsrv"
 	"github.com/a2aproject/a2a-cli/internal/output"
 	"github.com/a2aproject/a2a-cli/internal/polling"
 	"github.com/a2aproject/a2a-cli/internal/testutil"
@@ -243,20 +242,22 @@ func TestVersion(t *testing.T) {
 		}
 	})
 
-	t.Run("json output", func(t *testing.T) {
-		t.Parallel()
-		out := mustRunCMD(t, "version", "-o", "json")
-		var info versionInfo
-		if err := json.Unmarshal([]byte(out), &info); err != nil {
-			t.Fatalf("json.Unmarshal(version output) error = %v", err)
-		}
-		if info.Version == "" {
-			t.Fatalf("a2a version info.Version = %q, want non-empty", info.Version)
-		}
-		if info.GoVersion == "" {
-			t.Fatalf("a2a version info.GoVersion = %q, want non-empty", info.GoVersion)
-		}
-	})
+	for _, mode := range []string{"json", "jsonl"} {
+		t.Run(mode+" output", func(t *testing.T) {
+			t.Parallel()
+			out := mustRunCMD(t, "version", "-o", mode)
+			var info versionInfo
+			if err := json.Unmarshal([]byte(out), &info); err != nil {
+				t.Fatalf("json.Unmarshal(version output) error = %v", err)
+			}
+			if info.Version == "" {
+				t.Fatalf("a2a version info.Version = %q, want non-empty", info.Version)
+			}
+			if info.GoVersion == "" {
+				t.Fatalf("a2a version info.GoVersion = %q, want non-empty", info.GoVersion)
+			}
+		})
+	}
 }
 
 func TestSkill(t *testing.T) {
@@ -603,7 +604,7 @@ func partsFromArgs(t *testing.T, args ...string) *sendFlags {
 func TestSendStreaming(t *testing.T) {
 	t.Parallel()
 	url := startTestServer(t)
-	nonStreamingServerURL := startTestServerWith(t, a2a.AgentCapabilities{Streaming: false}, localsrv.NewEchoExecutor())
+	nonStreamingServerURL := startTestServerWith(t, a2a.AgentCapabilities{Streaming: false}, testutil.NewEchoExecutor())
 
 	testCases := []struct {
 		name               string
@@ -784,7 +785,7 @@ func TestSendOutputInvalidFormat(t *testing.T) {
 
 func TestSendStreamingFallbackUsesDefaultPoller(t *testing.T) {
 	t.Parallel()
-	nonStreamingURL := startTestServerWith(t, a2a.AgentCapabilities{Streaming: false}, localsrv.NewEchoExecutor())
+	nonStreamingURL := startTestServerWith(t, a2a.AgentCapabilities{Streaming: false}, testutil.NewEchoExecutor())
 
 	out, err := runCMDWithConfig(t, deps{cfgLoader: clicfg.LoadEmpty},
 		"send", "-a", nonStreamingURL, "-o", "json", "--stream", "stream me", "--poll-interval", "5ms")
@@ -836,6 +837,59 @@ func TestSend_ResumeHintForInputRequiredTask(t *testing.T) {
 	}
 	if want := "a2a send -a <agent> --task-id " + string(taskID); !strings.Contains(out, want) {
 		t.Fatalf("send text output missing the resume hint %q:\n%s", want, out)
+	}
+}
+
+func TestSend_NumberedResumeReplyCanBeRetried(t *testing.T) {
+	t.Parallel()
+
+	var mu sync.Mutex
+	question := 1
+	server := httptest.NewServer(a2asrv.NewRESTHandler(a2asrv.NewHandler(
+		a2asrv.AgentExecutorFunc(func(ctx context.Context, ec *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
+			return func(yield func(a2a.Event, error) bool) {
+				mu.Lock()
+				defer mu.Unlock()
+				for _, part := range ec.Message.Parts {
+					data, ok := part.Data().(map[string]any)
+					if ok && data["option"] == "once" && data["seq"] == float64(question) {
+						question++
+					}
+				}
+				part := a2a.NewDataPart(map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"option": map[string]any{"type": "string"},
+						"seq":    map[string]any{"const": question},
+					},
+					"required": []string{"option"},
+				})
+				part.Metadata = map[string]any{
+					"https://github.com/a2aproject/experimental-ext-structured-input/tree/main/v1": map[string]any{"type": "input_schema"},
+				}
+				yield(&a2a.Task{ID: ec.TaskID, ContextID: ec.ContextID, Status: a2a.TaskStatus{
+					State: a2a.TaskStateInputRequired, Message: &a2a.Message{Parts: a2a.ContentParts{part}},
+				}}, nil)
+			}
+		}),
+	)))
+	t.Cleanup(server.Close)
+
+	out := mustRunCMD(t, "send", "-e", server.URL, "--transport", "rest", "hello")
+	_, hint, found := strings.Cut(out, "Resume:     a2a send -e "+server.URL+" --transport rest --task-id ")
+	if !found {
+		t.Fatalf("send output = %q, want resume hint", out)
+	}
+	taskID, data, found := strings.Cut(strings.TrimSpace(hint), " --data-part '")
+	if !found || !strings.HasSuffix(data, "'") {
+		t.Fatalf("resume hint = %q, want structured reply", hint)
+	}
+	reply := strings.ReplaceAll(strings.TrimSuffix(data, "'"), "<option>", "once")
+	for range 2 {
+		out = mustRunCMD(t, "send", "-e", server.URL, "--transport", "rest", "--task-id", taskID, "--data-part", reply)
+		if !strings.Contains(out, `--data-part '{"option":"<option>","seq":2}'`) {
+			t.Fatalf("retried send output = %q, want question 2 still waiting", out)
+		}
 	}
 }
 
@@ -989,6 +1043,9 @@ func TestUsageErrors(t *testing.T) {
 		{"--endpoint without --transport", []string{"send", "-e", "http://x", "hi"}},
 		{"--endpoint with two --transport", []string{"send", "-e", "http://x", "--transport", "rest", "--transport", "grpc", "hi"}},
 		{"empty --transport", []string{"send", "-a", "http://x", "--transport", "", "hi"}},
+		{"unknown --a2a-version", []string{"send", "-a", "http://x", "--a2a-version", "1", "hi"}},
+		{"empty send --task-id", []string{"send", "-a", "http://x", "--task-id", "", "hi"}},
+		{"empty send --context-id", []string{"send", "-a", "http://x", "--context-id", "", "hi"}},
 		{"unknown server --protocol", []string{"server", "--echo", "--port", "0", "--protocol", "bogus"}},
 		{"unknown server --serve-transport", []string{"server", "--echo", "--port", "0", "--serve-transport", "bogus"}},
 		{"missing server --card file", []string{"server", "--echo", "--port", "0", "--card", "/no/such/card.json"}},
@@ -1098,55 +1155,6 @@ func TestGetTaskWait_Timeout(t *testing.T) {
 	}
 	if got := clierr.Classify(err).Code; got != clierr.CodeTimeout {
 		t.Fatalf("a2a task get --wait error = %v (code %q), want code %q", err, got, clierr.CodeTimeout)
-	}
-}
-
-func TestServe_ModeValidation(t *testing.T) {
-	t.Parallel()
-	for _, tt := range []struct {
-		name           string
-		args           []string
-		wantErrContain string
-	}{
-		{"no mode", []string{"server"}, "specify --echo, --proxy <url>, or --exec"},
-		{"multiple modes", []string{"server", "--echo", "--exec", "cat"}, "mutually exclusive"},
-	} {
-		t.Run(tt.name+" fails", func(t *testing.T) {
-			t.Parallel()
-			_, err := runCMD(t, tt.args...)
-			if err == nil {
-				t.Fatalf("runCMD(%v) error = nil, want error containing %q", tt.args, tt.wantErrContain)
-			}
-			if !strings.Contains(err.Error(), tt.wantErrContain) {
-				t.Fatalf("runCMD(%v) error = %v, want error containing %q", tt.args, err, tt.wantErrContain)
-			}
-		})
-	}
-}
-
-func TestServeProxy_Timeout(t *testing.T) {
-	t.Parallel()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(100 * time.Millisecond)
-	}))
-	t.Cleanup(server.Close)
-
-	_, err := runCMD(t, "server", "--proxy", "-a", server.URL, "--port", "0", "--timeout", "10ms")
-	if err == nil {
-		t.Fatal("a2a server --proxy should time out resolving upstream card")
-	}
-	var classified *clierr.Error
-	if !errors.As(err, &classified) {
-		t.Fatalf("runCMD(server --proxy) error = %v, want *clierr.Error", err)
-	}
-	if classified.Code != clierr.CodeTimeout {
-		t.Fatalf("runCMD(server --proxy) Code = %q, want %q", classified.Code, clierr.CodeTimeout)
-	}
-	if classified.Exit != 5 {
-		t.Fatalf("runCMD(server --proxy) Exit = %d, want 5", classified.Exit)
-	}
-	if classified.Hint != "increase --timeout" {
-		t.Fatalf("runCMD(server --proxy) Hint = %q, want %q", classified.Hint, "increase --timeout")
 	}
 }
 
@@ -1276,7 +1284,7 @@ func TestInsecureCredentialWarning(t *testing.T) {
 
 func startTestServer(t *testing.T) string {
 	t.Helper()
-	return startTestServerWith(t, a2a.AgentCapabilities{Streaming: true}, localsrv.NewEchoExecutor())
+	return startTestServerWith(t, a2a.AgentCapabilities{Streaming: true}, testutil.NewEchoExecutor())
 }
 
 func startTestServerWith(t *testing.T, capabilities a2a.AgentCapabilities, executor a2asrv.AgentExecutor) string {
@@ -1380,6 +1388,9 @@ func mustRunCMD(t *testing.T, args ...string) string {
 
 func mustNewRoot(t *testing.T, cfg *globalConfig, deps deps) *cobra.Command {
 	t.Helper()
+	if deps.oauthDir == "" {
+		deps.oauthDir = t.TempDir()
+	}
 	r, err := newRootCmd(cfg, deps)
 	if err != nil {
 		t.Fatalf("newRootCmd() error = %v", err)
@@ -1527,7 +1538,7 @@ func startTestServerRecordingCardHeaders(t *testing.T) (string, *http.Header) {
 	t.Helper()
 
 	capabilities := a2a.AgentCapabilities{Streaming: true}
-	handler := a2asrv.NewHandler(localsrv.NewEchoExecutor(), a2asrv.WithCapabilityChecks(&capabilities))
+	handler := a2asrv.NewHandler(testutil.NewEchoExecutor(), a2asrv.WithCapabilityChecks(&capabilities))
 
 	mux := http.NewServeMux()
 	mux.Handle("/", a2asrv.NewRESTHandler(handler))

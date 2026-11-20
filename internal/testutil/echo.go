@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package localsrv
+package testutil
 
 import (
 	"context"
@@ -22,30 +22,6 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 )
-
-// ServeEcho runs a local server whose agent echoes each incoming message back
-// to the caller as an artifact.
-func ServeEcho(ctx context.Context, cfg Config) error {
-	if cfg.AgentName == "" {
-		cfg.AgentName = "Echo Agent"
-	}
-	if cfg.AgentDesc == "" {
-		cfg.AgentDesc = "Echoes the user's message back as a response"
-	}
-
-	card, err := createAgentCard(cfg.CardParams)
-	if err != nil {
-		return err
-	}
-
-	handler := a2asrv.NewHandler(&echoExecutor{})
-
-	if !cfg.Quiet {
-		cfg.Logger("echo mode, transport=%s protocol=%s", cfg.Transport, cfg.ProtocolVersion)
-	}
-
-	return serve(ctx, cfg, handler, card)
-}
 
 type echoExecutor struct{}
 

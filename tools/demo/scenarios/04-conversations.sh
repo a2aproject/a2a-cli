@@ -64,9 +64,10 @@ scene() {
   run B 'a2a send "Run whoami and tell me the user name."'
   expect_status B input-required
   pause 3
-  local task
-  task="$(last_match B 'a2a send --task-id [^ ]+')"
-  run B "a2a send --task-id ${task##* } once"
+  local resume task
+  resume="$(last_match B "a2a send --task-id [^ ]+ --data-part '[^']+'")"
+  task="${resume#a2a send --task-id }"
+  run B "a2a send --task-id ${task/<option>/once}"
   expect_status B completed
   pause 3
 

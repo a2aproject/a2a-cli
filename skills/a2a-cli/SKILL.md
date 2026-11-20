@@ -112,6 +112,13 @@ transport) or `-e <url> --transport <rest|jsonrpc|grpc>` (connect directly).
    a2a send -a https://agent.example.com --task-id <task-id> "Yes, proceed"
    ```
 
+   When `Resume:` includes `--data-part`, fill in its `<field>` placeholders
+   and keep the other values unchanged. These are constants from the question's
+   Structured Input schema, such as its question number (`seq`). Retry the same
+   answer with the same constants after a timeout; fetching a newer question
+   and replacing them could answer a different question. The displayed JSON
+   uses POSIX shell quoting; pass it as one argument in other shells.
+
 6. **Continue the conversation** as a new task in the same context:
 
    ```bash
@@ -142,6 +149,7 @@ Run `a2a <command> --help` for the full, current set. The load-bearing ones:
 | `--task-id <id>` / `--context-id <id>` | Continue a task / group a new task under a context. |
 | `--save-fileparts <dir>` | Save raw file parts from responses (artifacts and messages) as files under `<dir>`; the output still summarizes them by name/type/size. |
 | `--auth "<creds>"` / `--svc-param <k=v>` | Attach credentials or transport parameters (or set `A2ACLI_*` env vars). Never commit a secret. |
+| `--oauth cached` | OAuth is off by default. This uses only stored OAuth grants and never starts a sign-in. If a call fails with a 401 whose hint mentions `a2a auth login`, the agent uses OAuth: ask the user to sign in, then retry with `--oauth cached`. On `A2ACLI_ERR_CREDENTIALS_MISSING`, ask the user to run the command in the error's `hint` (an `a2a auth login …`; add `--device` without a browser), then do what the hint says next. Don't run `auth login` yourself: it waits for the user. With OAuth on, credentials you pass (`--auth`, `--svc-param`, a credential helper, `--unix-socket`) are sent first and OAuth only reacts to a 401. `auth get`/`auth logout <agent>` cover the grant for exactly that URL and those for the agent's card interfaces; other grants that may apply (such as one for the whole host) are only listed, with the command that removes them. |
 
 ## Configuration
 

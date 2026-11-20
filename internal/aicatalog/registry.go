@@ -124,7 +124,9 @@ func (r *Registry) Remove(ctx context.Context, nameOrSource string) (Catalog, er
 	if err := r.save(); err != nil {
 		return Catalog{}, err
 	}
-	if slices.Contains(r.reachableObjects(ctx), entry.ContentHash) {
+	reachable, err := r.reachableObjects(ctx)
+	if err != nil || slices.Contains(reachable, entry.ContentHash) {
+		// An unreachable document left in the store is only wasted space.
 		return entry.Catalog, nil
 	}
 	if err := r.store.removeObject(entry.ContentHash); err != nil {
@@ -139,14 +141,14 @@ func (r *Registry) Remove(ctx context.Context, nameOrSource string) (Catalog, er
 
 // reachableObjects returns the hashes of the documents the registered catalogs
 // use, nested catalogs included.
-func (r *Registry) reachableObjects(ctx context.Context) []string {
+func (r *Registry) reachableObjects(ctx context.Context) ([]string, error) {
 	var hashes []string
 	for _, e := range r.entries {
 		hashes = append(hashes, e.ContentHash)
 	}
 	entries, _, err := r.Entries(ctx, "")
 	if err != nil {
-		return hashes
+		return nil, err
 	}
 	for _, e := range entries {
 		if !e.IsNestedCatalog() || e.URL == "" {
@@ -158,7 +160,7 @@ func (r *Registry) reachableObjects(ctx context.Context) []string {
 			}
 		}
 	}
-	return hashes
+	return hashes, nil
 }
 
 // fetch stores the catalog at sourceURL and every catalog nested in it.
@@ -179,6 +181,9 @@ func (r *Registry) fetch(ctx context.Context, f *Fetcher, sourceURL string) (*Re
 
 	w := &walker{store: r.store, refs: r.refs, fetcher: f, record: true, label: sourceURL, path: []string{sourceURL}}
 	w.walk(ctx, doc, sourceURL, 0)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err := r.saveRefs(); err != nil {
 		return nil, err
 	}
@@ -223,6 +228,9 @@ func (r *Registry) Entries(ctx context.Context, nameOrSource string) ([]Entry, [
 		}
 		w := &walker{store: r.store, refs: r.refs, label: e.Name, path: []string{e.Source}}
 		w.walk(ctx, doc, e.Source, 0)
+		if err := ctx.Err(); err != nil {
+			return nil, nil, err
+		}
 		entries = append(entries, w.entries...)
 		warnings = append(warnings, w.warnings...)
 	}
@@ -238,7 +246,24 @@ func Load(ctx context.Context, f *Fetcher, sourceURL string, data []byte) ([]Ent
 	}
 	w := &walker{fetcher: f, label: sourceURL, path: []string{sourceURL}}
 	w.walk(ctx, doc, sourceURL, 0)
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 	return w.entries, w.warnings, nil
+}
+
+// Parse returns the entries the catalog document data served from sourceURL
+// lists directly, without following nested catalogs.
+func Parse(sourceURL string, data []byte) ([]Entry, error) {
+	doc, err := parseDocument(data)
+	if err != nil {
+		return nil, fmt.Errorf("%s is not an AI Catalog: %w", sourceURL, err)
+	}
+	entries := make([]Entry, len(doc.Entries))
+	for i, e := range doc.Entries {
+		entries[i] = Entry{CatalogEntry: e, Catalog: sourceURL, Base: sourceURL, Raw: doc.rawEntries[i]}
+	}
+	return entries, nil
 }
 
 // registryIdentifier derives a registry entry identifier from the catalog name

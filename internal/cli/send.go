@@ -66,6 +66,9 @@ func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
   a2a send -a https://agent.example.com --data-part '{"priority":"high"}' "Triage"`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := rejectEmptyIDs(cmd); err != nil {
+				return err
+			}
 			if flags.stream && flags.async {
 				return clierr.Usage("--stream is incompatible with --async")
 			}
@@ -114,7 +117,7 @@ func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 	flags.parts.Attach(f)
 	flags.meta.Attach(f, "metadata", "Attach request metadata as a JSON object (repeatable)")
 
-	return cmd
+	return agentCall(cmd)
 }
 
 func buildRequest(cmd *cobra.Command, cfg *globalConfig, flags *sendFlags, args []string) (*a2a.SendMessageRequest, error) {
@@ -233,6 +236,17 @@ func parseRequestPayload(ref string) (*a2a.SendMessageRequest, error) {
 		req.Message.ID = a2a.NewMessageID()
 	}
 	return req, nil
+}
+
+// rejectEmptyIDs fails on an empty --task-id or --context-id, which usually
+// comes from an unset shell variable, instead of starting a new task.
+func rejectEmptyIDs(cmd *cobra.Command) error {
+	for _, name := range []string{"task-id", "context-id"} {
+		if f := cmd.Flags().Lookup(name); f.Changed && f.Value.String() == "" {
+			return clierr.Usage(fmt.Sprintf("empty --%s value", name))
+		}
+	}
+	return nil
 }
 
 // ensureNoPayloadOverrides rejects flags and positional arguments that would
