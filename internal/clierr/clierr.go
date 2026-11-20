@@ -96,6 +96,12 @@ func Usage(msg string) *Error {
 	return &Error{Code: CodeUsage, Message: msg, Hint: UsageHint, Exit: 2}
 }
 
+// UsageWithHint builds a usage error whose remediation is aimed at a human
+// operator rather than the agent-oriented default hint.
+func UsageWithHint(msg, hint string) *Error {
+	return &Error{Code: CodeUsage, Message: msg, Hint: hint, Exit: 2}
+}
+
 // CredentialsMissing builds an error for an agent that requires credentials the
 // CLI could not obtain on its own, such as when sign-in is not allowed.
 func CredentialsMissing(msg, hint string, cause error) *Error {

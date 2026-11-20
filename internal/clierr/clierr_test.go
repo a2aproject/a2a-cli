@@ -358,3 +358,22 @@ func TestRedactURL(t *testing.T) {
 		}
 	}
 }
+
+func TestUsageWithHint(t *testing.T) {
+	err := UsageWithHint("unknown flag: --bogus", "pick an agent with -a <ref>")
+	if err.Code != CodeUsage {
+		t.Fatalf("Code = %q, want %q", err.Code, CodeUsage)
+	}
+	if err.Exit != 2 {
+		t.Fatalf("Exit = %d, want 2", err.Exit)
+	}
+	if err.Message != "unknown flag: --bogus" {
+		t.Fatalf("Message = %q", err.Message)
+	}
+	if err.Hint != "pick an agent with -a <ref>" {
+		t.Fatalf("Hint = %q", err.Hint)
+	}
+	if err.Error() != err.Message {
+		t.Fatalf("Error() = %q, want the message", err.Error())
+	}
+}

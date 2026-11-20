@@ -72,7 +72,10 @@ func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclie
 	case cfg.catalog != "":
 		return nil, clierr.Usage("--catalog requires --agent-card <identifier>")
 	default:
-		return nil, clierr.Usage("either '--agent-card <ref>' or '--endpoint <url> --transport <t>' must be provided")
+		return nil, clierr.UsageWithHint(
+			"either '--agent-card <ref>' or '--endpoint <url> --transport <t>' must be provided",
+			"pick an agent with -a <ref> (or --agent-card); if the agent is stopped, start it and check the -a reference is correct",
+		)
 	}
 }
 

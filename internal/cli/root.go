@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -199,6 +200,13 @@ func (g *globalConfig) renderError(err error) int {
 	// Flag, argument and config errors fail before PersistentPreRunE sets the mode.
 	if mode := output.Mode(g.output); mode == output.ModeJson || mode == output.ModeJSONL {
 		g.Mode = mode
+	} else if v, ok := outputFlagFromArgs(os.Args[1:]); ok {
+		// pflag stops at the first unknown flag, so `a2a send --bogus -o json`
+		// never binds --output. Recover it from the raw arguments so a flag-parse
+		// error still honours an explicitly requested JSON output.
+		if mode := output.Mode(v); mode == output.ModeJson || mode == output.ModeJSONL {
+			g.Mode = mode
+		}
 	}
 	if g.IsJSON() {
 		if perr := g.PrintJSON(ce); perr != nil {
@@ -211,6 +219,27 @@ func (g *globalConfig) renderError(err error) int {
 		_, _ = fmt.Fprintf(g.stderr(), "hint: %s\n", ce.Hint)
 	}
 	return ce.Exit
+}
+
+// outputFlagFromArgs returns the value of an explicit -o/--output flag even when
+// pflag stopped parsing before reaching it (an unknown flag before -o).
+func outputFlagFromArgs(args []string) (string, bool) {
+	for i := range len(args) {
+		a := args[i]
+		switch {
+		case a == "-o" || a == "--output":
+			if i+1 < len(args) {
+				return args[i+1], true
+			}
+		case strings.HasPrefix(a, "--output="):
+			return strings.TrimPrefix(a, "--output="), true
+		case strings.HasPrefix(a, "-o="):
+			// pflag accepts -o=json as well as -o json; a parse error that stops
+			// before this token still has to honour the requested format.
+			return strings.TrimPrefix(a, "-o="), true
+		}
+	}
+	return "", false
 }
 
 func newRootCmd(cfg *globalConfig, deps deps) (*cobra.Command, error) {
