@@ -72,8 +72,70 @@ func newAgentClient(ctx context.Context, cfg *globalConfig, extraOpts ...a2aclie
 	case cfg.catalog != "":
 		return nil, clierr.Usage("--catalog requires --agent-card <identifier>")
 	default:
-		return nil, clierr.Usage("either '--agent-card <ref>' or '--endpoint <url> --transport <t>' must be provided")
+		err := clierr.Usage("either '--agent-card <ref>' or '--endpoint <url> --transport <t>' must be provided")
+		err.Hint = "pass -a <agent URL or card> to name the agent"
+		return nil, err
 	}
+}
+
+// agentFlags returns the flags that select the agent, quoted for a shell, so a
+// printed command can reach the same agent: the agent reference, then
+// --catalog, --tenant and --unix-socket. Only flags given on the command line
+// are repeated; a value from the environment or a config file applies again
+// when the printed command runs. A reference that may carry a credential, in
+// its query string or user info, is replaced by a placeholder.
+func agentFlags(cfg *globalConfig) string {
+	fromFlag := make(map[string]bool)
+	for _, b := range cfg.bindings {
+		if b.Source == "flag" {
+			fromFlag[b.Name] = true
+		}
+	}
+	var flags []string
+	switch {
+	case fromFlag["agent-card"] && cfg.agentCard.IsSet():
+		if mayCarryCredential(cfg.agentCard.URL()) {
+			flags = append(flags, "-a <agent>")
+		} else {
+			flags = append(flags, "-a "+shellQuote(cfg.agentCard.String()))
+		}
+		if fromFlag["catalog"] && cfg.catalog != "" {
+			if mayCarryCredential(cfg.catalog) {
+				flags = append(flags, "--catalog <catalog>")
+			} else {
+				flags = append(flags, "--catalog "+shellQuote(cfg.catalog))
+			}
+		}
+	case fromFlag["endpoint"] && cfg.url != "":
+		if mayCarryCredential(cfg.url) || len(cfg.transports) != 1 {
+			flags = append(flags, "-a <agent>")
+		} else {
+			flags = append(flags, "-e "+shellQuote(cfg.url)+" --transport "+shellQuote(cfg.transports[0]))
+		}
+	}
+	if fromFlag["tenant"] && cfg.tenant != "" {
+		flags = append(flags, "--tenant "+shellQuote(cfg.tenant))
+	}
+	if fromFlag["unix-socket"] && cfg.unixSocket != "" {
+		flags = append(flags, "--unix-socket "+shellQuote(cfg.unixSocket))
+	}
+	return strings.Join(flags, " ")
+}
+
+// mayCarryCredential reports whether a URL has a query string or user info,
+// either of which may hold a token, or does not parse at all.
+func mayCarryCredential(ref string) bool {
+	u, err := url.Parse(ref)
+	return err != nil || u.RawQuery != "" || u.ForceQuery || u.User != nil
+}
+
+// shellQuote returns s as a single shell word, wrapping it in single quotes
+// unless it holds only characters a POSIX shell treats literally.
+func shellQuote(s string) string {
+	if s != "" && strings.Trim(s, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@%+=:,./_-") == "" {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // newClientFromEndpoint connects straight to an agent interface URL without resolving an

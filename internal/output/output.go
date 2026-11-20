@@ -54,6 +54,10 @@ var taskStateNames = map[a2a.TaskState]string{
 type Printer struct {
 	Out  io.Writer
 	Mode Mode
+	// AgentFlags are the flags that select the agent, ready to paste into a
+	// shell, repeated in the resume hint of an interrupted task. Empty when
+	// the agent comes from the environment or a config file.
+	AgentFlags string
 
 	// openArtifact is the artifact whose streamed text is being written inline
 	// in text mode; its line is not terminated yet.
@@ -138,7 +142,7 @@ func (p *Printer) PrintEvent(event a2a.Event) error {
 			s = fmt.Sprintf("[status] %s\n", state)
 		}
 	case *a2a.Task:
-		s = formatTask(e) + formatResumeHint(e)
+		s = formatTask(e) + formatResumeHint(e, p.AgentFlags)
 	case *a2a.Message:
 		s = formatMessage(e)
 	default:
@@ -337,20 +341,24 @@ func formatTask(task *a2a.Task) string {
 }
 
 // formatResumeHint returns a copy-pasteable command to continue or reply to a task.
-func formatResumeHint(task *a2a.Task) string {
+// agentFlags select the agent, if the environment or config doesn't.
+func formatResumeHint(task *a2a.Task, agentFlags string) string {
 	if task.ID == "" {
 		return ""
 	}
 	if task.Status.State != a2a.TaskStateInputRequired && task.Status.State != a2a.TaskStateAuthRequired {
 		return ""
 	}
+	if agentFlags != "" {
+		agentFlags += " "
+	}
 	if task.Status.State == a2a.TaskStateInputRequired {
 		if data := structuredResumeData(task.Status.Message); data != "" {
 			quoted := "'" + strings.ReplaceAll(data, "'", "'\"'\"'") + "'"
-			return fmt.Sprintf("\n\nResume:     a2a send --task-id %s --data-part %s\n", task.ID, quoted)
+			return fmt.Sprintf("\n\nResume:     a2a send %s--task-id %s --data-part %s\n", agentFlags, task.ID, quoted)
 		}
 	}
-	return fmt.Sprintf("\n\nResume:     a2a send --task-id %s %q\n", task.ID, "<reply>")
+	return fmt.Sprintf("\n\nResume:     a2a send %s--task-id %s %q\n", agentFlags, task.ID, "<reply>")
 }
 
 func formatMessage(msg *a2a.Message) string {
