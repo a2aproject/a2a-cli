@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -133,7 +134,7 @@ func (p *Printer) PrintEvent(event a2a.Event) error {
 	case *a2a.TaskStatusUpdateEvent:
 		state := shortState(e.Status.State)
 		if e.Status.Message != nil {
-			s = fmt.Sprintf("[status] %s: %s\n", state, MessageText(e.Status.Message))
+			s = fmt.Sprintf("[status] %s: %s\n", state, messageDisplayText(e.Status.Message))
 		} else {
 			s = fmt.Sprintf("[status] %s\n", state)
 		}
@@ -308,7 +309,7 @@ func formatTask(task *a2a.Task) string {
 	}
 	fmt.Fprintf(&sb, "\n")
 	if task.Status.Message != nil {
-		fmt.Fprintf(&sb, "  %s\n", MessageText(task.Status.Message))
+		fmt.Fprintf(&sb, "  %s\n", messageDisplayText(task.Status.Message))
 	}
 
 	if len(task.Artifacts) > 0 {
@@ -329,7 +330,7 @@ func formatTask(task *a2a.Task) string {
 			if msg.Role == a2a.MessageRoleAgent {
 				role = "agent"
 			}
-			fmt.Fprintf(&sb, "  [%s] %s\n", role, MessageText(msg))
+			fmt.Fprintf(&sb, "  [%s] %s\n", role, messageDisplayText(msg))
 		}
 	}
 
@@ -358,7 +359,7 @@ func formatMessage(msg *a2a.Message) string {
 	if msg.Role == a2a.MessageRoleAgent {
 		role = "agent"
 	}
-	return fmt.Sprintf("[%s] %s\n", role, MessageText(msg))
+	return fmt.Sprintf("[%s] %s\n", role, messageDisplayText(msg))
 }
 
 func formatTaskList(resp *a2a.ListTasksResponse) string {
@@ -378,6 +379,15 @@ func formatTaskList(resp *a2a.ListTasksResponse) string {
 // MessageText returns the concatenated textual representation of a message's parts.
 func MessageText(msg *a2a.Message) string {
 	return partsText(msg.Parts)
+}
+
+// messageDisplayText renders a message for text output. When the message has
+// text, its data parts are left out: -o json shows them.
+func messageDisplayText(msg *a2a.Message) string {
+	if !slices.ContainsFunc(msg.Parts, isText) {
+		return MessageText(msg)
+	}
+	return partsText(slices.DeleteFunc(slices.Clone(msg.Parts), isData))
 }
 
 // partsText renders parts separated by spaces.
@@ -404,6 +414,11 @@ func joinParts(parts a2a.ContentParts, concatText bool) string {
 
 func isText(p *a2a.Part) bool {
 	_, ok := p.Content.(a2a.Text)
+	return ok
+}
+
+func isData(p *a2a.Part) bool {
+	_, ok := p.Content.(a2a.Data)
 	return ok
 }
 

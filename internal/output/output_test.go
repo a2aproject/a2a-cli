@@ -200,6 +200,75 @@ func TestMessageTextFileParts(t *testing.T) {
 	}
 }
 
+func TestPrintEventTextOutputDataParts(t *testing.T) {
+	t.Parallel()
+
+	toolCall := a2a.NewDataPart(map[string]any{"toolCall": map[string]any{"id": "call-1", "kind": "execute"}})
+	schema := a2a.NewDataPart(map[string]any{"type": "object"})
+	agentMessage := func(parts ...*a2a.Part) *a2a.Message {
+		return &a2a.Message{Role: a2a.MessageRoleAgent, Parts: parts}
+	}
+
+	tests := []struct {
+		name  string
+		event a2a.Event
+		want  string
+	}{
+		{
+			name: "task status message shows only text",
+			event: &a2a.Task{ID: "task-1", Status: a2a.TaskStatus{
+				State:   a2a.TaskStateWorking,
+				Message: agentMessage(a2a.NewTextPart("Permission required: ls."), toolCall, a2a.NewTextPart("Reply with one of: once, reject."), schema),
+			}},
+			want: "Task:     task-1\nStatus:   working\n  Permission required: ls. Reply with one of: once, reject.\n",
+		},
+		{
+			name: "task history shows only text",
+			event: &a2a.Task{ID: "task-1", Status: a2a.TaskStatus{State: a2a.TaskStateCompleted}, History: []*a2a.Message{
+				agentMessage(a2a.NewTextPart("Running ls"), toolCall),
+			}},
+			want: "Task:     task-1\nStatus:   completed\nHistory:\n  [agent] Running ls\n",
+		},
+		{
+			name: "status update shows only text",
+			event: &a2a.TaskStatusUpdateEvent{Status: a2a.TaskStatus{
+				State:   a2a.TaskStateWorking,
+				Message: agentMessage(a2a.NewTextPart("Running ls"), toolCall),
+			}},
+			want: "[status] working: Running ls\n",
+		},
+		{
+			name:  "message shows only text",
+			event: agentMessage(a2a.NewTextPart("Done"), toolCall),
+			want:  "[agent] Done\n",
+		},
+		{
+			name:  "message keeps file parts next to text",
+			event: agentMessage(a2a.NewTextPart("Report"), &a2a.Part{Content: a2a.URL("https://example.com/r.pdf")}, toolCall),
+			want:  "[agent] Report file: (https://example.com/r.pdf)\n",
+		},
+		{
+			name:  "data-only message keeps its data",
+			event: agentMessage(a2a.NewDataPart(map[string]any{"total": 3})),
+			want:  "[agent] {\"total\":3}\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var out bytes.Buffer
+			printer := NewPrinter(&out, ModeText)
+			if err := printer.PrintEvent(tt.event); err != nil {
+				t.Fatalf("Printer.PrintEvent() error = %v, want nil", err)
+			}
+			if diff := cmp.Diff(tt.want, out.String()); diff != "" {
+				t.Fatalf("Printer.PrintEvent() wrong result (-want +got) diff = %s", diff)
+			}
+		})
+	}
+}
+
 func TestPrintEventStreamsArtifactTextInline(t *testing.T) {
 	t.Parallel()
 
