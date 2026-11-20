@@ -233,6 +233,10 @@ func outputFlagFromArgs(args []string) (string, bool) {
 			}
 		case strings.HasPrefix(a, "--output="):
 			return strings.TrimPrefix(a, "--output="), true
+		case strings.HasPrefix(a, "-o="):
+			// pflag accepts -o=json as well as -o json; a parse error that stops
+			// before this token still has to honour the requested format.
+			return strings.TrimPrefix(a, "-o="), true
 		}
 	}
 	return "", false
