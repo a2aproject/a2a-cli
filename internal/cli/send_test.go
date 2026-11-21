@@ -84,3 +84,35 @@ func TestSendExitsForTerminalTaskState(t *testing.T) {
 		})
 	}
 }
+
+func TestSendStreamExitsForTerminalTaskState(t *testing.T) {
+	t.Parallel()
+
+	url := startTestServerWith(t, a2a.AgentCapabilities{Streaming: true}, &terminalExecutor{state: a2a.TaskStateFailed})
+
+	_, err := runCMD(t, "send", "-a", url, "--stream", "hello")
+
+	var got *clierr.Error
+	if !errors.As(err, &got) {
+		t.Fatalf("send --stream error = %v, want a *clierr.Error", err)
+	}
+	if got.Code != clierr.CodeTaskFailed || got.Exit != 6 {
+		t.Fatalf("send --stream error = %s/exit %d, want %s/exit 6", got.Code, got.Exit, clierr.CodeTaskFailed)
+	}
+}
+
+func TestSendPollingFallbackExitsForTerminalTaskState(t *testing.T) {
+	t.Parallel()
+
+	url := startTestServerWith(t, a2a.AgentCapabilities{Streaming: false}, &terminalExecutor{state: a2a.TaskStateCanceled})
+
+	_, err := runCMD(t, "send", "-a", url, "--stream", "hello")
+
+	var got *clierr.Error
+	if !errors.As(err, &got) {
+		t.Fatalf("send --stream fallback error = %v, want a *clierr.Error", err)
+	}
+	if got.Code != clierr.CodeTaskCanceled || got.Exit != 8 {
+		t.Fatalf("send --stream fallback error = %s/exit %d, want %s/exit 8", got.Code, got.Exit, clierr.CodeTaskCanceled)
+	}
+}
