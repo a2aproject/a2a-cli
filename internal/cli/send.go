@@ -94,14 +94,16 @@ func newSendCmd(cfg *globalConfig, poller pollerFunc) *cobra.Command {
 			ctx, cancel = context.WithTimeout(baseCtx, cfg.timeout)
 			defer cancel()
 
+			outcome := &taskOutcome{}
 			result, err := client.SendMessage(ctx, req)
 			if err != nil {
 				return fmt.Errorf("failed to send message: %w", err)
 			}
+			outcome.observe(result)
 			if err := cfg.handleEvent(result); err != nil {
 				return err
 			}
-			return nil
+			return outcome.err()
 		},
 	}
 
@@ -159,9 +161,10 @@ func sendStreaming(ctx context.Context, cfg *globalConfig, client *a2aclient.Cli
 	defer func() { _ = cfg.Printer.Flush() }()
 	ctx, debounceTimeout := utils.WithInactivityTimeout(ctx, cfg.timeout)
 
-	err := handleStreaming(ctx, cfg, client, req, debounceTimeout)
+	outcome := &taskOutcome{}
+	err := handleStreaming(ctx, cfg, client, req, debounceTimeout, outcome)
 	if err == nil {
-		return nil
+		return outcome.err()
 	}
 	if !errors.Is(err, a2a.ErrUnsupportedOperation) {
 		return utils.UnpackCause(ctx, err)
@@ -174,11 +177,43 @@ func sendStreaming(ctx context.Context, cfg *globalConfig, client *a2aclient.Cli
 		if err := handleStreamEntry(cfg, event, err); err != nil {
 			return utils.UnpackCause(ctx, err)
 		}
+		outcome.observe(event)
 	}
-	return nil
+	return outcome.err()
 }
 
-func handleStreaming(ctx context.Context, cfg *globalConfig, client *a2aclient.Client, req *a2a.SendMessageRequest, debounceTimeout utils.DebounceFunc) error {
+// taskOutcome records the last task state seen while a send runs, so the command
+// can report a terminal state that is not a success in its exit code (#136).
+type taskOutcome struct {
+	taskID a2a.TaskID
+	state  a2a.TaskState
+}
+
+func (o *taskOutcome) observe(e a2a.Event) {
+	switch ev := e.(type) {
+	case *a2a.Task:
+		o.taskID, o.state = ev.ID, ev.Status.State
+	case *a2a.TaskStatusUpdateEvent:
+		o.taskID, o.state = ev.TaskID, ev.Status.State
+	}
+}
+
+// err names the terminal state in the exit code. A completed task, and one left
+// open for input or authentication, exits 0: those are not failures of the CLI.
+func (o *taskOutcome) err() error {
+	switch o.state {
+	case a2a.TaskStateFailed:
+		return clierr.TaskFailed(string(o.taskID))
+	case a2a.TaskStateRejected:
+		return clierr.TaskRejected(string(o.taskID))
+	case a2a.TaskStateCanceled:
+		return clierr.TaskCanceled(string(o.taskID))
+	default:
+		return nil
+	}
+}
+
+func handleStreaming(ctx context.Context, cfg *globalConfig, client *a2aclient.Client, req *a2a.SendMessageRequest, debounceTimeout utils.DebounceFunc, outcome *taskOutcome) error {
 	if card := client.Card(); card != nil && !card.Capabilities.Streaming {
 		return fmt.Errorf("streaming not listed in agent capabilities: %w", a2a.ErrUnsupportedOperation)
 	}
@@ -187,6 +222,7 @@ func handleStreaming(ctx context.Context, cfg *globalConfig, client *a2aclient.C
 		if err := handleStreamEntry(cfg, event, err); err != nil {
 			return err
 		}
+		outcome.observe(event)
 	}
 	return nil
 }

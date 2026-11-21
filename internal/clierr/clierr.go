@@ -24,6 +24,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -58,6 +59,13 @@ const (
 	// CodeInternal marks an unexpected CLI-side failure, or any condition with
 	// no better code. Exit 1.
 	CodeInternal = "A2ACLI_ERR_INTERNAL"
+	// CodeTaskFailed marks a task that ended in TASK_STATE_FAILED. Exit 6.
+	CodeTaskFailed = "A2ACLI_ERR_TASK_FAILED"
+	// CodeTaskRejected marks a task the agent refused with TASK_STATE_REJECTED.
+	// Exit 7.
+	CodeTaskRejected = "A2ACLI_ERR_TASK_REJECTED"
+	// CodeTaskCanceled marks a task that ended in TASK_STATE_CANCELED. Exit 8.
+	CodeTaskCanceled = "A2ACLI_ERR_TASK_CANCELED"
 )
 
 // Error is a classified CLI failure.
@@ -105,6 +113,36 @@ func CredentialsMissing(msg, hint string, cause error) *Error {
 // AuthFailed builds an error for a failed authorization attempt.
 func AuthFailed(msg string, cause error) *Error {
 	return &Error{Code: CodeAuthFailed, Message: msg, Exit: 4, err: cause}
+}
+
+// TaskFailed builds an error for a task that ended in TASK_STATE_FAILED, so a
+// script can tell a failed task from a successful one by the exit code.
+func TaskFailed(taskID string) *Error {
+	return taskEnded(CodeTaskFailed, 6, "failed", taskID,
+		"run `a2a task get <task-id> --history` to see the agent's error")
+}
+
+// TaskRejected builds an error for a task the agent refused with
+// TASK_STATE_REJECTED.
+func TaskRejected(taskID string) *Error {
+	return taskEnded(CodeTaskRejected, 7, "rejected", taskID, "")
+}
+
+// TaskCanceled builds an error for a task that ended in TASK_STATE_CANCELED.
+func TaskCanceled(taskID string) *Error {
+	return taskEnded(CodeTaskCanceled, 8, "canceled", taskID, "")
+}
+
+// taskEnded builds the error for a task that reached a terminal state that is
+// not a success. A completed task, and one left open for input or auth, exits 0.
+func taskEnded(code string, exit int, outcome, taskID, hint string) *Error {
+	subject := "the task"
+	if taskID != "" {
+		// Quote it: the id comes from the remote agent and must not inject
+		// terminal escapes or newlines into the CLI output.
+		subject = "task " + strconv.Quote(taskID)
+	}
+	return &Error{Code: code, Message: subject + " " + outcome, Exit: exit, Hint: hint}
 }
 
 // CardResolution builds an error for a failure to resolve an --agent-card.
