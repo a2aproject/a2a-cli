@@ -1,6 +1,6 @@
 # Errors and Exit Codes
 
-When a command fails, the CLI prints an error with a symbolic code, a message and often a hint, and exits with a status that says what kind of failure it was. A task that ends in a failed state is not a CLI failure. This page lists the error format, the exit codes and how scripts should check task results. The codes come from `internal/clierr`.
+When a command fails, the CLI prints an error with a symbolic code, a message and often a hint, and exits with a status that says what kind of failure it was. A task that ends `failed`, `rejected` or `canceled` exits with its own code; one that stops for input or authentication still exits 0, because the CLI did what it was asked and the task is waiting for the caller. This page lists the error format, the exit codes and how scripts should check task results. The codes come from `internal/clierr`.
 
 ## Format
 
@@ -43,6 +43,9 @@ The JSON form is used whenever `--output` or `A2ACLI_OUTPUT` asks for JSON, whic
 | 3 | `A2ACLI_ERR_IO` | The agent could not be reached or the connection broke |
 | 4 | `A2ACLI_ERR_CARD_INVALID` | The card was reached but cannot be used |
 | 5 | `A2ACLI_ERR_TIMEOUT` | `--timeout` expired |
+| 6 | `A2ACLI_ERR_TASK_FAILED` | The task ended `failed` |
+| 7 | `A2ACLI_ERR_TASK_REJECTED` | The agent rejected the task |
+| 8 | `A2ACLI_ERR_TASK_CANCELED` | The task ended `canceled` |
 
 ### 1: protocol
 
@@ -118,20 +121,46 @@ hint: increase --timeout, or start the task with --async and follow it later
 
 See [Streaming and Timeouts](../advanced/streaming.md) for what `--timeout` bounds in each command.
 
+### 6, 7 and 8: how the task ended
+
+`a2a send` reports the state the task reached, so a script can branch on the exit code instead of parsing the output:
+
+```text
+Error: task "4f2a1c" failed
+hint: run `a2a task get <task-id> --history` to see the agent's error
+```
+
+| Exit | Code | State |
+| --- | --- | --- |
+| 6 | `A2ACLI_ERR_TASK_FAILED` | `TASK_STATE_FAILED` |
+| 7 | `A2ACLI_ERR_TASK_REJECTED` | `TASK_STATE_REJECTED` |
+| 8 | `A2ACLI_ERR_TASK_CANCELED` | `TASK_STATE_CANCELED` |
+
+A task that completes exits 0, and so does one that stops in `input-required` or `auth-required`: the call itself worked and the task is waiting for the caller.
+
 ## Task states and the exit code
 
-The exit code reports whether the CLI got an answer, not what the answer was. A task that ends `failed`, `canceled` or `rejected`, or stops in `input-required` or `auth-required`, still exits 0. The same applies to `send --stream`, `task get --wait` and `task subscribe`.
+`a2a send` exits with the code for the state the task ended in, so a `set -e` script stops on a task that failed:
 
-Scripts that need the outcome should read the state from JSON output:
+| State | Exit |
+| --- | --- |
+| `TASK_STATE_COMPLETED` | 0 |
+| `TASK_STATE_INPUT_REQUIRED`, `TASK_STATE_AUTH_REQUIRED` | 0 |
+| `TASK_STATE_FAILED` | 6 |
+| `TASK_STATE_REJECTED` | 7 |
+| `TASK_STATE_CANCELED` | 8 |
+
+The follow-up commands `task get --wait` and `task subscribe` still exit 0 whatever the state; read the state from their output when the outcome matters.
+
+Scripts that need the payload, or the state of a task they follow with those commands, read it from JSON output:
 
 ```bash
-out=$(a2a send -a https://agent.example.com -o json "Summarize the report") || exit
-state=$(jq -r '.task.status.state // empty' <<<"$out")
-case "$state" in
-  TASK_STATE_COMPLETED) jq -r '.task.artifacts[]?.parts[]?.text // empty' <<<"$out" ;;
-  TASK_STATE_INPUT_REQUIRED) echo "agent needs input: $(jq -r '.task.id' <<<"$out")" >&2; exit 10 ;;
-  "") jq -r '.message.parts[]?.text // empty' <<<"$out" ;;
-  *) echo "task ended in $state" >&2; exit 11 ;;
+out=$(a2a send -a https://agent.example.com -o json "Summarize the report")
+code=$?
+case $code in
+  0) jq -r '.task.artifacts[]?.parts[]?.text // .message.parts[]?.text // empty' <<<"$out" ;;
+  6|7|8) echo "task did not succeed (exit $code)" >&2 ;;
+  *) exit $code ;;
 esac
 ```
 

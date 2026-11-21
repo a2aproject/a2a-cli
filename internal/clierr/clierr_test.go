@@ -30,6 +30,20 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2aclient/agentcard"
 )
 
+func TestTaskErrorQuotesRemoteID(t *testing.T) {
+	t.Parallel()
+
+	id := "a\nb\x1b[31m"
+	msg := TaskFailed(id).Error()
+
+	if strings.ContainsAny(msg, "\n\x1b") {
+		t.Fatalf("Error() = %q, want no raw newline or escape from the remote id", msg)
+	}
+	if !strings.Contains(msg, `task "`) {
+		t.Fatalf("Error() = %q, want the id quoted", msg)
+	}
+}
+
 func TestClassify(t *testing.T) {
 	t.Parallel()
 
@@ -45,6 +59,24 @@ func TestClassify(t *testing.T) {
 			err:      Usage("bad flag combo"),
 			wantCode: CodeUsage,
 			wantExit: 2,
+		},
+		{
+			name:     "already-classified task failure passes through",
+			err:      TaskFailed("task-1"),
+			wantCode: CodeTaskFailed,
+			wantExit: 6,
+		},
+		{
+			name:     "already-classified task rejection passes through",
+			err:      TaskRejected("task-1"),
+			wantCode: CodeTaskRejected,
+			wantExit: 7,
+		},
+		{
+			name:     "already-classified task cancellation passes through",
+			err:      TaskCanceled("task-1"),
+			wantCode: CodeTaskCanceled,
+			wantExit: 8,
 		},
 		{
 			name:     "already-classified card error passes through",

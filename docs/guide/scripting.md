@@ -22,7 +22,7 @@ States are spelled as in the protocol, such as `TASK_STATE_COMPLETED` and `TASK_
 
 ## Check the task state
 
-A task that ends `failed`, `canceled`, `rejected` or `input-required` is still a successful call, and `a2a` exits 0. Check the state:
+`a2a send` exits 6 when the task ends `failed`, 7 when the agent rejects it and 8 when it ends `canceled`, so a `set -e` script stops without parsing the output. A task that stops for input or authorization still exits 0, because the call worked:
 
 ```bash
 state="$(jq -r '.task.status.state' <<<"$result")"
@@ -39,6 +39,9 @@ state="$(jq -r '.task.status.state' <<<"$result")"
 | 3 | The agent couldn't be reached. |
 | 4 | The agent card is missing or invalid. |
 | 5 | `--timeout` expired. |
+| 6 | The task ended `failed`. |
+| 7 | The agent rejected the task. |
+| 8 | The task ended `canceled`. |
 
 With `-o json`, an error prints `{"error": {"code": ..., "message": ..., "hint": ...}}` on stdout. [Errors and exit codes](../reference/errors.md) lists the codes.
 
